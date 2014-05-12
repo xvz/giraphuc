@@ -52,7 +52,8 @@ public class PageRankTolFinderComputation extends BasicComputation<
     LongWritable, DoubleWritable, NullWritable, DoubleWritable> {
   /** Max number of supersteps */
   public static final IntConfOption MAX_SUPERSTEPS =
-    new IntConfOption("PageRankTolFinderComputation.maxSS", 100);
+    new IntConfOption("PageRankTolFinderComputation.maxSS", 100,
+                      "Maximum number of supersteps");
 
   /** Logger */
   private static final Logger LOG =
