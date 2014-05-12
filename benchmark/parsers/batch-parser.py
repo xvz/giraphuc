@@ -90,14 +90,16 @@ def time_parser(log_prefix, system, alg):
         for line in open(log_file):
             if "Setup " in line:
                 io = io + float(line.split()[5].split('=')[1])
-            elif "Initialize " in line:
-                io = io + float(line.split()[5].split('=')[1])
             elif "Input superstep " in line:
                 io = io + float(line.split()[6].split('=')[1])
             elif "Shutdown " in line:
                 io = io + float(line.split()[5].split('=')[1])
+            # initialize is not included in total time, so add it too
+            elif "Initialize " in line:
+                io = io + float(line.split()[5].split('=')[1])
+                total = total + float(line.split()[5].split('=')[1])
             elif "Total (ms)" in line:
-                total = float(line.split()[5].split('=')[1])
+                total = total + float(line.split()[5].split('=')[1])
 
         return ((total - io)/(MS_PER_SEC), io/(MS_PER_SEC))
 

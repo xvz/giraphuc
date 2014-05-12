@@ -206,6 +206,7 @@ public class MinimumSpanningTreeComputation extends BasicComputation<
    */
   private void phase2A(
        Vertex<LongWritable, MSTVertexValue, MSTEdgeValue> vertex) {
+
     vertex.getValue().setType(MSTVertexType.TYPE_UNKNOWN);
 
     MSTMessage msg = new MSTMessage(
@@ -221,7 +222,7 @@ public class MinimumSpanningTreeComputation extends BasicComputation<
   }
 
   /**
-   * Phase 2B: respond to questions with answers, and send questions
+   * Phase 2B: respond to questions with answers, and send questions.
    * This phase can repeat for multiple supersteps.
    *
    * @param vertex Vertex
@@ -230,6 +231,7 @@ public class MinimumSpanningTreeComputation extends BasicComputation<
   private void phase2B(
        Vertex<LongWritable, MSTVertexValue, MSTEdgeValue> vertex,
        Iterable<MSTMessage> messages) {
+
     ArrayList<Long> sources = new ArrayList<Long>();
     boolean isPointerSupervertex = false;
 
@@ -374,6 +376,7 @@ public class MinimumSpanningTreeComputation extends BasicComputation<
    */
   private void phase3A(
        Vertex<LongWritable, MSTVertexValue, MSTEdgeValue> vertex) {
+
     // This is dumb... there's probably a better way.
     aggregate(COUNTER_AGG, new LongWritable(-1));
     aggregate(SUPERVERTEX_AGG, new LongWritable(-1));
@@ -399,6 +402,7 @@ public class MinimumSpanningTreeComputation extends BasicComputation<
   private void phase3B(
        Vertex<LongWritable, MSTVertexValue, MSTEdgeValue> vertex,
        Iterable<MSTMessage> messages) {
+
     //for (Edge<LongWritable, MSTEdgeValue> edge : vertex.getEdges()) {
     //  LOG.info(vertex.getId() + ": before 3B...edge to " +
     //           edge.getTargetVertexId() + " with " + edge.getValue());
@@ -494,6 +498,7 @@ public class MinimumSpanningTreeComputation extends BasicComputation<
    */
   private void phase4A(
        Vertex<LongWritable, MSTVertexValue, MSTEdgeValue> vertex) {
+
     MSTVertexType type = vertex.getValue().getType();
     long pointer = vertex.getValue().getPointer();
 
@@ -529,6 +534,7 @@ public class MinimumSpanningTreeComputation extends BasicComputation<
   private void phase4B(
        Vertex<LongWritable, MSTVertexValue, MSTEdgeValue> vertex,
        Iterable<MSTMessage> messages) {
+
     LongWritable eId;
     MSTEdgeValue eVal;
     MSTEdgeValue eValExisting;
@@ -619,7 +625,7 @@ public class MinimumSpanningTreeComputation extends BasicComputation<
     public void initialize() throws InstantiationException,
         IllegalAccessException {
       // must use persistent aggregators, as these have to live
-      // accross multiple supersteps (and phases)
+      // across multiple supersteps (and phases)
       registerPersistentAggregator(COUNTER_AGG, LongSumAggregator.class);
       registerPersistentAggregator(SUPERVERTEX_AGG,
                                    LongSumAggregator.class);
@@ -1077,7 +1083,7 @@ public class MinimumSpanningTreeComputation extends BasicComputation<
     public static final int MSG_QUESTION = 1; /**/
     public static final int MSG_ANSWER = 2;   /**/
     public static final int MSG_CLEAN = 3;    /**/
-    public static final int MSG_EDGE = 4;    /**/
+    public static final int MSG_EDGE = 4;     /**/
 
     /** A type. **/
     private int type;
