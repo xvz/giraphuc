@@ -58,7 +58,7 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
 
   /** Configurable max number of supersteps */
   public static final IntConfOption MAX_SS =
-    new IntConfOption("SimplePageRankVertex.maxSS", MAX_SUPERSTEPS,
+    new IntConfOption("SimplePageRankComputation.maxSS", MAX_SUPERSTEPS,
                       "The maximum number of supersteps");
 
   /** Logger */
@@ -73,7 +73,7 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
 
   @Override
   public void compute(
-      Vertex<LongWritable, DoubleWritable, FloatWritable> vertex,
+      Vertex<LongWritable, DoubleWritable, NullWritable> vertex,
       Iterable<DoubleWritable> messages) throws IOException {
 
     if (getSuperstep() == 0) {
@@ -193,7 +193,7 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
    * Simple VertexReader that supports {@link SimplePageRankComputation}
    */
   public static class SimplePageRankVertexReader extends
-      GeneratedVertexReader<LongWritable, DoubleWritable, FloatWritable> {
+      GeneratedVertexReader<LongWritable, DoubleWritable, NullWritable> {
     /** Class logger */
     private static final Logger LOG =
         Logger.getLogger(SimplePageRankVertexReader.class);
@@ -204,9 +204,9 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
     }
 
     @Override
-    public Vertex<LongWritable, DoubleWritable, FloatWritable>
+    public Vertex<LongWritable, DoubleWritable, NullWritable>
     getCurrentVertex() throws IOException {
-      Vertex<LongWritable, DoubleWritable, FloatWritable> vertex =
+      Vertex<LongWritable, DoubleWritable, NullWritable> vertex =
           getConf().createVertex();
       LongWritable vertexId = new LongWritable(
           (inputSplit.getSplitIndex() * totalRecords) + recordsRead);
@@ -218,9 +218,8 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
       // NOTE: we've modified the algorithm to remove edge weights, so
       // this will value will NOT be used
       float edgeValue = vertexId.get() * 100f;
-      List<Edge<LongWritable, FloatWritable>> edges = Lists.newLinkedList();
-      edges.add(EdgeFactory.create(new LongWritable(targetVertexId),
-          new FloatWritable(edgeValue)));
+      List<Edge<LongWritable, NullWritable>> edges = Lists.newLinkedList();
+      edges.add(EdgeFactory.create(new LongWritable(targetVertexId)));
       vertex.initialize(vertexId, vertexValue, edges);
       ++recordsRead;
       if (LOG.isInfoEnabled()) {
@@ -236,10 +235,10 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
    * Simple VertexInputFormat that supports {@link SimplePageRankComputation}
    */
   public static class SimplePageRankVertexInputFormat extends
-    GeneratedVertexInputFormat<LongWritable, DoubleWritable, FloatWritable> {
+    GeneratedVertexInputFormat<LongWritable, DoubleWritable, NullWritable> {
     @Override
     public VertexReader<LongWritable, DoubleWritable,
-    FloatWritable> createVertexReader(InputSplit split,
+    NullWritable> createVertexReader(InputSplit split,
       TaskAttemptContext context)
       throws IOException {
       return new SimplePageRankVertexReader();
@@ -250,7 +249,7 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
    * Simple VertexOutputFormat that supports {@link SimplePageRankComputation}
    */
   public static class SimplePageRankVertexOutputFormat extends
-      TextVertexOutputFormat<LongWritable, DoubleWritable, FloatWritable> {
+      TextVertexOutputFormat<LongWritable, DoubleWritable, NullWritable> {
     @Override
     public TextVertexWriter createVertexWriter(TaskAttemptContext context)
       throws IOException, InterruptedException {
@@ -263,7 +262,7 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
     public class SimplePageRankVertexWriter extends TextVertexWriter {
       @Override
       public void writeVertex(
-          Vertex<LongWritable, DoubleWritable, FloatWritable> vertex)
+          Vertex<LongWritable, DoubleWritable, NullWritable> vertex)
         throws IOException, InterruptedException {
         getRecordWriter().write(
             new Text(vertex.getId().toString()),

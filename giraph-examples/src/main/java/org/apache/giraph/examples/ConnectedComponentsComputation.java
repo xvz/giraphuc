@@ -19,7 +19,7 @@
 package org.apache.giraph.examples;
 
 import org.apache.giraph.graph.BasicComputation;
-import org.apache.giraph.edge.Edge;
+//import org.apache.giraph.edge.Edge;
 import org.apache.giraph.graph.Vertex;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
@@ -60,7 +60,7 @@ public class ConnectedComponentsComputation extends
   public void compute(
       Vertex<LongWritable, LongWritable, NullWritable> vertex,
       Iterable<LongWritable> messages) throws IOException {
-    int currentComponent = vertex.getValue().get();
+    long currentComponent = vertex.getValue().get();
 
     // in first superstep, load proper vertex values and then broadcast
     if (getSuperstep() == 0) {
@@ -78,7 +78,7 @@ public class ConnectedComponentsComputation extends
     boolean changed = false;
     // did we get a smaller id ?
     for (LongWritable message : messages) {
-      int candidateComponent = message.get();
+      long candidateComponent = message.get();
       if (candidateComponent < currentComponent) {
         currentComponent = candidateComponent;
         changed = true;
