@@ -37,7 +37,7 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-SNAPSHOT-f
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \
     org.apache.giraph.examples.PageRankTolFinderComputation \
     -mc org.apache.giraph.examples.PageRankTolFinderComputation\$PageRankTolFinderMasterCompute \
-    -c org.apache.giraph.combiner.DoubleSumCombiner \
+    -c org.apache.giraph.combiner.DoubleSumMessageCombiner \
     -ca PageRankTolFinderComputation.maxSS=30 \
     -vif org.apache.giraph.examples.io.formats.SimplePageRankInputFormat \
     -vip /user/${USER}/input/${inputgraph} \

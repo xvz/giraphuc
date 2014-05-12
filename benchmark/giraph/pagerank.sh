@@ -45,7 +45,7 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-SNAPSHOT-f
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \
     org.apache.giraph.examples.SimplePageRankComputation \
-    -c org.apache.giraph.combiner.DoubleSumCombiner \
+    -c org.apache.giraph.combiner.DoubleSumMessageCombiner \
     -ca SimplePageRankComputation.maxSS=30 \
     -vif org.apache.giraph.examples.io.formats.SimplePageRankInputFormat \
     -vip /user/${USER}/input/${inputgraph} \
