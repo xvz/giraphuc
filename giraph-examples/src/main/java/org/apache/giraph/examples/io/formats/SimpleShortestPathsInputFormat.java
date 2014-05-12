@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.giraph.examples;
+package org.apache.giraph.examples.io.formats;
 
 import com.google.common.collect.Lists;
 import org.apache.giraph.edge.Edge;
