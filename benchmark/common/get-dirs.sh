@@ -19,7 +19,7 @@ DATASET_DIR="$DIR_PREFIX"/datasets/
 HADOOP_DIR="$DIR_PREFIX"/hadoop-1.0.4/
 HADOOP_DATA_DIR="$DIR_PREFIX"/hadoop_data/
 
-GIRAPH_DIR="$DIR_PREFIX"/giraph-2ce3ef/
+GIRAPH_DIR="$DIR_PREFIX"/giraph-110/
 
 # These must match "GPS_DIR" and "GPS_LOG_DIRECTORY" of $GPS_DIR/conf/gps-env.sh
 #GPS_DIR="$DIR_PREFIX"/gps-rev-110/
