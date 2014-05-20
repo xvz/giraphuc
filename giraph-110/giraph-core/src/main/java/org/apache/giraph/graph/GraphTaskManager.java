@@ -633,7 +633,7 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
     computeAll = new GiraphTimer(superstepMetrics,
         TIMER_COMPUTE_ALL, TimeUnit.MILLISECONDS);
     timeToFirstMessage = new GiraphTimer(superstepMetrics,
-        TIMER_TIME_TO_FIRST_MSG, TimeUnit.MICROSECONDS);
+        TIMER_TIME_TO_FIRST_MSG, TimeUnit.MILLISECONDS);
     communicationTimer = new GiraphTimer(superstepMetrics,
         TIMER_COMMUNICATION_TIME, TimeUnit.MILLISECONDS);
     wcPreSuperstepTimer = new GiraphTimer(superstepMetrics,
