@@ -86,6 +86,8 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
   private final BlockingQueue<Integer> partitionIdQueue;
   /** Message store */
   private final MessageStore<I, M1> messageStore;
+  /** YH: Local message store */
+  private final MessageStore<I, M1> localMessageStore;
   /** Configuration */
   private final ImmutableClassesGiraphConfiguration<I, V, E> configuration;
   /** Worker (for NettyWorkerClientRequestProcessor) */
@@ -111,6 +113,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
    * @param context Context
    * @param graphState Current graph state (use to create own graph state)
    * @param messageStore Message store
+   * @param localMessageStore Local message store
    * @param partitionIdQueue Queue of partition ids (thread-safe)
    * @param configuration Configuration
    * @param serviceWorker Service worker
@@ -118,6 +121,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
   public ComputeCallable(
       Mapper<?, ?, ?, ?>.Context context, GraphState graphState,
       MessageStore<I, M1> messageStore,
+      MessageStore<I, M1> localMessageStore,
       BlockingQueue<Integer> partitionIdQueue,
       ImmutableClassesGiraphConfiguration<I, V, E> configuration,
       CentralizedServiceWorker<I, V, E> serviceWorker) {
@@ -125,6 +129,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
     this.configuration = configuration;
     this.partitionIdQueue = partitionIdQueue;
     this.messageStore = messageStore;
+    this.localMessageStore = localMessageStore;
     this.serviceWorker = serviceWorker;
     this.graphState = graphState;
 
@@ -237,7 +242,16 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
     // Make sure this is thread-safe across runs
     synchronized (partition) {
       for (Vertex<I, V, E> vertex : partition) {
-        Iterable<M1> messages = messageStore.getVertexMessages(vertex.getId());
+        Iterable<M1> messages;
+        if (configuration.asyncLocalRead()) {
+          // YH: get iterators for both message stores and concat them
+          messages = Iterables.concat(
+            messageStore.getVertexMessages(vertex.getId()),
+            localMessageStore.getVertexMessages(vertex.getId()));
+        } else {
+          messages = messageStore.getVertexMessages(vertex.getId());
+        }
+
         if (vertex.isHalted() && !Iterables.isEmpty(messages)) {
           vertex.wakeUp();
         }
@@ -266,6 +280,14 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         // Remove the messages now that the vertex has finished computation
         messageStore.clearVertexMessages(vertex.getId());
 
+        // YH: also remove local messages
+        // TODO-YH: this is NOT thread safe!!!
+        // (if 2 threads are running how do we ensure we don't
+        //  clear out messages it hasn't yet processed/missed???)
+        if (configuration.asyncLocalRead()) {
+          localMessageStore.clearVertexMessages(vertex.getId());
+        }
+
         // Add statistics for this vertex
         partitionStats.incrVertexCount();
         partitionStats.addEdgeCount(vertex.getNumEdges());
@@ -278,6 +300,9 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       }
 
       messageStore.clearPartition(partition.getId());
+      // YH: We CANNOT clear partition for localMessageStore!!
+      //     Unprocessed messages must be persisted to next superstep.
+      // TODO-YH: true? should we have a/b buffers that keep switching?
     }
     WorkerProgress.get().addVerticesComputed(verticesComputedProgress);
     WorkerProgress.get().incrementPartitionsComputed();

@@ -289,6 +289,9 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
       context.progress();
       MessageStore<I, Writable> messageStore =
         serviceWorker.getServerData().getCurrentMessageStore();
+      // YH: also pass in localMessageStore (see all occurrences for additions)
+      MessageStore<I, Writable> localMessageStore =
+        serviceWorker.getServerData().getLocalMessageStore();
       int numPartitions = serviceWorker.getPartitionStore().getNumPartitions();
       int numThreads = Math.min(numComputeThreads, numPartitions);
       if (LOG.isInfoEnabled()) {
@@ -300,7 +303,7 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
       // execute the current superstep
       if (numPartitions > 0) {
         processGraphPartitions(context, partitionStatsList, graphState,
-          messageStore, numPartitions, numThreads);
+          messageStore, localMessageStore, numPartitions, numThreads);
       }
       finishedSuperstepStats = completeSuperstepAndCollectStats(
         partitionStatsList, superstepTimerContext);
@@ -680,6 +683,7 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
    * @param partitionStatsList to pick up this superstep's processing stats
    * @param graphState the BSP graph state
    * @param messageStore the messages to be processed in this superstep
+   * @param localMessageStore local messages to be processed in this superstep
    * @param numPartitions the number of data partitions (vertices) to process
    * @param numThreads number of concurrent threads to do processing
    */
@@ -687,6 +691,7 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
       List<PartitionStats> partitionStatsList,
       final GraphState graphState,
       final MessageStore<I, Writable> messageStore,
+      final MessageStore<I, Writable> localMessageStore,
       int numPartitions,
       int numThreads) {
     final BlockingQueue<Integer> computePartitionIdQueue =
@@ -718,6 +723,7 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
                 context,
                 graphState,
                 messageStore,
+                localMessageStore,
                 computePartitionIdQueue,
                 conf,
                 serviceWorker);
