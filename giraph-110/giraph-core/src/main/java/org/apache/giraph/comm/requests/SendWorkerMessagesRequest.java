@@ -20,6 +20,7 @@ package org.apache.giraph.comm.requests;
 
 import org.apache.giraph.comm.ServerData;
 import org.apache.giraph.comm.messages.MessageStore;
+import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.utils.ByteArrayVertexIdMessages;
 import org.apache.giraph.utils.PairList;
 import org.apache.hadoop.io.Writable;
@@ -47,10 +48,13 @@ public class SendWorkerMessagesRequest<I extends WritableComparable,
    *
    * @param partVertMsgs Map of remote partitions =>
    *                     ByteArrayVertexIdMessages
+   * @param conf ImmutableClassesGiraphConfiguration
    */
   public SendWorkerMessagesRequest(
-      PairList<Integer, ByteArrayVertexIdMessages<I, M>> partVertMsgs) {
+      PairList<Integer, ByteArrayVertexIdMessages<I, M>> partVertMsgs,
+      ImmutableClassesGiraphConfiguration conf) {
     this.partitionVertexData = partVertMsgs;
+    setConf(conf);
   }
 
   @Override
@@ -78,7 +82,7 @@ public class SendWorkerMessagesRequest<I extends WritableComparable,
   /**
    * Helper function for doRequest() and doLocalRequest()
    *
-   * @param serverData {@link WorkerRequest#doRequest}
+   * @param serverData ServerData
    * @param isLocal Whether request is local or not
    */
   private void doRequest(ServerData serverData, boolean isLocal) {

@@ -148,21 +148,37 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
       getServiceWorker().getVertexPartitionOwner(destVertexId);
     WorkerInfo workerInfo = owner.getWorkerInfo();
     final int partitionId = owner.getPartitionId();
+
     if (LOG.isTraceEnabled()) {
       LOG.trace("sendMessageRequest: Send bytes (" + message.toString() +
         ") to " + destVertexId + " on worker " + workerInfo);
     }
     ++totalMsgsSentInSuperstep;
+
     // Add the message to the cache
     int workerMessageSize = addMessage(
       workerInfo, partitionId, destVertexId, message);
+
     // Send a request if the cache of outgoing message to
     // the remote worker 'workerInfo' is full enough to be flushed
-    if (workerMessageSize >= maxMessagesSizePerWorker) {
+    //
+    // YH: if local worker is same as destination vertex's worker,
+    // send message immediately (skip cache). Ensures that local message
+    // store is updated as early as possible.
+    // (Note that we still cache, but immediately remove.. this may be
+    //  highly inefficient...)
+    //
+    // TODO-YH: trade-off is to flush after a vertex completes computation
+    // instead of flushing things immediately on every send call
+    // (i.e., we can add flushLocal() that flushes only local messages)
+    // TODO-YH: SendMessageToAllCache isn't modified
+    // || getServiceWorker().getWorkerInfo().equals(workerInfo)
+    if (workerMessageSize >= maxMessagesSizePerWorker ||
+        getServiceWorker().getWorkerInfo().equals(workerInfo)) {
       PairList<Integer, ByteArrayVertexIdMessages<I, M>>
         workerMessages = removeWorkerMessages(workerInfo);
       WritableRequest writableRequest =
-        new SendWorkerMessagesRequest<I, M>(workerMessages);
+        new SendWorkerMessagesRequest<I, M>(workerMessages, getConf());
       totalMsgBytesSentInSuperstep += writableRequest.getSerializedSize();
       clientProcessor.doRequest(workerInfo, writableRequest);
       // Notify sending
@@ -242,7 +258,7 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
       iterator.next();
       WritableRequest writableRequest =
         new SendWorkerMessagesRequest<I, M>(
-          iterator.getCurrentSecond());
+          iterator.getCurrentSecond(), getConf());
       totalMsgBytesSentInSuperstep += writableRequest.getSerializedSize();
       clientProcessor.doRequest(
         iterator.getCurrentFirst(), writableRequest);

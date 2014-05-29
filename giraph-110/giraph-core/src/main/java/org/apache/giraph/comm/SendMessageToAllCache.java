@@ -252,7 +252,7 @@ public class SendMessageToAllCache<I extends WritableComparable,
           PairList<Integer, ByteArrayVertexIdMessages<I, M>>
             workerMessages = removeWorkerMessages(workerInfoList[i]);
           writableRequest =
-            new SendWorkerMessagesRequest<I, M>(workerMessages);
+            new SendWorkerMessagesRequest<I, M>(workerMessages, getConf());
           totalMsgBytesSentInSuperstep += writableRequest.getSerializedSize();
           clientProcessor.doRequest(workerInfoList[i], writableRequest);
           // Notify sending

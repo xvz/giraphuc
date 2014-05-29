@@ -224,7 +224,7 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
       if (vertexIdMessages.getSize() > maxMessagesSizePerWorker) {
         WritableRequest messagesRequest = new
             SendPartitionCurrentMessagesRequest<I, V, E, Writable>(
-            partitionId, vertexIdMessages);
+            partitionId, vertexIdMessages, configuration);
         doRequest(workerInfo, messagesRequest);
         vertexIdMessages =
             new ByteArrayVertexIdMessages<I, Writable>(
@@ -236,7 +236,7 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
     if (!vertexIdMessages.isEmpty()) {
       WritableRequest messagesRequest = new
           SendPartitionCurrentMessagesRequest<I, V, E, Writable>(
-          partitionId, vertexIdMessages);
+          partitionId, vertexIdMessages, configuration);
       doRequest(workerInfo, messagesRequest);
     }
   }
@@ -463,7 +463,8 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
     // If this is local, execute locally
     if (serviceWorker.getWorkerInfo().getTaskId() ==
         workerInfo.getTaskId()) {
-      ((WorkerRequest) writableRequest).doRequest(serverData);
+      // YH: always use doLocalRequest()
+      ((WorkerRequest) writableRequest).doLocalRequest(serverData);
       localRequests.inc();
     } else {
       workerClient.sendWritableRequest(

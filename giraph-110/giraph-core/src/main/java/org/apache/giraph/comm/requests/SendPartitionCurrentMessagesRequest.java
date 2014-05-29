@@ -23,6 +23,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import org.apache.giraph.comm.ServerData;
 import org.apache.giraph.comm.messages.MessageStore;
+import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.utils.ByteArrayVertexIdMessages;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
@@ -52,12 +53,15 @@ public class SendPartitionCurrentMessagesRequest<I extends WritableComparable,
    *
    * @param partitionId Partition to send the request to
    * @param vertexIdMessages Map of messages to send
+   * @param conf ImmutableClassesGiraphConfiguration
    */
   public SendPartitionCurrentMessagesRequest(int partitionId,
-    ByteArrayVertexIdMessages<I, M> vertexIdMessages) {
+    ByteArrayVertexIdMessages<I, M> vertexIdMessages,
+    ImmutableClassesGiraphConfiguration conf) {
     super();
     this.partitionId = partitionId;
     this.vertexIdMessageMap = vertexIdMessages;
+    setConf(conf);
   }
 
   @Override
@@ -97,7 +101,7 @@ public class SendPartitionCurrentMessagesRequest<I extends WritableComparable,
   /**
    * Helper function for doRequest() and doLocalRequest()
    *
-   * @param serverData {@link WorkerRequest#doRequest}
+   * @param serverData ServerData
    * @param isLocal Whether request is local or not
    */
   private void doRequest(ServerData<I, V, E> serverData, boolean isLocal) {

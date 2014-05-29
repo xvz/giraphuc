@@ -163,7 +163,7 @@ public class RequestTest {
 
     // Send the request
     SendWorkerMessagesRequest<IntWritable, IntWritable> request =
-      new SendWorkerMessagesRequest<IntWritable, IntWritable>(dataToSend);
+      new SendWorkerMessagesRequest<IntWritable, IntWritable>(dataToSend, conf);
     client.sendWritableRequest(workerInfo.getTaskId(), request);
     client.waitAllRequests();
 

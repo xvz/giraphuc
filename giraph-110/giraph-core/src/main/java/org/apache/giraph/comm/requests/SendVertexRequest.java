@@ -82,7 +82,7 @@ public class SendVertexRequest<I extends WritableComparable,
   }
 
   @Override
-  public void doLocalRequest(ServerData serverData) {
+  public void doLocalRequest(ServerData<I, V, E> serverData) {
     doRequest(serverData);  // YH: dummy wrapper
   }
 

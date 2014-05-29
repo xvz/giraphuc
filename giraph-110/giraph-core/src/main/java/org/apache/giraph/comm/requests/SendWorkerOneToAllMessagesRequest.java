@@ -104,7 +104,7 @@ public class SendWorkerOneToAllMessagesRequest<I extends WritableComparable,
   /**
    * Helper function for doRequest() and doLocalRequest()
    *
-   * @param serverData {@link WorkerRequest#doRequest}
+   * @param serverData ServerData
    * @param isLocal Whether request is local or not
    */
   private void doRequest(ServerData serverData, boolean isLocal) {
