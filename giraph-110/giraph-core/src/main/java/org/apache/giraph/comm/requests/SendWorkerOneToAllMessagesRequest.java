@@ -27,6 +27,7 @@ import java.util.Map.Entry;
 
 import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.comm.ServerData;
+import org.apache.giraph.comm.messages.MessageStore;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.partition.PartitionOwner;
 import org.apache.giraph.utils.ByteArrayOneToAllMessages;
@@ -91,6 +92,22 @@ public class SendWorkerOneToAllMessagesRequest<I extends WritableComparable,
 
   @Override
   public void doRequest(ServerData serverData) {
+    doRequest(serverData, false);  // YH: wrapper call
+  }
+
+  @Override
+  public void doLocalRequest(ServerData serverData) {
+    // YH: use local message store only if doing async
+    doRequest(serverData, getConf().asyncLocalRead());
+  }
+
+  /**
+   * Helper function for doRequest() and doLocalRequest()
+   *
+   * @param serverData {@link WorkerRequest#doRequest}
+   * @param isLocal Whether request is local or not
+   */
+  private void doRequest(ServerData serverData, boolean isLocal) {
     CentralizedServiceWorker<I, ?, ?> serviceWorker =
       serverData.getServiceWorker();
     // Get the initial size of ByteArrayVertexIdMessages per partition
@@ -139,17 +156,22 @@ public class SendWorkerOneToAllMessagesRequest<I extends WritableComparable,
     } catch (IOException e) {
       throw new RuntimeException("doRequest: Got IOException ", e);
     }
+
     // Read ByteArrayVertexIdMessages and write to message store
+    // YH: use local message store if doing async and request is local
+    MessageStore msgStore = isLocal ? serverData.getLocalMessageStore() :
+      serverData.getIncomingMessageStore();
+
     try {
       for (Entry<Integer, ByteArrayVertexIdMessages> idMsgs :
           partitionIdMsgs.entrySet()) {
         if (!idMsgs.getValue().isEmpty()) {
-          serverData.getIncomingMessageStore().addPartitionMessages(
-            idMsgs.getKey(), idMsgs.getValue());
+          msgStore.addPartitionMessages(idMsgs.getKey(), idMsgs.getValue());
         }
       }
     } catch (IOException e) {
-      throw new RuntimeException("doRequest: Got IOException.", e);
+      throw new RuntimeException(isLocal ? "doRequest" : "doLocalRequest" +
+                                 ": Got IOException ", e);
     }
   }
 }

@@ -118,6 +118,11 @@ public class SendWorkerVerticesRequest<I extends WritableComparable,
   }
 
   @Override
+  public void doLocalRequest(ServerData serverData) {
+    doRequest(serverData);  // YH: dummy wrapper
+  }
+
+  @Override
   public int getSerializedSize() {
     // 4 for number of partitions
     int size = super.getSerializedSize() + 4;

@@ -19,6 +19,7 @@
 package org.apache.giraph.comm.requests;
 
 import org.apache.giraph.comm.ServerData;
+import org.apache.giraph.comm.messages.MessageStore;
 import org.apache.giraph.utils.ByteArrayVertexIdMessages;
 import org.apache.giraph.utils.PairList;
 import org.apache.hadoop.io.Writable;
@@ -65,16 +66,37 @@ public class SendWorkerMessagesRequest<I extends WritableComparable,
 
   @Override
   public void doRequest(ServerData serverData) {
+    doRequest(serverData, false);  // YH: wrapper call
+  }
+
+  @Override
+  public void doLocalRequest(ServerData serverData) {
+    // YH: use local message store only if doing async
+    doRequest(serverData, getConf().asyncLocalRead());
+  }
+
+  /**
+   * Helper function for doRequest() and doLocalRequest()
+   *
+   * @param serverData {@link WorkerRequest#doRequest}
+   * @param isLocal Whether request is local or not
+   */
+  private void doRequest(ServerData serverData, boolean isLocal) {
     PairList<Integer, ByteArrayVertexIdMessages<I, M>>.Iterator
         iterator = partitionVertexData.getIterator();
+
+    // YH: use local message store if doing async and request is local
+    MessageStore msgStore = isLocal ? serverData.getLocalMessageStore() :
+      serverData.getIncomingMessageStore();
+
     while (iterator.hasNext()) {
       iterator.next();
       try {
-        serverData.getIncomingMessageStore().
-            addPartitionMessages(iterator.getCurrentFirst(),
+        msgStore.addPartitionMessages(iterator.getCurrentFirst(),
                 iterator.getCurrentSecond());
       } catch (IOException e) {
-        throw new RuntimeException("doRequest: Got IOException ", e);
+        throw new RuntimeException(isLocal ? "doRequest" : "doLocalRequest" +
+                                   ": Got IOException ", e);
       }
     }
   }

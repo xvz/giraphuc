@@ -37,4 +37,11 @@ public interface WorkerRequest<I extends WritableComparable,
    * @param serverData Accessible data that can be mutated per the request
    */
   void doRequest(ServerData<I, V, E> serverData);
+
+  /**
+   * YH: Execute a local request
+   *
+   * @param serverData Accessible data that can be mutated per the request
+   */
+  void doLocalRequest(ServerData<I, V, E> serverData);
 }

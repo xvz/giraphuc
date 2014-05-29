@@ -79,6 +79,12 @@ public class SendWorkerAggregatorsRequest extends
     aggregatorData.receivedRequestFromWorker();
   }
 
+
+  @Override
+  public void doLocalRequest(ServerData serverData) {
+    doRequest(serverData);  // YH: dummy wrapper
+  }
+
   @Override
   public RequestType getType() {
     return RequestType.SEND_WORKER_AGGREGATORS_REQUEST;

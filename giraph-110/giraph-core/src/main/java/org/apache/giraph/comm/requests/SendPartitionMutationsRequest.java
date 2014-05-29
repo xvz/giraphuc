@@ -133,6 +133,11 @@ public class SendPartitionMutationsRequest<I extends WritableComparable,
   }
 
   @Override
+  public void doLocalRequest(ServerData serverData) {
+    doRequest(serverData);  // YH: dummy wrapper
+  }
+
+  @Override
   public int getSerializedSize() {
     return WritableRequest.UNKNOWN_SIZE;
   }

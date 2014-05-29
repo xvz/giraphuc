@@ -73,4 +73,9 @@ public class SendWorkerEdgesRequest<I extends WritableComparable,
               iterator.getCurrentSecond());
     }
   }
+
+  @Override
+  public void doLocalRequest(ServerData serverData) {
+    doRequest(serverData);  // YH: dummy wrapper
+  }
 }
