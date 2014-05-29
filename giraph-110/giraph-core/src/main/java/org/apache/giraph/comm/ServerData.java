@@ -67,6 +67,12 @@ public class ServerData<I extends WritableComparable,
    */
   private volatile MessageStore<I, Writable> currentMessageStore;
   /**
+   * YH: Message store for local messages (messages which we received in
+   * the current OR previous superstep and is consumed in the current OR
+   * next superstep).
+   */
+  private volatile MessageStore<I, Writable> localMessageStore;
+  /**
    * Map of partition ids to incoming vertex mutations from other workers.
    * (Synchronized access to values)
    */
@@ -148,6 +154,20 @@ public class ServerData<I extends WritableComparable,
     return (MessageStore<I, M>) currentMessageStore;
   }
 
+  /**
+   * YH: Get message store for local messages (messages which we received in
+   * the current OR previous superstep and is consumed in the current OR
+   * next superstep).
+   *
+   * @param <M> Message data
+   * @return Local message store
+   */
+  public <M extends Writable> MessageStore<I, M> getLocalMessageStore() {
+    // NOTE: if we have phases, we should change this return
+    // TODO-YH: also fix checkpointing stuff (search getIncoming..(), etc)
+    return (MessageStore<I, M>) localMessageStore;
+  }
+
   /** Prepare for next super step */
   public void prepareSuperstep() {
     if (currentMessageStore != null) {
@@ -163,6 +183,15 @@ public class ServerData<I extends WritableComparable,
             messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
     incomingMessageStore =
         messageStoreFactory.newStore(conf.getOutgoingMessageValueFactory());
+
+    // YH: create localMessageStore if needed; this persists across supersteps
+    if (conf.asyncLocalRead() && localMessageStore == null) {
+      // TODO-YH: this breaks if Incoming and Outgoing factories are not same!!
+      // this should PROBABLY be Incoming... so is there bug above?
+      // (i.e., current uses incoming but incoming uses outgoing)
+      localMessageStore =
+        messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
+    }
   }
 
   /**
