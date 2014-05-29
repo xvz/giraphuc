@@ -1060,5 +1060,10 @@ public interface GiraphConstants {
   IntConfOption HDFS_FILE_CREATION_RETRY_WAIT_MS =
       new IntConfOption("giraph.hdfs.file.creation.retry.wait.ms", 30_000,
           "Milliseconds to wait prior to retrying creation of an HDFS file");
+
+  /** YH: Whether to read most recently available local value or not */
+  BooleanConfOption ASYNC_LOCAL_READ =
+      new BooleanConfOption("giraph.asyncLocalRead", false,
+          "Whether to read most recently available local value or not");
 }
 // CHECKSTYLE: resume InterfaceIsTypeCheck

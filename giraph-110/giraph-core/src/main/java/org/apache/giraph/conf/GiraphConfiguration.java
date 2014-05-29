@@ -1238,4 +1238,13 @@ public class GiraphConfiguration extends Configuration
   public int getHdfsFileCreationRetryWaitMs() {
     return HDFS_FILE_CREATION_RETRY_WAIT_MS.get(this);
   }
+
+  /**
+   * YH: Check whether to read most recently available local value or not.
+   *
+   * @return true if reading most recently available local value
+   */
+  public boolean asyncLocalRead() {
+    return ASYNC_LOCAL_READ.get(this);
+  }
 }
