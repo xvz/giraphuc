@@ -201,6 +201,8 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
   private void sendPartitionMessages(WorkerInfo workerInfo,
                                      Partition<I, V, E> partition) {
     final int partitionId = partition.getId();
+    // YH: this doesn't need to be changed---workerInfo will
+    // always be that of a remote worker
     MessageStore<I, Writable> messageStore =
         serverData.getCurrentMessageStore();
     ByteArrayVertexIdMessages<I, Writable> vertexIdMessages =

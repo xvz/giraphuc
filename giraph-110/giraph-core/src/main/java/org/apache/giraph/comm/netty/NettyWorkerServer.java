@@ -145,6 +145,15 @@ public class NettyWorkerServer<I extends WritableComparable,
     for (Integer partitionId : service.getPartitionStore().getPartitionIds()) {
       Iterable<I> destinations = serverData.getCurrentMessageStore().
           getPartitionDestinationVertices(partitionId);
+
+      // YH: must look in local message store too, as this is what
+      // creates/adds missing vertices (i.e., sinks)
+      // YH-TODO: correct??
+      if (conf.asyncLocalRead() && Iterables.isEmpty(destinations)) {
+        destinations = serverData.getLocalMessageStore().
+          getPartitionDestinationVertices(partitionId);
+      }
+
       if (!Iterables.isEmpty(destinations)) {
         Partition<I, V, E> partition =
             service.getPartitionStore().getOrCreatePartition(partitionId);
@@ -179,10 +188,15 @@ public class NettyWorkerServer<I extends WritableComparable,
           }
           serverData.getVertexMutations().remove(vertexIndex);
         }
+
+        // YH: also check local message store
+        boolean hasMessages = serverData.getCurrentMessageStore().
+          hasMessagesForVertex(vertexIndex) ||
+          (conf.asyncLocalRead() && serverData.getLocalMessageStore().
+            hasMessagesForVertex(vertexIndex));
+
         Vertex<I, V, E> vertex = vertexResolver.resolve(
-            vertexIndex, originalVertex, mutations,
-            serverData.getCurrentMessageStore().
-                hasMessagesForVertex(vertexIndex));
+            vertexIndex, originalVertex, mutations, hasMessages);
         context.progress();
 
         if (LOG.isDebugEnabled()) {
