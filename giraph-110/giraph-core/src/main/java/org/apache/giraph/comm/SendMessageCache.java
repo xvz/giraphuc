@@ -173,8 +173,7 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
     // (i.e., we can add flushLocal() that flushes only local messages)
     // TODO-YH: SendMessageToAllCache isn't modified
     // || getServiceWorker().getWorkerInfo().equals(workerInfo)
-    if (workerMessageSize >= maxMessagesSizePerWorker ||
-        getServiceWorker().getWorkerInfo().equals(workerInfo)) {
+    if (workerMessageSize >= maxMessagesSizePerWorker) {
       PairList<Integer, ByteArrayVertexIdMessages<I, M>>
         workerMessages = removeWorkerMessages(workerInfo);
       WritableRequest writableRequest =

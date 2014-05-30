@@ -146,9 +146,7 @@ public class NettyWorkerServer<I extends WritableComparable,
       Iterable<I> destinations = serverData.getCurrentMessageStore().
           getPartitionDestinationVertices(partitionId);
 
-      // YH: must look in local message store too, as this is what
-      // creates/adds missing vertices (i.e., sinks)
-      // YH-TODO: correct??
+      // YH: must look in local message store too
       if (conf.asyncLocalRead() && Iterables.isEmpty(destinations)) {
         destinations = serverData.getLocalMessageStore().
           getPartitionDestinationVertices(partitionId);
