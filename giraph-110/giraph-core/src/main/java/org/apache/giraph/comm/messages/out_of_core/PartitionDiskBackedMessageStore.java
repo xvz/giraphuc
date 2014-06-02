@@ -160,6 +160,28 @@ public class PartitionDiskBackedMessageStore<I extends WritableComparable,
   }
 
   /**
+   * Get and clear the messages for a vertex.
+   * TODO-YH: why doesn't this class implement MessageStore??
+   *
+   * @param vertexId Vertex id for which we want to get messages
+   * @return Iterable of messages for a vertex id
+   */
+  public Iterable<M> removeVertexMessages(I vertexId) throws IOException {
+    DataInputOutput dataInputOutput = inMemoryMessages.remove(vertexId);
+    if (dataInputOutput == null) {
+      dataInputOutput = config.createMessagesInputOutput();
+    }
+    Iterable<M> combinedIterable = new MessagesIterable<M>(
+        dataInputOutput, messageValueFactory);
+
+    for (SequentialFileMessageStore<I, M> fileStore : fileStores) {
+      combinedIterable = Iterables.concat(combinedIterable,
+          fileStore.getVertexMessages(vertexId));
+    }
+    return combinedIterable;
+  }
+
+  /**
    * Get number of messages in memory
    *
    * @return Number of messages in memory

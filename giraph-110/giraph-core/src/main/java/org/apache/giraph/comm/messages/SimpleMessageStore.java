@@ -164,6 +164,19 @@ public abstract class SimpleMessageStore<I extends WritableComparable,
   }
 
   @Override
+  public Iterable<M> removeVertexMessages(I vertexId) throws IOException {
+    // YH: nearly identical to getVertexMessages...
+    ConcurrentMap<I, T> partitionMap = map.get(getPartitionId(vertexId));
+    if (partitionMap == null) {
+      return Collections.<M>emptyList();
+    }
+    // ...except that we use remove() instead of get()
+    T messages = partitionMap.remove(vertexId);
+    return (messages == null) ? Collections.<M>emptyList() :
+        getMessagesAsIterable(messages);
+  }
+
+  @Override
   public void writePartition(DataOutput out,
       int partitionId) throws IOException {
     ConcurrentMap<I, T> partitionMap = map.get(partitionId);

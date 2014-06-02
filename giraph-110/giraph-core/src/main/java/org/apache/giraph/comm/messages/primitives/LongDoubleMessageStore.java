@@ -145,6 +145,18 @@ public class LongDoubleMessageStore
   }
 
   @Override
+  public Iterable<DoubleWritable> removeVertexMessages(
+      LongWritable vertexId) throws IOException {
+    Long2DoubleOpenHashMap partitionMap = getPartitionMap(vertexId);
+    if (!partitionMap.containsKey(vertexId.get())) {
+      return EmptyIterable.get();
+    } else {
+      return Collections.singleton(
+          new DoubleWritable(partitionMap.remove(vertexId.get())));
+    }
+  }
+
+  @Override
   public void clearVertexMessages(LongWritable vertexId) throws IOException {
     getPartitionMap(vertexId).remove(vertexId.get());
   }

@@ -182,6 +182,18 @@ public class LongByteArrayMessageStore<M extends Writable>
   }
 
   @Override
+  public Iterable<M> removeVertexMessages(
+      LongWritable vertexId) throws IOException {
+    DataInputOutput dataInputOutput =
+        getPartitionMap(vertexId).remove(vertexId.get());
+    if (dataInputOutput == null) {
+      return EmptyIterable.get();
+    } else {
+      return new MessagesIterable<M>(dataInputOutput, messageValueFactory);
+    }
+  }
+
+  @Override
   public void clearVertexMessages(LongWritable vertexId) throws IOException {
     getPartitionMap(vertexId).remove(vertexId.get());
   }

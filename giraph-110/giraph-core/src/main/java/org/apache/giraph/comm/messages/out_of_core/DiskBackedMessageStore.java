@@ -114,6 +114,15 @@ public class DiskBackedMessageStore<I extends WritableComparable,
   }
 
   @Override
+  public Iterable<M> removeVertexMessages(I vertexId) throws IOException {
+    if (hasMessagesForVertex(vertexId)) {
+      return getMessageStore(vertexId).removeVertexMessages(vertexId);
+    } else {
+      return EmptyIterable.get();
+    }
+  }
+
+  @Override
   public boolean hasMessagesForVertex(I vertexId) {
     return getMessageStore(vertexId).hasMessagesForVertex(vertexId);
   }

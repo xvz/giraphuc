@@ -181,6 +181,18 @@ public class IntByteArrayMessageStore<M extends Writable>
   }
 
   @Override
+  public Iterable<M> removeVertexMessages(
+      IntWritable vertexId) throws IOException {
+    DataInputOutput dataInputOutput =
+        getPartitionMap(vertexId).remove(vertexId.get());
+    if (dataInputOutput == null) {
+      return EmptyIterable.get();
+    } else {
+      return new MessagesIterable<M>(dataInputOutput, messageValueFactory);
+    }
+  }
+
+  @Override
   public void clearVertexMessages(IntWritable vertexId) throws IOException {
     getPartitionMap(vertexId).remove(vertexId.get());
   }

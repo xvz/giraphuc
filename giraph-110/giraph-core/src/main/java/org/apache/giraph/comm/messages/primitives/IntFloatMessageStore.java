@@ -148,6 +148,18 @@ public class IntFloatMessageStore
   }
 
   @Override
+  public Iterable<FloatWritable> removeVertexMessages(
+      IntWritable vertexId) throws IOException {
+    Int2FloatOpenHashMap partitionMap = getPartitionMap(vertexId);
+    if (!partitionMap.containsKey(vertexId.get())) {
+      return EmptyIterable.get();
+    } else {
+      return Collections.singleton(
+          new FloatWritable(partitionMap.remove(vertexId.get())));
+    }
+  }
+
+  @Override
   public void clearVertexMessages(IntWritable vertexId) throws IOException {
     getPartitionMap(vertexId).remove(vertexId.get());
   }

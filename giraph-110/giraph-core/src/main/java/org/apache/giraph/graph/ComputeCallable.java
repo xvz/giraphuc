@@ -244,10 +244,11 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       for (Vertex<I, V, E> vertex : partition) {
         Iterable<M1> messages;
         if (configuration.asyncLocalRead()) {
-          // YH: get iterators for both message stores and concat them
+          // YH: get iterables for both message stores and concat them
+          // Note that local messages are *removed*
           messages = Iterables.concat(
             messageStore.getVertexMessages(vertex.getId()),
-            localMessageStore.getVertexMessages(vertex.getId()));
+            localMessageStore.removeVertexMessages(vertex.getId()));
         } else {
           messages = messageStore.getVertexMessages(vertex.getId());
         }
@@ -279,14 +280,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         }
         // Remove the messages now that the vertex has finished computation
         messageStore.clearVertexMessages(vertex.getId());
-
-        // YH: also remove local messages
-        // TODO-YH: this is NOT thread safe!!!
-        // (if 2 threads are running how do we ensure we don't
-        //  clear out messages it hasn't yet processed/missed???)
-        if (configuration.asyncLocalRead()) {
-          localMessageStore.clearVertexMessages(vertex.getId());
-        }
+        // YH: no need to clear local message store (it was already done)
 
         // Add statistics for this vertex
         partitionStats.incrVertexCount();
@@ -301,12 +295,13 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
 
       messageStore.clearPartition(partition.getId());
       // YH: We CANNOT clear partition for localMessageStore!!
-      //     Unprocessed messages must be persisted to next superstep.
-      // TODO-YH: true? should we have a/b buffers that keep switching?
+      //     Unprocessed messages must persist to next superstep.
+      // TODO-YH: new incoming messages do not overwrite existing messages!!
+      // hence a vertex might see two versions of the same message...
+      // shouldn't happen if scheduling/execution order is fixed??
     }
     WorkerProgress.get().addVerticesComputed(verticesComputedProgress);
     WorkerProgress.get().incrementPartitionsComputed();
     return partitionStats;
   }
 }
-

@@ -45,6 +45,21 @@ public interface MessageStore<I extends WritableComparable,
   Iterable<M> getVertexMessages(I vertexId) throws IOException;
 
   /**
+   * Gets messages for a vertex and removes it from the underlying store.
+   * The lifetime of every message is only guaranteed until the iterator's
+   * next() method is called. Do not hold references to objects returned
+   * by this iterator.
+   *
+   * Similar to getVertexMessages() followed by clearVertexMessages(),
+   * but this is "atomic" and returns an iterable after clearing.
+   *
+   * @param vertexId Vertex id for which we want to get messages
+   * @return Iterable of messages for a vertex id
+   * @throws java.io.IOException
+   */
+  Iterable<M> removeVertexMessages(I vertexId) throws IOException;
+
+  /**
    * Clears messages for a vertex.
    *
    * @param vertexId Vertex id for which we want to clear messages
