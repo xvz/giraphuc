@@ -66,11 +66,15 @@ public class GiraphConfiguration extends Configuration
   /** ByteBufAllocator to be used by netty */
   private ByteBufAllocator nettyBufferAllocator = null;
 
+  /** YH: Configuration for async */
+  private AsyncConfiguration asyncConf = null;
+
   /**
    * Constructor that creates the configuration
    */
   public GiraphConfiguration() {
     configureHadoopSecurity();
+    configureAsync();
   }
 
   /**
@@ -81,6 +85,9 @@ public class GiraphConfiguration extends Configuration
   public GiraphConfiguration(Configuration conf) {
     super(conf);
     configureHadoopSecurity();
+    // YH: this may be a problem if call is attempting to clone()
+    // currently, calls to this are passing in Hadoop config, so we're okay
+    configureAsync();
   }
 
   /**
@@ -1239,12 +1246,19 @@ public class GiraphConfiguration extends Configuration
     return HDFS_FILE_CREATION_RETRY_WAIT_MS.get(this);
   }
 
+
   /**
-   * YH: Check whether to read most recently available local value or not.
-   *
-   * @return true if reading most recently available local value
+   * YH: Initializes and configures asyncConf based on user preferences.
    */
-  public boolean asyncLocalRead() {
-    return ASYNC_LOCAL_READ.get(this);
+  private void configureAsync() {
+    asyncConf = new AsyncConfiguration();
+    asyncConf.setLocalRead(ASYNC_LOCAL_READ.get(this));
+  }
+
+  /**
+   * @return Configuration for async mode.
+   */
+  public AsyncConfiguration getAsyncConf() {
+    return asyncConf;
   }
 }

@@ -241,14 +241,46 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
     long verticesComputedProgress = 0;
     // Make sure this is thread-safe across runs
     synchronized (partition) {
+      // YH: this for loop must always iterate over vertices
+      // of the partition in the SAME order
+      // TODO-YH: this is not true right now.. need to get
+      // and iterate over sorted keys (i.e., sorted values)
       for (Vertex<I, V, E> vertex : partition) {
         Iterable<M1> messages;
-        if (configuration.asyncLocalRead()) {
-          // YH: get iterables for both message stores and concat them
-          // Note that local messages are *removed*
-          messages = Iterables.concat(
-            messageStore.getVertexMessages(vertex.getId()),
-            localMessageStore.removeVertexMessages(vertex.getId()));
+        if (configuration.getAsyncConf().doLocalRead()) {
+          // YH: if this is a new phase, do NOT read local message store.
+          // Furthermore, CLEAR any messages current in the store, as
+          // new versions will be received during the next superstep
+          // (and before the vertex reads these messages).
+          //
+          // This forces all messages to be read in next superstep, which
+          // avoids errors from reading partial # of messages.
+          //
+          // NOTE: this assumes that scheduling always executes vertices
+          // in same order---this will NOT work for inter-worker message
+          // queues, b/c network latencies can cause random delays.
+          if (configuration.getAsyncConf().isNewPhase()) {
+            // TODO-YH: need to do BSP in first superstep by making use of
+            // messageStore.. i.e., local messages in newPhase should be
+            // written to messageStore instaed of localMessageStore
+            //
+            // however, we still need to clear localMessageStore so that
+            // messages that came before we executed are not present
+            // as "old" messages in the next superstep
+            //
+            // NOTE: this is assuming that messages are queued instantly
+            // or at least that messages are queued on the actual stores
+            // after buffering for X vertices (cannot do it by size,
+            // otherwise we may get variable # of old messages)
+            localMessageStore.clearVertexMessages(vertex.getId());
+            messages = messageStore.getVertexMessages(vertex.getId());
+          } else {
+            // YH: get iterables for both message stores and concat them
+            // Note that local messages are *removed*
+            messages = Iterables.concat(
+              messageStore.getVertexMessages(vertex.getId()),
+              localMessageStore.removeVertexMessages(vertex.getId()));
+          }
         } else {
           messages = messageStore.getVertexMessages(vertex.getId());
         }

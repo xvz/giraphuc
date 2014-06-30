@@ -185,12 +185,33 @@ public class ServerData<I extends WritableComparable,
         messageStoreFactory.newStore(conf.getOutgoingMessageValueFactory());
 
     // YH: create localMessageStore if needed; this persists across supersteps
-    if (conf.asyncLocalRead() && localMessageStore == null) {
+    if (conf.getAsyncConf().doLocalRead()) {
       // TODO-YH: this breaks if Incoming and Outgoing factories are not same!!
       // this should PROBABLY be Incoming... so is there bug above?
       // (i.e., current uses incoming but incoming uses outgoing)
-      localMessageStore =
-        messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
+      if (localMessageStore == null) {
+        localMessageStore =
+          messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
+      }
+      //if (localMessageStore == null) {
+      //  localMessageStoreA =
+      //    messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
+      //  localMessageStoreB =
+      //    messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
+      //
+      //  localMessageStore = localMessageStoreA;
+      //}
+      //
+      //// TODO-YH: ????.. double check if this is even needed
+      //if (conf.getAsyncConf().isNewPhase()) {
+      //  if (localMessageStore == localMessageStoreA) {
+      //    localMessageStoreB.clearAll();
+      //    localMessageStore = localMessageStoreB;
+      //  } else {
+      //    localMessageStoreA.clearAll();
+      //    localMessageStore = localMessageStoreA;
+      //  }
+      //}
     }
   }
 

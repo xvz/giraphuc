@@ -98,7 +98,7 @@ public class SendWorkerOneToAllMessagesRequest<I extends WritableComparable,
   @Override
   public void doLocalRequest(ServerData serverData) {
     // YH: use local message store only if doing async
-    doRequest(serverData, getConf().asyncLocalRead());
+    doRequest(serverData, getConf().getAsyncConf().doLocalRead());
   }
 
   /**

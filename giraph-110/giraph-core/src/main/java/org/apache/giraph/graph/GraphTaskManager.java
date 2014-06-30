@@ -151,6 +151,10 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
   private Mapper<?, ?, ?, ?>.Context context;
   /** is this GraphTaskManager the master? */
   private boolean isMaster;
+  /** YH: Will next superstep have a new computation phase? **/
+  private boolean isPhaseChanged;
+  /** YH: Is current superstep is a new computation phase? **/
+  private boolean isNewPhase;
 
   /**
    * Default constructor for GiraphTaskManager.
@@ -160,6 +164,10 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
   public GraphTaskManager(Mapper<?, ?, ?, ?>.Context context) {
     this.context = context;
     this.isMaster = false;
+    this.isPhaseChanged = false;
+    // YH: very first superstep (0, not -1) is new phase
+    // NOTE: this works b/c execute()'s main loop starts after input step
+    this.isNewPhase = true;
   }
 
   /**
@@ -211,6 +219,10 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
     ScriptLoader.loadScripts(conf);
     // One time setup for computation factory
     conf.createComputationFactory().initialize(conf);
+
+    // YH: update async conf with correct isNewPhase
+    conf.getAsyncConf().setNewPhase(isNewPhase);
+
     // Do some task setup (possibly starting up a Zookeeper service)
     context.setStatus("setup: Initializing Zookeeper services.");
     String serverPortList = conf.getZookeeperList();
@@ -289,7 +301,7 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
       context.progress();
       MessageStore<I, Writable> messageStore =
         serviceWorker.getServerData().getCurrentMessageStore();
-      // YH: also pass in localMessageStore (see all occurrences for additions)
+      // YH: also pass in localMessageStore
       MessageStore<I, Writable> localMessageStore =
         serviceWorker.getServerData().getLocalMessageStore();
       int numPartitions = serviceWorker.getPartitionStore().getNumPartitions();
@@ -307,6 +319,13 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
       }
       finishedSuperstepStats = completeSuperstepAndCollectStats(
         partitionStatsList, superstepTimerContext);
+
+      // YH: store and update whether the upcoming superstep is a new
+      // computation phase and reset isPhaseChanged flag
+      isNewPhase = isPhaseChanged;
+      conf.getAsyncConf().setNewPhase(isNewPhase);
+      isPhaseChanged = false;
+
       // END of superstep compute loop
     }
 
@@ -675,6 +694,14 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
         }
       }
     }
+  }
+
+  /**
+   * YH: Notify that next superstep will have a different computation
+   * phase from the current superstep.
+   */
+  public void notifyPhaseChange() {
+    isPhaseChanged = true;
   }
 
   /**

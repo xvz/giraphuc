@@ -189,6 +189,12 @@ public interface Computation<I extends WritableComparable,
     throws IOException;
 
   /**
+   * YH: Notify that next superstep will have a different computation
+   * phase from the current superstep.
+   */
+  void phaseChange();
+
+  /**
    * Get the mapper context
    *
    * @return Mapper context

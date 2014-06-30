@@ -147,7 +147,8 @@ public class NettyWorkerServer<I extends WritableComparable,
           getPartitionDestinationVertices(partitionId);
 
       // YH: must look in local message store too
-      if (conf.asyncLocalRead() && Iterables.isEmpty(destinations)) {
+      if (conf.getAsyncConf().doLocalRead() &&
+          Iterables.isEmpty(destinations)) {
         destinations = serverData.getLocalMessageStore().
           getPartitionDestinationVertices(partitionId);
       }
@@ -190,7 +191,8 @@ public class NettyWorkerServer<I extends WritableComparable,
         // YH: also check local message store
         boolean hasMessages = serverData.getCurrentMessageStore().
           hasMessagesForVertex(vertexIndex) ||
-          (conf.asyncLocalRead() && serverData.getLocalMessageStore().
+          (conf.getAsyncConf().doLocalRead() &&
+           serverData.getLocalMessageStore().
             hasMessagesForVertex(vertexIndex));
 
         Vertex<I, V, E> vertex = vertexResolver.resolve(
