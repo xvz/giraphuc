@@ -201,10 +201,16 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
   private void sendPartitionMessages(WorkerInfo workerInfo,
                                      Partition<I, V, E> partition) {
     final int partitionId = partition.getId();
-    // YH: this doesn't need to be changed---workerInfo will
-    // always be that of a remote worker
+    // YH: workerInfo will always be that of a remote worker
+    // so we only need to change this to accommodate remote message store
+    //
+    // TODO-YH: is this correct? looks like this is only used
+    // to exchange vertices...
     MessageStore<I, Writable> messageStore =
+        configuration.getAsyncConf().doRemoteRead() ?
+        serverData.getRemoteMessageStore() :
         serverData.getCurrentMessageStore();
+
     ByteArrayVertexIdMessages<I, Writable> vertexIdMessages =
         new ByteArrayVertexIdMessages<I, Writable>(
             configuration.getOutgoingMessageValueFactory());

@@ -1281,8 +1281,21 @@ public class BspServiceWorker<I extends WritableComparable,
       long startPos = verticesOutputStream.getPos();
       partition.write(verticesOutputStream);
       // write messages
-      getServerData().getCurrentMessageStore().writePartition(
-          verticesOutputStream, partition.getId());
+      // YH: write out contents of correct message store
+      if (getConfiguration().getAsyncConf().doRemoteRead()) {
+        getServerData().getRemoteMessageStore().writePartition(
+            verticesOutputStream, partition.getId());
+      } else {
+        getServerData().getCurrentMessageStore().writePartition(
+            verticesOutputStream, partition.getId());
+      }
+
+      // YH: also write out contents of local store
+      if (getConfiguration().getAsyncConf().doLocalRead()) {
+        getServerData().getLocalMessageStore().writePartition(
+            verticesOutputStream, partition.getId());
+      }
+
       // Write the metadata for this partition
       // Format:
       // <index count>
@@ -1341,8 +1354,18 @@ public class BspServiceWorker<I extends WritableComparable,
   public VertexEdgeCount loadCheckpoint(long superstep) {
     try {
       // clear old message stores
-      getServerData().getIncomingMessageStore().clearAll();
-      getServerData().getCurrentMessageStore().clearAll();
+      // YH: clear stores based on what's enabled/disabled
+      if (getConfiguration().getAsyncConf().doRemoteRead()) {
+        getServerData().getRemoteMessageStore().clearAll();
+      } else {
+        getServerData().getIncomingMessageStore().clearAll();
+        getServerData().getCurrentMessageStore().clearAll();
+      }
+
+      if (getConfiguration().getAsyncConf().doLocalRead()) {
+        getServerData().getLocalMessageStore().clearAll();
+      }
+
     } catch (IOException e) {
       throw new RuntimeException(
           "loadCheckpoint: Failed to clear message stores ", e);
@@ -1391,8 +1414,22 @@ public class BspServiceWorker<I extends WritableComparable,
                 " on " + partitionsFile);
           }
           partition.readFields(partitionsStream);
-          getServerData().getIncomingMessageStore().readFieldsForPartition(
-              partitionsStream, partitionId);
+
+          // YH: restore correct remote message store
+          if (getConfiguration().getAsyncConf().doRemoteRead()) {
+            getServerData().getRemoteMessageStore().readFieldsForPartition(
+                partitionsStream, partitionId);
+          } else {
+            getServerData().getIncomingMessageStore().readFieldsForPartition(
+                partitionsStream, partitionId);
+          }
+
+          // YH: restore local message store if used
+          if (getConfiguration().getAsyncConf().doLocalRead()) {
+            getServerData().getLocalMessageStore().readFieldsForPartition(
+                partitionsStream, partitionId);
+          }
+
           partitionsStream.close();
           if (LOG.isInfoEnabled()) {
             LOG.info("loadCheckpoint: Loaded partition " +

@@ -59,6 +59,9 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
   /** NettyWorkerClientRequestProcessor for message sending */
   protected final NettyWorkerClientRequestProcessor<I, ?, ?> clientProcessor;
 
+  /** YH: Number of messages queued so far */
+  private int numCachedMsgs = 0;
+
   /**
    * Constructor
    *
@@ -173,8 +176,14 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
     // (i.e., we can add flushLocal() that flushes only local messages)
     // TODO-YH: SendMessageToAllCache isn't modified
     // || getServiceWorker().getWorkerInfo().equals(workerInfo)
-    if (workerMessageSize >= maxMessagesSizePerWorker ||
-        getServiceWorker().getWorkerInfo().equals(workerInfo)) {
+
+    // YH: hack.. queued by # of messages
+    numCachedMsgs++;
+
+    //if (workerMessageSize >= maxMessagesSizePerWorker ||
+    //    getServiceWorker().getWorkerInfo().equals(workerInfo)) {
+    if (numCachedMsgs >= getConf().getAsyncConf().maxNumMsgs()) {
+      numCachedMsgs = 0;
       PairList<Integer, ByteArrayVertexIdMessages<I, M>>
         workerMessages = removeWorkerMessages(workerInfo);
       WritableRequest writableRequest =

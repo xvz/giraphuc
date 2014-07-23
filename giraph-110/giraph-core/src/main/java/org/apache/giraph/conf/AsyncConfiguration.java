@@ -22,20 +22,39 @@ package org.apache.giraph.conf;
  * YH: Tracks configuration specific to async mode.
  */
 public class AsyncConfiguration {
-  /** Whether or not to read most recently available local values **/
+  /** Whether or not to read most recently available local values */
   private boolean doLocalRead;
-  /** Whether or not this is a new computation phase **/
+  /** Whether or not to read most recently available remote values */
+  private boolean doRemoteRead;
+  /** Is the next superstep a new computation phase? */
+  // TODO: phases are not completed yet
   private boolean isNewPhase;
-  /** Number of vertices to delay by, when caching sent messages **/
-  private int numVertexDelay;
+  /** Maximum number of messages before flushing cached messages */
+  private int maxNumMsgs;
+  /**
+   * Whether algorithm (or phase) needs every vertex to have all messages
+   * from all its neighbours for every superstep (aka, "stationary")
+   */
+  private boolean needAllMsgs;
 
   /**
    * Default constructor.
    */
   public AsyncConfiguration() {
-    doLocalRead = false;
-    isNewPhase = false;
-    numVertexDelay = 10;
+  }
+
+  /**
+   * Initialization constructor.
+   *
+   * @param conf GiraphConfiguration
+   */
+  public AsyncConfiguration(GiraphConfiguration conf) {
+    doLocalRead = GiraphConfiguration.ASYNC_LOCAL_READ.get(conf);
+    doRemoteRead = GiraphConfiguration.ASYNC_REMOTE_READ.get(conf);
+    // special case: first superstep is always new "phase"
+    isNewPhase = true;
+    maxNumMsgs = GiraphConfiguration.ASYNC_MAX_NUM_MSGS.get(conf);
+    needAllMsgs = GiraphConfiguration.ASYNC_NEED_ALL_MSGS.get(conf);
   }
 
   /**
@@ -45,6 +64,15 @@ public class AsyncConfiguration {
    */
   public boolean doLocalRead() {
     return doLocalRead;
+  }
+
+  /**
+   * Returns whether or not to read most recently available remote values.
+   *
+   * @return True if reading most recent remote values
+   */
+  public boolean doRemoteRead() {
+    return doRemoteRead;
   }
 
   /**
@@ -58,16 +86,22 @@ public class AsyncConfiguration {
   }
 
   /**
-   * Setter for doLocalRead.
-   *
-   * @param doLocalRead True to read most recently available local values
+   * @return Number of messages before flushing.
    */
-  protected void setLocalRead(boolean doLocalRead) {
-    this.doLocalRead = doLocalRead;
+  public int maxNumMsgs() {
+    return maxNumMsgs;
   }
 
   /**
-   * Setter for isNewPhase.
+   * @return Whether every vertex needs messages from all its neighbours.
+   */
+  public boolean needAllMsgs() {
+    return needAllMsgs;
+  }
+
+
+  /**
+   * Sets whether current superstep is new phase.
    *
    * NOTE: Set by GraphTaskManager.setup() and execute().
    *

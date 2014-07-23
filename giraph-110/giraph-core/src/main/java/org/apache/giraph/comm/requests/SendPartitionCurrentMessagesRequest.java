@@ -94,8 +94,7 @@ public class SendPartitionCurrentMessagesRequest<I extends WritableComparable,
 
   @Override
   public void doLocalRequest(ServerData<I, V, E> serverData) {
-    // YH: use local message store only if doing async
-    doRequest(serverData, getConf().getAsyncConf().doLocalRead());
+    doRequest(serverData, true);   // YH: wrapper call
   }
 
   /**
@@ -105,9 +104,17 @@ public class SendPartitionCurrentMessagesRequest<I extends WritableComparable,
    * @param isLocal Whether request is local or not
    */
   private void doRequest(ServerData<I, V, E> serverData, boolean isLocal) {
-    // YH: use local message store if doing async and request is local
-    MessageStore msgStore = isLocal ? serverData.<M>getLocalMessageStore() :
-      serverData.<M>getIncomingMessageStore();
+    MessageStore msgStore;
+    if (isLocal && getConf().getAsyncConf().doLocalRead()) {
+      // YH: use local message store if doing async and request is local
+      msgStore = serverData.<M>getLocalMessageStore();
+    } else if (!isLocal && getConf().getAsyncConf().doRemoteRead()) {
+      // YH: use remote message store if doing async and request is remote
+      msgStore = serverData.<M>getRemoteMessageStore();
+    } else {
+      // otherwise use default BSP incoming message store
+      msgStore = serverData.<M>getIncomingMessageStore();
+    }
 
     try {
       msgStore.addPartitionMessages(partitionId, vertexIdMessageMap);

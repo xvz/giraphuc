@@ -1251,8 +1251,7 @@ public class GiraphConfiguration extends Configuration
    * YH: Initializes and configures asyncConf based on user preferences.
    */
   private void configureAsync() {
-    asyncConf = new AsyncConfiguration();
-    asyncConf.setLocalRead(ASYNC_LOCAL_READ.get(this));
+    asyncConf = new AsyncConfiguration(this);
   }
 
   /**

@@ -56,6 +56,7 @@ public class ServerData<I extends WritableComparable,
   /** Message store factory */
   private final MessageStoreFactory<I, Writable, MessageStore<I, Writable>>
   messageStoreFactory;
+
   /**
    * Message store for incoming messages (messages which will be consumed
    * in the next super step)
@@ -66,12 +67,21 @@ public class ServerData<I extends WritableComparable,
    * previous super step and which will be consumed in current super step)
    */
   private volatile MessageStore<I, Writable> currentMessageStore;
+
+  /**
+   * YH: Message store for messages received from remote neighbours.
+   * Messages are received in the current OR previous superstep, and are
+   * consumed in the current OR next superstep.
+   */
+  private volatile MessageStore<I, Writable> remoteMessageStore;
+
   /**
    * YH: Message store for local messages (messages which we received in
    * the current OR previous superstep and is consumed in the current OR
    * next superstep).
    */
   private volatile MessageStore<I, Writable> localMessageStore;
+
   /**
    * Map of partition ids to incoming vertex mutations from other workers.
    * (Synchronized access to values)
@@ -155,6 +165,18 @@ public class ServerData<I extends WritableComparable,
   }
 
   /**
+   * YH: Get message store for remote messages (messages which we received in
+   * the current OR previous superstep and is consumed in the current OR
+   * next superstep).
+   *
+   * @param <M> Message data
+   * @return Remote message store
+   */
+  public <M extends Writable> MessageStore<I, M> getRemoteMessageStore() {
+    return (MessageStore<I, M>) remoteMessageStore;
+  }
+
+  /**
    * YH: Get message store for local messages (messages which we received in
    * the current OR previous superstep and is consumed in the current OR
    * next superstep).
@@ -163,26 +185,35 @@ public class ServerData<I extends WritableComparable,
    * @return Local message store
    */
   public <M extends Writable> MessageStore<I, M> getLocalMessageStore() {
-    // NOTE: if we have phases, we should change this return
-    // TODO-YH: also fix checkpointing stuff (search getIncoming..(), etc)
     return (MessageStore<I, M>) localMessageStore;
   }
 
   /** Prepare for next super step */
   public void prepareSuperstep() {
-    if (currentMessageStore != null) {
-      try {
-        currentMessageStore.clearAll();
-      } catch (IOException e) {
-        throw new IllegalStateException(
-            "Failed to clear previous message store");
+    // YH: if doing immediate remote reads, use our own message store
+    // rather than the default current/incoming message stores
+    if (conf.getAsyncConf().doRemoteRead()) {
+      if (remoteMessageStore == null) {
+        remoteMessageStore =
+          messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
       }
-    }
-    currentMessageStore =
+    } else {
+      // these stores will never be initialized if doRemoteRead() is true
+      if (currentMessageStore != null) {
+        try {
+          currentMessageStore.clearAll();
+        } catch (IOException e) {
+          throw new IllegalStateException(
+            "Failed to clear previous message store");
+        }
+      }
+      currentMessageStore =
         incomingMessageStore != null ? incomingMessageStore :
-            messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
-    incomingMessageStore =
+        messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
+      incomingMessageStore =
         messageStoreFactory.newStore(conf.getOutgoingMessageValueFactory());
+    }
+
 
     // YH: create localMessageStore if needed; this persists across supersteps
     if (conf.getAsyncConf().doLocalRead()) {

@@ -241,48 +241,53 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
     long verticesComputedProgress = 0;
     // Make sure this is thread-safe across runs
     synchronized (partition) {
-      // YH: this for loop must always iterate over vertices
-      // of the partition in the SAME order
-      // TODO-YH: this is not true right now.. need to get
-      // and iterate over sorted keys (i.e., sorted values)
       for (Vertex<I, V, E> vertex : partition) {
         Iterable<M1> messages;
+
+        // YH: message store is set correctly by GraphTaskManager;
+        // always remove messages immediately (rather than get and clear)
+        messages = messageStore.removeVertexMessages(vertex.getId());
+
         if (configuration.getAsyncConf().doLocalRead()) {
-          // YH: if this is a new phase, do NOT read local message store.
-          // Furthermore, CLEAR any messages current in the store, as
-          // new versions will be received during the next superstep
-          // (and before the vertex reads these messages).
+          // NOTE: This assumes messages are queued instantly, or in gaps
+          // of X vertices (cannot do it by size, b/c then # of old messages
+          // will vary).
           //
-          // This forces all messages to be read in next superstep, which
-          // avoids errors from reading partial # of messages.
-          //
-          // NOTE: this assumes that scheduling always executes vertices
-          // in same order---this will NOT work for inter-worker message
-          // queues, b/c network latencies can cause random delays.
+          // TODO-YH: this does not handle algs with multiple computation
+          // phases! We would need way of knowing phase transition BEFORE the
+          // superstep in which it occurs: b/c messages intended to be read
+          // in new phase will be immediately visible in local message store,
+          // and we should not read it.
           if (configuration.getAsyncConf().isNewPhase()) {
-            // TODO-YH: need to do BSP in first superstep by making use of
-            // messageStore.. i.e., local messages in newPhase should be
-            // written to messageStore instaed of localMessageStore
+            // Two types of algorithms:
+            // 1. vertices need all messages (aka, stationary; e.g., PageRank)
+            //    -> newer messages always as up-to-date as older messages
+            //    -> edge case is exactly 1 superstep (b/c there, old messages
+            //       are valuable as they only appear once)
             //
-            // however, we still need to clear localMessageStore so that
-            // messages that came before we executed are not present
-            // as "old" messages in the next superstep
+            // 2. vertices can handle partial messages (e.g., SSSP/WCC)
+            //    -> this subsumes case where old messages are more valuable
+            //       than newer messages, as they won't be repeated
             //
-            // NOTE: this is assuming that messages are queued instantly
-            // or at least that messages are queued on the actual stores
-            // after buffering for X vertices (cannot do it by size,
-            // otherwise we may get variable # of old messages)
-            localMessageStore.clearVertexMessages(vertex.getId());
-            messages = messageStore.getVertexMessages(vertex.getId());
+            // Type 1 algs should clear old messages to make way for new,
+            // while type 2 algs should show them immediately.
+            //
+            // HOWEVER, algorithms typically only do initialization in first
+            // superstep, so we instead persist them to be processed in
+            // a subsequent superstep.
+            //
+            // NOTE: Correctly clearing for type 1 algs gives large performance
+            // benefits in terms of convergence (by at least 100x), but WILL
+            // cause correctness issues if algorithm is actually type 2 alg.
+            if (configuration.getAsyncConf().needAllMsgs()) {
+              localMessageStore.clearVertexMessages(vertex.getId());
+            }
           } else {
-            // YH: get iterables for both message stores and concat them
+            // YH: concat iterators for remote and local stores
             // Note that local messages are *removed*
-            messages = Iterables.concat(
-              messageStore.getVertexMessages(vertex.getId()),
+            messages = Iterables.concat(messages,
               localMessageStore.removeVertexMessages(vertex.getId()));
           }
-        } else {
-          messages = messageStore.getVertexMessages(vertex.getId());
         }
 
         if (vertex.isHalted() && !Iterables.isEmpty(messages)) {
@@ -311,8 +316,8 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
           partitionStats.incrFinishedVertexCount();
         }
         // Remove the messages now that the vertex has finished computation
-        messageStore.clearVertexMessages(vertex.getId());
-        // YH: no need to clear local message store (it was already done)
+        // YH: we do this right when we get messages, so this isn't needed
+        //messageStore.clearVertexMessages(vertex.getId());
 
         // Add statistics for this vertex
         partitionStats.incrVertexCount();
@@ -325,12 +330,14 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         }
       }
 
-      messageStore.clearPartition(partition.getId());
-      // YH: We CANNOT clear partition for localMessageStore!!
-      //     Unprocessed messages must persist to next superstep.
-      // TODO-YH: new incoming messages do not overwrite existing messages!!
-      // hence a vertex might see two versions of the same message...
-      // shouldn't happen if scheduling/execution order is fixed??
+      // YH: clear partition if using normal BSP message store.
+      // Should NOT clear partitions for stores otherwise, as they will
+      // have picked up unprocessed messages during compute calls above.
+      //
+      // TODO-YH: can partitions disappear?...
+      if (!configuration.getAsyncConf().doRemoteRead()) {
+        messageStore.clearPartition(partition.getId());
+      }
     }
     WorkerProgress.get().addVerticesComputed(verticesComputedProgress);
     WorkerProgress.get().incrementPartitionsComputed();

@@ -1061,9 +1061,32 @@ public interface GiraphConstants {
       new IntConfOption("giraph.hdfs.file.creation.retry.wait.ms", 30_000,
           "Milliseconds to wait prior to retrying creation of an HDFS file");
 
+
   /** YH: Whether to read most recently available local value or not */
   BooleanConfOption ASYNC_LOCAL_READ =
       new BooleanConfOption("giraph.asyncLocalRead", false,
           "Whether to read most recently available local value or not");
+
+  /** YH: Whether to read most recently available remote value or not */
+  BooleanConfOption ASYNC_REMOTE_READ =
+      new BooleanConfOption("giraph.asyncRemoteRead", false,
+          "Whether to read most recently available remote value or not");
+
+  /**
+   * YH: Whether algorithm needs every vertex to have all messages from
+   * all its neighbours for every superstep (for async only)
+   */
+  BooleanConfOption ASYNC_NEED_ALL_MSGS =
+      new BooleanConfOption("giraph.asyncPageRankLike", false,
+          "Whether algorithm needs every vertex to have all messages from" +
+          "all its neighbours for every superstep; " +
+          "improves correctness and convergence if set correctly");
+
+  // NOTE: this replaces MAX_MSG_REQUEST_SIZE
+  // (assuming 8 bytes per message, 512K ~= 64K messages)
+  /** YH: Maximum number of messages per peer before flush */
+  IntConfOption ASYNC_MAX_NUM_MSGS =
+      new IntConfOption("giraph.asyncMaxNumMsgs", 65536,
+          "Maximum number of messages per peer before flush");
 }
 // CHECKSTYLE: resume InterfaceIsTypeCheck

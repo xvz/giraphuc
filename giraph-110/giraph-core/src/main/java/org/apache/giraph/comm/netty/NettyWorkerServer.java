@@ -121,6 +121,10 @@ public class NettyWorkerServer<I extends WritableComparable,
   @Override
   public void prepareSuperstep() {
     serverData.prepareSuperstep();
+    // YH: this is safe even when we read messages immediately, wrt part
+    // where missing vertices are added. This is b/c if vertex doesn't
+    // exist yet, we won't encounter them in compute loop, so their messages
+    // are correctly delayed until subsequent superstep.
     resolveMutations();
   }
 
@@ -130,7 +134,7 @@ public class NettyWorkerServer<I extends WritableComparable,
   private void resolveMutations() {
     Multimap<Integer, I> resolveVertexIndices = HashMultimap.create(
         service.getPartitionStore().getNumPartitions(), 100);
-      // Add any mutated vertex indices to be resolved
+    // Add any mutated vertex indices to be resolved
     for (Entry<I, VertexMutations<I, V, E>> e :
         serverData.getVertexMutations().entrySet()) {
       I vertexId = e.getKey();
@@ -143,14 +147,22 @@ public class NettyWorkerServer<I extends WritableComparable,
     }
     // Keep track of the vertices which are not here but have received messages
     for (Integer partitionId : service.getPartitionStore().getPartitionIds()) {
-      Iterable<I> destinations = serverData.getCurrentMessageStore().
+      Iterable<I> destinations;
+      // YH: check correct message store (remote or BSP)
+      // and concat local message store if needed
+      if (conf.getAsyncConf().doRemoteRead()) {
+        destinations = serverData.getRemoteMessageStore().
           getPartitionDestinationVertices(partitionId);
+      } else {
+        destinations = serverData.getCurrentMessageStore().
+          getPartitionDestinationVertices(partitionId);
+      }
 
       // YH: must look in local message store too
-      if (conf.getAsyncConf().doLocalRead() &&
-          Iterables.isEmpty(destinations)) {
-        destinations = serverData.getLocalMessageStore().
-          getPartitionDestinationVertices(partitionId);
+      if (conf.getAsyncConf().doLocalRead()) {
+        destinations = Iterables.concat(destinations,
+           serverData.getLocalMessageStore().
+             getPartitionDestinationVertices(partitionId));
       }
 
       if (!Iterables.isEmpty(destinations)) {
@@ -188,12 +200,20 @@ public class NettyWorkerServer<I extends WritableComparable,
           serverData.getVertexMutations().remove(vertexIndex);
         }
 
-        // YH: also check local message store
-        boolean hasMessages = serverData.getCurrentMessageStore().
-          hasMessagesForVertex(vertexIndex) ||
-          (conf.getAsyncConf().doLocalRead() &&
-           serverData.getLocalMessageStore().
-            hasMessagesForVertex(vertexIndex));
+        // YH: check remote and local message stores if needed
+        boolean hasMessages;
+        if (conf.getAsyncConf().doRemoteRead()) {
+          hasMessages = serverData.getRemoteMessageStore().
+            hasMessagesForVertex(vertexIndex);
+        } else {
+          hasMessages = serverData.getCurrentMessageStore().
+            hasMessagesForVertex(vertexIndex);
+        }
+
+        if (conf.getAsyncConf().doLocalRead()) {
+          hasMessages |= serverData.getLocalMessageStore().
+            hasMessagesForVertex(vertexIndex);
+        }
 
         Vertex<I, V, E> vertex = vertexResolver.resolve(
             vertexIndex, originalVertex, mutations, hasMessages);

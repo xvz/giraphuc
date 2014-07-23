@@ -153,8 +153,6 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
   private boolean isMaster;
   /** YH: Will next superstep have a new computation phase? **/
   private boolean isPhaseChanged;
-  /** YH: Is current superstep is a new computation phase? **/
-  private boolean isNewPhase;
 
   /**
    * Default constructor for GiraphTaskManager.
@@ -164,10 +162,7 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
   public GraphTaskManager(Mapper<?, ?, ?, ?>.Context context) {
     this.context = context;
     this.isMaster = false;
-    this.isPhaseChanged = false;
-    // YH: very first superstep (0, not -1) is new phase
-    // NOTE: this works b/c execute()'s main loop starts after input step
-    this.isNewPhase = true;
+    this.isPhaseChanged = false;   // YH: unset flag
   }
 
   /**
@@ -220,8 +215,9 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
     // One time setup for computation factory
     conf.createComputationFactory().initialize(conf);
 
-    // YH: update async conf with correct isNewPhase
-    conf.getAsyncConf().setNewPhase(isNewPhase);
+    // YH: very first superstep (0, not -1) is new phase
+    // NOTE: this works b/c execute()'s main loop starts after input step
+    conf.getAsyncConf().setNewPhase(true);
 
     // Do some task setup (possibly starting up a Zookeeper service)
     context.setStatus("setup: Initializing Zookeeper services.");
@@ -299,7 +295,10 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
       graphState = checkSuperstepRestarted(superstep, graphState);
       prepareForSuperstep(graphState);
       context.progress();
+      // YH: pass in correct message store (either remote or BSP)
       MessageStore<I, Writable> messageStore =
+        conf.getAsyncConf().doRemoteRead() ?
+        serviceWorker.getServerData().getRemoteMessageStore() :
         serviceWorker.getServerData().getCurrentMessageStore();
       // YH: also pass in localMessageStore
       MessageStore<I, Writable> localMessageStore =
@@ -322,8 +321,7 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
 
       // YH: store and update whether the upcoming superstep is a new
       // computation phase and reset isPhaseChanged flag
-      isNewPhase = isPhaseChanged;
-      conf.getAsyncConf().setNewPhase(isNewPhase);
+      conf.getAsyncConf().setNewPhase(isPhaseChanged);
       isPhaseChanged = false;
 
       // END of superstep compute loop

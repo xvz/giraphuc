@@ -75,8 +75,7 @@ public class SendWorkerMessagesRequest<I extends WritableComparable,
 
   @Override
   public void doLocalRequest(ServerData serverData) {
-    // YH: use local message store only if doing async
-    doRequest(serverData, getConf().getAsyncConf().doLocalRead());
+    doRequest(serverData, true);  // YH: wrapper call
   }
 
   /**
@@ -89,9 +88,17 @@ public class SendWorkerMessagesRequest<I extends WritableComparable,
     PairList<Integer, ByteArrayVertexIdMessages<I, M>>.Iterator
         iterator = partitionVertexData.getIterator();
 
-    // YH: use local message store if doing async and request is local
-    MessageStore msgStore = isLocal ? serverData.getLocalMessageStore() :
-      serverData.getIncomingMessageStore();
+    MessageStore msgStore;
+    if (isLocal && getConf().getAsyncConf().doLocalRead()) {
+      // YH: use local message store if doing async and request is local
+      msgStore = serverData.getLocalMessageStore();
+    } else if (!isLocal && getConf().getAsyncConf().doRemoteRead()) {
+      // YH: use remote message store if doing async and request is remote
+      msgStore = serverData.getRemoteMessageStore();
+    } else {
+      // otherwise use default BSP incoming message store
+      msgStore = serverData.getIncomingMessageStore();
+    }
 
     while (iterator.hasNext()) {
       iterator.next();
