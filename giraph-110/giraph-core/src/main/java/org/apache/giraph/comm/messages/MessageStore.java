@@ -83,6 +83,17 @@ public interface MessageStore<I extends WritableComparable,
   boolean hasMessagesForVertex(I vertexId);
 
   /**
+   * Adds an unserialized message for partition
+   *
+   * @param partitionId Id of partition
+   * @param destVertexId Target vertex id (must be local to worker)
+   * @param message Unserialized message to add
+   * @throws IOException
+   */
+  void addPartitionMessage(int partitionId, I destVertexId, M message)
+    throws IOException;
+
+  /**
    * Adds messages for partition
    *
    * @param partitionId Id of partition

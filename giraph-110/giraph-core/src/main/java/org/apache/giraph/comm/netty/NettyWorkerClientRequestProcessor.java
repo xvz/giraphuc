@@ -471,8 +471,11 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
     // If this is local, execute locally
     if (serviceWorker.getWorkerInfo().getTaskId() ==
         workerInfo.getTaskId()) {
-      // YH: always use doLocalRequest()
-      ((WorkerRequest) writableRequest).doLocalRequest(serverData);
+      // YH: always use doLocalRequest().
+      // Request may be null if coming from SendMessageCache.
+      if (writableRequest != null) {
+        ((WorkerRequest) writableRequest).doLocalRequest(serverData);
+      }
       localRequests.inc();
     } else {
       workerClient.sendWritableRequest(

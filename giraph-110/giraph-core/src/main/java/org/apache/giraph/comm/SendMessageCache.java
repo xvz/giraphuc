@@ -38,6 +38,8 @@ import org.apache.log4j.Logger;
 import static org.apache.giraph.conf.GiraphConstants.ADDITIONAL_MSG_REQUEST_SIZE;
 import static org.apache.giraph.conf.GiraphConstants.MAX_MSG_REQUEST_SIZE;
 
+import java.io.IOException;
+
 /**
  * Aggregates the messages to be sent to workers so they can be sent
  * in bulk.  Not thread-safe.
@@ -156,6 +158,42 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
       LOG.trace("sendMessageRequest: Send bytes (" + message.toString() +
         ") to " + destVertexId + " on worker " + workerInfo);
     }
+
+    // YH: short-circuit local messages directly to message store.
+    // This should cut down GC and memory overheads substantially, as byte
+    // array caches are not allocated. Additionally, this gives better
+    // async performance (smaller batch sizes => more recent data).
+    if (getConf().getAsyncConf().doLocalRead() &&
+        getServiceWorker().getWorkerInfo().getTaskId() ==
+        workerInfo.getTaskId()) {
+
+      // Mimics doRequest() in comm.requests.SendWorkerMessageRequest
+      //
+      // NegativeArraySizeException is copied from catch of write message
+      // functions for vertex id iterators (see addPartitionMessages()).
+      try {
+        getServiceWorker().getServerData().getLocalMessageStore().
+          addPartitionMessage(partitionId, destVertexId, message);
+      } catch (NegativeArraySizeException e) {
+        throw new RuntimeException("The numbers of bytes sent to vertex " +
+            destVertexId + " exceeded the max capacity of " +
+            "its ExtendedDataOutput. Please consider setting " +
+            "giraph.useBigDataIOForMessages=true. If there are super-vertices" +
+            " in the graph which receive a lot of messages (total serialized " +
+            "size of messages goes beyond the maximum size of a byte array), " +
+            "setting this option to true will remove that limit");
+      } catch (IOException e) {
+        throw new RuntimeException("sendMessageRequest: Got IOException ", e);
+      }
+
+      // dummy call to keep counters consistent
+      clientProcessor.doRequest(workerInfo, null);
+      // notify sending, as per normal code path
+      getServiceWorker().getGraphTaskManager().notifySentMessages();
+
+      return;
+    }
+
     ++totalMsgsSentInSuperstep;
 
     // Add the message to the cache

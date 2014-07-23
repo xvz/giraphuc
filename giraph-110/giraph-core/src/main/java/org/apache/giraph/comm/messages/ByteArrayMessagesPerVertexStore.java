@@ -66,7 +66,7 @@ public class ByteArrayMessagesPerVertexStore<I extends WritableComparable,
    * iterator if necessary (if used in the partition map entry).
    *
    * @param partitionMap Partition map to look in
-   * @param iterator Special iterator that can release ownerhips of vertex ids
+   * @param iterator Special iterator that can release ownerships of vertex ids
    * @return Extended data output for this vertex id (created if necessary)
    */
   private DataInputOutput getDataInputOutput(
@@ -83,6 +83,43 @@ public class ByteArrayMessagesPerVertexStore<I extends WritableComparable,
       }
     }
     return dataInputOutput;
+  }
+
+  /**
+   * Get the extended data output for a vertex id. Similar to the iterator
+   * version, with no need to worry about ownership.
+   *
+   * @param partitionMap Partition map to look in
+   * @param vertexId The vertex id of interest
+   * @return Extended data output for this vertex id (created if necessary)
+   */
+  private DataInputOutput getDataInputOutput(
+      ConcurrentMap<I, DataInputOutput> partitionMap,
+      I vertexId) {
+    DataInputOutput dataInputOutput = partitionMap.get(vertexId);
+    if (dataInputOutput == null) {
+      DataInputOutput newDataOutput = config.createMessagesInputOutput();
+      dataInputOutput = partitionMap.putIfAbsent(vertexId, newDataOutput);
+      if (dataInputOutput == null) {
+        dataInputOutput = newDataOutput;
+      }
+    }
+    return dataInputOutput;
+  }
+
+  @Override
+  public void addPartitionMessage(
+      int partitionId, I destVertexId, M message) throws IOException {
+    ConcurrentMap<I, DataInputOutput> partitionMap =
+        getOrCreatePartitionMap(partitionId);
+    DataInputOutput dataInputOutput =
+      getDataInputOutput(partitionMap, destVertexId);
+
+    // YH: as per utils.ByteArrayVertexIdMessages...
+    // a little messy to decouple serialization like this
+    synchronized (dataInputOutput) {
+      message.write(dataInputOutput.getDataOutput());
+    }
   }
 
   @Override

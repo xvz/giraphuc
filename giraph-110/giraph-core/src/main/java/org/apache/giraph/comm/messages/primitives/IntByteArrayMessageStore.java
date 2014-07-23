@@ -122,6 +122,20 @@ public class IntByteArrayMessageStore<M extends Writable>
   }
 
   @Override
+  public void addPartitionMessage(int partitionId,
+      IntWritable destVertexId, M message) throws
+      IOException {
+    Int2ObjectOpenHashMap<DataInputOutput> partitionMap =
+        map.get(partitionId);
+
+    synchronized (partitionMap) {
+      DataInputOutput dataInputOutput =
+        getDataInputOutput(partitionMap, destVertexId.get());
+      message.write(dataInputOutput.getDataOutput());
+    }
+  }
+
+  @Override
   public void addPartitionMessages(int partitionId,
       ByteArrayVertexIdMessages<IntWritable, M> messages) throws
       IOException {

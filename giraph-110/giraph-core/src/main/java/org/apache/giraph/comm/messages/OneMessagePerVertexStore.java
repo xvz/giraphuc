@@ -62,6 +62,25 @@ public class OneMessagePerVertexStore<I extends WritableComparable,
   }
 
   @Override
+  public void addPartitionMessage(
+      int partitionId, I destVertexId, M message) throws IOException {
+    ConcurrentMap<I, M> partitionMap =
+        getOrCreatePartitionMap(partitionId);
+
+    M currentMessage = partitionMap.get(destVertexId);
+    if (currentMessage == null) {
+      M newMessage = messageCombiner.createInitialMessage();
+      currentMessage = partitionMap.putIfAbsent(destVertexId, newMessage);
+      if (currentMessage == null) {
+        currentMessage = newMessage;
+      }
+    }
+    synchronized (currentMessage) {
+      messageCombiner.combine(destVertexId, currentMessage, message);
+    }
+  }
+
+  @Override
   public void addPartitionMessages(
       int partitionId,
       ByteArrayVertexIdMessages<I, M> messages) throws IOException {

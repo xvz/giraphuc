@@ -123,6 +123,20 @@ public class LongByteArrayMessageStore<M extends Writable>
   }
 
   @Override
+  public void addPartitionMessage(int partitionId,
+      LongWritable destVertexId, M message) throws
+      IOException {
+    Long2ObjectOpenHashMap<DataInputOutput> partitionMap =
+        map.get(partitionId);
+
+    synchronized (partitionMap) {
+      DataInputOutput dataInputOutput =
+        getDataInputOutput(partitionMap, destVertexId.get());
+      message.write(dataInputOutput.getDataOutput());
+    }
+  }
+
+  @Override
   public void addPartitionMessages(int partitionId,
       ByteArrayVertexIdMessages<LongWritable, M> messages) throws
       IOException {

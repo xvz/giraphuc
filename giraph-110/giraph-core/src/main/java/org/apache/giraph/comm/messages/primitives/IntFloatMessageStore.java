@@ -96,6 +96,31 @@ public class IntFloatMessageStore
   }
 
   @Override
+  public void addPartitionMessage(int partitionId,
+      IntWritable destVertexId, FloatWritable message) throws
+      IOException {
+    // TODO-YH: this creates a new object for EVERY message, which
+    // can result in substantial overheads.
+    //
+    // A better solution is to have a resuable FloatWritable for each
+    // partition id (i.e., per-instance map), which are then automatically
+    // protected when synchronized on partitionMap below.
+    FloatWritable reusableCurrentMessage = new FloatWritable();
+
+    Int2FloatOpenHashMap partitionMap = map.get(partitionId);
+    synchronized (partitionMap) {
+      int vertexId = destVertexId.get();
+      float msg = message.get();
+      if (partitionMap.containsKey(vertexId)) {
+        reusableCurrentMessage.set(partitionMap.get(vertexId));
+        messageCombiner.combine(destVertexId, reusableCurrentMessage, message);
+        msg = reusableCurrentMessage.get();
+      }
+      partitionMap.put(vertexId, msg);
+    }
+  }
+
+  @Override
   public void addPartitionMessages(int partitionId,
       ByteArrayVertexIdMessages<IntWritable, FloatWritable> messages) throws
       IOException {

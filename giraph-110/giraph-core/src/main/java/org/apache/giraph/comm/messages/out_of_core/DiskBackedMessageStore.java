@@ -82,6 +82,16 @@ public class DiskBackedMessageStore<I extends WritableComparable,
   }
 
   @Override
+  public void addPartitionMessage(
+      int partitionId, I destVertexId, M message) throws IOException {
+    PartitionDiskBackedMessageStore<I, M> partitionMessageStore =
+        getMessageStore(partitionId);
+    partitionMessageStore.addVertexMessages(destVertexId,
+                                            Collections.singleton(message));
+    checkMemory();
+  }
+
+  @Override
   public void addPartitionMessages(
       int partitionId,
       ByteArrayVertexIdMessages<I, M> messages) throws IOException {
