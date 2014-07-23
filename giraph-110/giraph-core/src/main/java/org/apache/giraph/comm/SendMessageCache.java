@@ -159,10 +159,20 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
         ") to " + destVertexId + " on worker " + workerInfo);
     }
 
+    // YH: this is used for termination at BspServiceMaster:1626.
+    // Namely, if number of messages is 0 and all vertices are halted,
+    // then entire computation terminates. So don't mess with this.
+    //
+    // TODO-YH: totalMsgBytesSentInSuperstep seems to only be used for stats
+    ++totalMsgsSentInSuperstep;
+
     // YH: short-circuit local messages directly to message store.
     // This should cut down GC and memory overheads substantially, as byte
     // array caches are not allocated. Additionally, this gives better
     // async performance (smaller batch sizes => more recent data).
+    //
+    // Note: taskId is same for all partitions local to same worker
+    // b/c it relies on mapred.task.partition (= attempt_...._m_..._0)
     if (getConf().getAsyncConf().doLocalRead() &&
         getServiceWorker().getWorkerInfo().getTaskId() ==
         workerInfo.getTaskId()) {
@@ -193,8 +203,6 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
 
       return;
     }
-
-    ++totalMsgsSentInSuperstep;
 
     // Add the message to the cache
     int workerMessageSize = addMessage(
