@@ -50,6 +50,7 @@ import com.yammer.metrics.core.Timer;
 import com.yammer.metrics.core.TimerContext;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -244,9 +245,19 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       for (Vertex<I, V, E> vertex : partition) {
         Iterable<M1> messages;
 
-        // YH: message store is set correctly by GraphTaskManager;
-        // always remove messages immediately (rather than get and clear)
-        messages = messageStore.removeVertexMessages(vertex.getId());
+        // YH: message store is set correctly by GraphTaskManager,
+        // but we have to check for this case
+        if (configuration.getAsyncConf().doRemoteRead() &&
+            configuration.getAsyncConf().isNewPhase()) {
+          // if new phase, do same thing as for local message store
+          if (configuration.getAsyncConf().needAllMsgs()) {
+            messageStore.clearVertexMessages(vertex.getId());
+          }
+          messages = (Iterable<M1>) Collections.<M1>emptyList();
+        } else {
+          // always remove messages immediately (rather than get and clear)
+          messages = messageStore.removeVertexMessages(vertex.getId());
+        }
 
         if (configuration.getAsyncConf().doLocalRead()) {
           // NOTE: This assumes messages are queued instantly, or in gaps
@@ -282,6 +293,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
             if (configuration.getAsyncConf().needAllMsgs()) {
               localMessageStore.clearVertexMessages(vertex.getId());
             }
+            // nothing else needed (not concating => local msgs not seen)
           } else {
             // YH: concat iterators for remote and local stores
             // Note that local messages are *removed*
