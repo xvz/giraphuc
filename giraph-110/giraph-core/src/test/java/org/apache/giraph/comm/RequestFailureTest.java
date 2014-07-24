@@ -98,7 +98,7 @@ public class RequestFailureTest {
 
     // Send the request
     SendWorkerMessagesRequest<IntWritable, IntWritable> request =
-        new SendWorkerMessagesRequest<IntWritable, IntWritable>(dataToSend);
+        new SendWorkerMessagesRequest<IntWritable, IntWritable>(dataToSend, conf);
     request.setConf(conf);
     return request;
   }

@@ -164,7 +164,7 @@ public class RequestTest {
 
     // Send the request
     SendWorkerMessagesRequest<IntWritable, IntWritable> request =
-      new SendWorkerMessagesRequest<>(dataToSend);
+      new SendWorkerMessagesRequest<>(dataToSend, conf);
     request.setConf(conf);
 
     client.sendWritableRequest(workerInfo.getTaskId(), request);

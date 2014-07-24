@@ -20,6 +20,7 @@ package org.apache.giraph.comm.requests;
 
 import org.apache.giraph.comm.ServerData;
 import org.apache.giraph.comm.messages.MessageStore;
+import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.utils.VertexIdMessages;
 import org.apache.giraph.utils.ByteArrayVertexIdMessages;
 import org.apache.giraph.utils.PairList;
@@ -48,10 +49,13 @@ public class SendWorkerMessagesRequest<I extends WritableComparable,
    *
    * @param partVertMsgs Map of remote partitions =>
    *                     VertexIdMessages
+   * @param conf ImmutableClassesGiraphConfiguration
    */
   public SendWorkerMessagesRequest(
-      PairList<Integer, VertexIdMessages<I, M>> partVertMsgs) {
+      PairList<Integer, VertexIdMessages<I, M>> partVertMsgs,
+      ImmutableClassesGiraphConfiguration conf) {
     this.partitionVertexData = partVertMsgs;
+    setConf(conf);
   }
 
   @Override
