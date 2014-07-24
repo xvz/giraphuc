@@ -36,29 +36,26 @@ import java.io.IOException;
  */
 @SuppressWarnings("unchecked")
 public class SendWorkerMessagesRequest<I extends WritableComparable,
-    M extends Writable>
-    extends SendWorkerDataRequest<I, M, ByteArrayVertexIdMessages<I, M>> {
-  /**
-   * Constructor used for reflection only
-   */
-  public SendWorkerMessagesRequest() { }
+    M extends Writable> extends SendWorkerDataRequest<I, M,
+    VertexIdMessages<I, M>> {
+
+  /** Default constructor */
+  public SendWorkerMessagesRequest() {
+  }
 
   /**
    * Constructor used to send request.
    *
    * @param partVertMsgs Map of remote partitions =>
-   *                     ByteArrayVertexIdMessages
-   * @param conf ImmutableClassesGiraphConfiguration
+   *                     VertexIdMessages
    */
   public SendWorkerMessagesRequest(
-      PairList<Integer, ByteArrayVertexIdMessages<I, M>> partVertMsgs,
-      ImmutableClassesGiraphConfiguration conf) {
+      PairList<Integer, VertexIdMessages<I, M>> partVertMsgs) {
     this.partitionVertexData = partVertMsgs;
-    setConf(conf);
   }
 
   @Override
-  public ByteArrayVertexIdMessages<I, M> createByteArrayVertexIdData() {
+  public VertexIdMessages<I, M> createVertexIdData() {
     return new ByteArrayVertexIdMessages<I, M>(
         getConf().getOutgoingMessageValueFactory());
   }
@@ -85,7 +82,7 @@ public class SendWorkerMessagesRequest<I extends WritableComparable,
    * @param isLocal Whether request is local or not
    */
   private void doRequest(ServerData serverData, boolean isLocal) {
-    PairList<Integer, ByteArrayVertexIdMessages<I, M>>.Iterator
+    PairList<Integer, VertexIdMessages<I, M>>.Iterator
         iterator = partitionVertexData.getIterator();
 
     MessageStore msgStore;

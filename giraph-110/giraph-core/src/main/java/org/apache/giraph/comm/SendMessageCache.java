@@ -28,6 +28,7 @@ import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.edge.Edge;
 import org.apache.giraph.graph.Vertex;
 import org.apache.giraph.partition.PartitionOwner;
+import org.apache.giraph.utils.VertexIdMessages;
 import org.apache.giraph.utils.ByteArrayVertexIdMessages;
 import org.apache.giraph.utils.PairList;
 import org.apache.giraph.worker.WorkerInfo;
@@ -47,8 +48,9 @@ import java.io.IOException;
  * @param <I> Vertex id
  * @param <M> Message data
  */
+@SuppressWarnings("unchecked")
 public class SendMessageCache<I extends WritableComparable, M extends Writable>
-    extends SendVertexIdDataCache<I, M, ByteArrayVertexIdMessages<I, M>> {
+    extends SendVertexIdDataCache<I, M, VertexIdMessages<I, M>> {
   /** Class logger */
   private static final Logger LOG =
       Logger.getLogger(SendMessageCache.class);
@@ -83,7 +85,7 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
   }
 
   @Override
-  public ByteArrayVertexIdMessages<I, M> createByteArrayVertexIdData() {
+  public VertexIdMessages<I, M> createVertexIdData() {
     return new ByteArrayVertexIdMessages<I, M>(
         getConf().getOutgoingMessageValueFactory());
   }
@@ -127,7 +129,7 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
    * @return List of pairs (partitionId, ByteArrayVertexIdMessages),
    *         where all partition ids belong to workerInfo
    */
-  protected PairList<Integer, ByteArrayVertexIdMessages<I, M>>
+  protected PairList<Integer, VertexIdMessages<I, M>>
   removeWorkerMessages(WorkerInfo workerInfo) {
     return removeWorkerData(workerInfo);
   }
@@ -138,7 +140,7 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
    * @return All vertex messages for all partitions
    */
   private PairList<WorkerInfo, PairList<
-      Integer, ByteArrayVertexIdMessages<I, M>>> removeAllMessages() {
+      Integer, VertexIdMessages<I, M>>> removeAllMessages() {
     return removeAllData();
   }
 
@@ -230,7 +232,7 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
     //    getServiceWorker().getWorkerInfo().equals(workerInfo)) {
     if (numCachedMsgs >= getConf().getAsyncConf().maxNumMsgs()) {
       numCachedMsgs = 0;
-      PairList<Integer, ByteArrayVertexIdMessages<I, M>>
+      PairList<Integer, VertexIdMessages<I, M>>
         workerMessages = removeWorkerMessages(workerInfo);
       WritableRequest writableRequest =
         new SendWorkerMessagesRequest<I, M>(workerMessages, getConf());
@@ -304,10 +306,10 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
    */
   public void flush() {
     PairList<WorkerInfo, PairList<Integer,
-        ByteArrayVertexIdMessages<I, M>>>
+        VertexIdMessages<I, M>>>
     remainingMessageCache = removeAllMessages();
     PairList<WorkerInfo, PairList<
-        Integer, ByteArrayVertexIdMessages<I, M>>>.Iterator
+        Integer, VertexIdMessages<I, M>>>.Iterator
     iterator = remainingMessageCache.getIterator();
     while (iterator.hasNext()) {
       iterator.next();
