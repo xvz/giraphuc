@@ -1078,7 +1078,7 @@ public class GiraphConfiguration extends Configuration
   public String getLocalHostname() throws UnknownHostException {
     return DNS.getDefaultHost(
         GiraphConstants.DNS_INTERFACE.get(this),
-        GiraphConstants.DNS_NAMESERVER.get(this));
+        GiraphConstants.DNS_NAMESERVER.get(this)).toLowerCase();
   }
 
   /**
