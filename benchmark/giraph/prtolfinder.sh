@@ -26,7 +26,7 @@ logfile=${logname}_time.txt       # running time
 
 
 ## start logging memory + network usage
-#../common/bench-init.sh ${logname}
+../common/bench-init.sh ${logname}
 
 ## start algorithm run
 # we use default byte array edges (better performance)
@@ -35,6 +35,8 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-SNAPSHOT-f
     -Dgiraph.numComputeThreads=${GIRAPH_THREADS} \
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \
+    -Dgiraph.asyncLocalRead=true \
+    -Dgiraph.asyncPageRankLike=true \
     org.apache.giraph.examples.PageRankTolFinderComputation \
     -mc org.apache.giraph.examples.PageRankTolFinderComputation\$PageRankTolFinderMasterCompute \
     -c org.apache.giraph.combiner.DoubleSumMessageCombiner \
@@ -48,7 +50,7 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-SNAPSHOT-f
 # -wc org.apache.giraph.examples.PageRankTolFinderComputation\$PageRankTolFinderWorkerContext
 
 ## finish logging memory + network usage
-#../common/bench-finish.sh ${logname}
+../common/bench-finish.sh ${logname}
 
 
 ## get max deltas (changes in PR value) at each superstep

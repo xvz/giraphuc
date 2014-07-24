@@ -41,18 +41,20 @@ logfile=${logname}_time.txt       # running time
 ## start algorithm run
 hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-SNAPSHOT-for-hadoop-1.0.4-jar-with-dependencies.jar org.apache.giraph.GiraphRunner \
     ${edgeclass} \
+    -Dgiraph.metrics.enable=true \
+    -Dgiraph.asyncLocalRead=true \
+    -Dgiraph.asyncPageRankLike=true \
     -Dgiraph.numComputeThreads=${GIRAPH_THREADS} \
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \
     org.apache.giraph.examples.SimplePageRankComputation \
-    -c org.apache.giraph.combiner.DoubleSumMessageCombiner \
     -ca SimplePageRankComputation.maxSS=30 \
     -vif org.apache.giraph.examples.io.formats.SimplePageRankInputFormat \
     -vip /user/${USER}/input/${inputgraph} \
     -vof org.apache.giraph.examples.SimplePageRankComputation\$SimplePageRankVertexOutputFormat \
     -op "$outputdir" \
     -w ${machines} 2>&1 | tee -a ./logs/${logfile}
-
+#    -c org.apache.giraph.combiner.DoubleSumMessageCombiner \
 # mc not needed b/c we don't want aggregators: -mc org.apache.giraph.examples.SimplePageRankVertex\$SimplePageRankVertexMasterCompute 
 # alternative output format: -vof org.apache.giraph.io.formats.IdWithValueTextOutputFormat 
 

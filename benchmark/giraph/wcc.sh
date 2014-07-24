@@ -41,6 +41,9 @@ logfile=${logname}_time.txt       # running time
 ## start algorithm run
 hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-SNAPSHOT-for-hadoop-1.0.4-jar-with-dependencies.jar org.apache.giraph.GiraphRunner \
     ${edgeclass} \
+    -Dgiraph.metrics.enable=true \
+    -Dgiraph.asyncLocalRead=true \
+    -Dgiraph.asyncRemoteRead=true \
     -Dgiraph.numComputeThreads=${GIRAPH_THREADS} \
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \

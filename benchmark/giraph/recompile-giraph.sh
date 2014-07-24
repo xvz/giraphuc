@@ -13,6 +13,8 @@ cd "$GIRAPH_DIR"
 # -pl specifies what packages to compile (e.g., giraph-examples,giraph-core)
 # -Dfindbugs.skip skips "find bugs" stage (saves quite a bit of time)
 if [[ $# -eq 1 && $1 -eq 1 ]]; then
+    # NOTE: giraph-examples MUST be recompiled when recompiling giraph-core
+    # Otherwise there may be stale code
     mvn clean install -Phadoop_1 -Dhadoop.version=1.0.4 -DskipTests -pl giraph-examples,giraph-core -Dfindbugs.skip
 else
     mvn clean install -Phadoop_1 -Dhadoop.version=1.0.4 -DskipTests -pl giraph-examples -Dfindbugs.skip
