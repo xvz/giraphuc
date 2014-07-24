@@ -41,7 +41,7 @@ logfile=${logname}_time.txt       # running time
 ## start algorithm run
 # -Dmapred.task.timeout=0 is needed to prevent Giraph job from getting killed after spending 10 mins on one superstep
 # Giraph seems to ignore any mapred.task.timeout specified in Hadoop's mapred-site.xml
-hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-SNAPSHOT-for-hadoop-1.0.4-jar-with-dependencies.jar org.apache.giraph.GiraphRunner \
+hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop-1.0.4-jar-with-dependencies.jar org.apache.giraph.GiraphRunner \
     ${edgeclass} \
     -Dgiraph.numComputeThreads=${GIRAPH_THREADS} \
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \

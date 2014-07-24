@@ -31,7 +31,7 @@ logfile=${logname}_time.txt       # running time
 ## start algorithm run
 # we use default byte array edges (better performance)
 # NOTE: this outputs no data to HDFS
-hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-SNAPSHOT-for-hadoop-1.0.4-jar-with-dependencies.jar org.apache.giraph.GiraphRunner \
+hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop-1.0.4-jar-with-dependencies.jar org.apache.giraph.GiraphRunner \
     -Dgiraph.numComputeThreads=${GIRAPH_THREADS} \
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \
