@@ -235,7 +235,8 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
       PairList<Integer, VertexIdMessages<I, M>>
         workerMessages = removeWorkerMessages(workerInfo);
       WritableRequest writableRequest =
-        new SendWorkerMessagesRequest<I, M>(workerMessages, getConf());
+        new SendWorkerMessagesRequest<I, M>(workerMessages);
+      writableRequest.setConf(getConf());
       totalMsgBytesSentInSuperstep += writableRequest.getSerializedSize();
       clientProcessor.doRequest(workerInfo, writableRequest);
       // Notify sending
@@ -315,7 +316,8 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
       iterator.next();
       WritableRequest writableRequest =
         new SendWorkerMessagesRequest<I, M>(
-          iterator.getCurrentSecond(), getConf());
+          iterator.getCurrentSecond());
+      writableRequest.setConf(getConf());
       totalMsgBytesSentInSuperstep += writableRequest.getSerializedSize();
       clientProcessor.doRequest(
         iterator.getCurrentFirst(), writableRequest);
