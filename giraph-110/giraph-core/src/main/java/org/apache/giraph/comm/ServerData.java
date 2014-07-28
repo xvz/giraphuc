@@ -193,15 +193,10 @@ public class ServerData<I extends WritableComparable,
 
   /** Prepare for next super step */
   public void prepareSuperstep() {
-    // YH: if doing immediate remote reads, use our own message store
-    // rather than the default current/incoming message stores
-    if (conf.getAsyncConf().doRemoteRead()) {
-      if (remoteMessageStore == null) {
-        remoteMessageStore =
-          messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
-      }
-    } else {
-      // these stores will never be initialized if doRemoteRead() is true
+    // YH: if one of immediate local or remote reads is not used,
+    // we must use regular BSP message stores for the disabled case
+    if (!conf.getAsyncConf().doLocalRead() ||
+        !conf.getAsyncConf().doRemoteRead()) {
       if (currentMessageStore != null) {
         try {
           currentMessageStore.clearAll();
@@ -217,8 +212,15 @@ public class ServerData<I extends WritableComparable,
         messageStoreFactory.newStore(conf.getOutgoingMessageValueFactory());
     }
 
+    // if doing immediate remote reads, use remote message store
+    if (conf.getAsyncConf().doRemoteRead()) {
+      if (remoteMessageStore == null) {
+        remoteMessageStore =
+          messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
+      }
+    }
 
-    // YH: create localMessageStore if needed; this persists across supersteps
+    // create localMessageStore if needed; this persists across supersteps
     if (conf.getAsyncConf().doLocalRead()) {
       // TODO-YH: this breaks if Incoming and Outgoing factories are not same!!
       // this should PROBABLY be Incoming... so is there bug above?

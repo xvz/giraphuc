@@ -41,6 +41,7 @@ import com.google.common.collect.Multimap;
 
 import java.net.InetSocketAddress;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map.Entry;
 
 import static org.apache.giraph.conf.GiraphConstants.MESSAGE_STORE_FACTORY_CLASS;
@@ -147,22 +148,28 @@ public class NettyWorkerServer<I extends WritableComparable,
     }
     // Keep track of the vertices which are not here but have received messages
     for (Integer partitionId : service.getPartitionStore().getPartitionIds()) {
-      Iterable<I> destinations;
-      // YH: check correct message store (remote or BSP)
-      // and concat local message store if needed
-      if (conf.getAsyncConf().doRemoteRead()) {
-        destinations = serverData.getRemoteMessageStore().
-          getPartitionDestinationVertices(partitionId);
-      } else {
-        destinations = serverData.getCurrentMessageStore().
-          getPartitionDestinationVertices(partitionId);
+      // YH: start w/ empty iterator and concat as needed
+      Iterable<I> destinations = (Iterable<I>) Collections.<I>emptyList();
+
+      // YH: if either immediate local or remote reads are not used, we
+      // have to use BSP message store and concat other ones as needed
+      if (!conf.getAsyncConf().doLocalRead() ||
+          !conf.getAsyncConf().doRemoteRead()) {
+        destinations = Iterables.concat(destinations,
+                          serverData.getCurrentMessageStore().
+                          getPartitionDestinationVertices(partitionId));
       }
 
-      // YH: must look in local message store too
+      if (conf.getAsyncConf().doRemoteRead()) {
+        destinations = Iterables.concat(destinations,
+                          serverData.getRemoteMessageStore().
+                          getPartitionDestinationVertices(partitionId));
+      }
+
       if (conf.getAsyncConf().doLocalRead()) {
         destinations = Iterables.concat(destinations,
-           serverData.getLocalMessageStore().
-             getPartitionDestinationVertices(partitionId));
+                          serverData.getLocalMessageStore().
+                          getPartitionDestinationVertices(partitionId));
       }
 
       if (!Iterables.isEmpty(destinations)) {
@@ -170,6 +177,7 @@ public class NettyWorkerServer<I extends WritableComparable,
             service.getPartitionStore().getOrCreatePartition(partitionId);
         for (I vertexId : destinations) {
           if (partition.getVertex(vertexId) == null) {
+            // TODO-YH: there is bug here (condition is true)
             if (!resolveVertexIndices.put(partitionId, vertexId)) {
               throw new IllegalStateException(
                   "resolveMutations: Already has missing vertex on this " +
@@ -201,12 +209,16 @@ public class NettyWorkerServer<I extends WritableComparable,
         }
 
         // YH: check remote and local message stores if needed
-        boolean hasMessages;
-        if (conf.getAsyncConf().doRemoteRead()) {
-          hasMessages = serverData.getRemoteMessageStore().
+        boolean hasMessages = false;
+
+        if (!conf.getAsyncConf().doLocalRead() ||
+            !conf.getAsyncConf().doRemoteRead()) {
+          hasMessages |= serverData.getCurrentMessageStore().
             hasMessagesForVertex(vertexIndex);
-        } else {
-          hasMessages = serverData.getCurrentMessageStore().
+        }
+
+        if (conf.getAsyncConf().doRemoteRead()) {
+          hasMessages |= serverData.getRemoteMessageStore().
             hasMessagesForVertex(vertexIndex);
         }
 

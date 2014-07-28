@@ -1399,16 +1399,18 @@ public class BspServiceWorker<I extends WritableComparable,
       long startPos = verticesOutputStream.getPos();
       partition.write(verticesOutputStream);
       // write messages
-      // YH: write out contents of correct message store
-      if (getConfiguration().getAsyncConf().doRemoteRead()) {
-        getServerData().getRemoteMessageStore().writePartition(
-            verticesOutputStream, partition.getId());
-      } else {
+      // YH: write out contents of all message stores in use
+      if (!getConfiguration().getAsyncConf().doLocalRead() ||
+          !getConfiguration().getAsyncConf().doRemoteRead()) {
         getServerData().getCurrentMessageStore().writePartition(
             verticesOutputStream, partition.getId());
       }
 
-      // YH: also write out contents of local store
+      if (getConfiguration().getAsyncConf().doRemoteRead()) {
+        getServerData().getRemoteMessageStore().writePartition(
+            verticesOutputStream, partition.getId());
+      }
+
       if (getConfiguration().getAsyncConf().doLocalRead()) {
         getServerData().getLocalMessageStore().writePartition(
             verticesOutputStream, partition.getId());
@@ -1473,11 +1475,14 @@ public class BspServiceWorker<I extends WritableComparable,
     try {
       // clear old message stores
       // YH: clear stores based on what's enabled/disabled
-      if (getConfiguration().getAsyncConf().doRemoteRead()) {
-        getServerData().getRemoteMessageStore().clearAll();
-      } else {
+      if (!getConfiguration().getAsyncConf().doLocalRead() ||
+          !getConfiguration().getAsyncConf().doRemoteRead()) {
         getServerData().getIncomingMessageStore().clearAll();
         getServerData().getCurrentMessageStore().clearAll();
+      }
+
+      if (getConfiguration().getAsyncConf().doRemoteRead()) {
+        getServerData().getRemoteMessageStore().clearAll();
       }
 
       if (getConfiguration().getAsyncConf().doLocalRead()) {
@@ -1533,16 +1538,18 @@ public class BspServiceWorker<I extends WritableComparable,
           }
           partition.readFields(partitionsStream);
 
-          // YH: restore correct remote message store
-          if (getConfiguration().getAsyncConf().doRemoteRead()) {
-            getServerData().getRemoteMessageStore().readFieldsForPartition(
-                partitionsStream, partitionId);
-          } else {
+          // YH: restore correct message stores
+          if (!getConfiguration().getAsyncConf().doLocalRead() ||
+              !getConfiguration().getAsyncConf().doRemoteRead()) {
             getServerData().getIncomingMessageStore().readFieldsForPartition(
                 partitionsStream, partitionId);
           }
 
-          // YH: restore local message store if used
+          if (getConfiguration().getAsyncConf().doRemoteRead()) {
+            getServerData().getRemoteMessageStore().readFieldsForPartition(
+                partitionsStream, partitionId);
+          }
+
           if (getConfiguration().getAsyncConf().doLocalRead()) {
             getServerData().getLocalMessageStore().readFieldsForPartition(
                 partitionsStream, partitionId);
