@@ -193,29 +193,17 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
   }
 
   /**
-   * Send all messages for a partition to another worker.
+   * Helper for sendPartitionMessages.
    *
    * @param workerInfo Worker to send the partition messages to
-   * @param partition Partition whose messages to send
+   * @param partitionId Id of partition whose messages are to be sent
+   * @param messageStore The message store to iterate through
+   * @param vertexIdMessages The serialized byte array of messages
    */
-  private void sendPartitionMessages(WorkerInfo workerInfo,
-                                     Partition<I, V, E> partition) {
-    final int partitionId = partition.getId();
-    // YH: workerInfo will always be that of a remote worker
-    // so we only need to change this to accommodate remote message store
-    //
-    // TODO-YH: is this correct? looks like this is only used
-    // to exchange vertices...
-    MessageStore<I, Writable> messageStore =
-        configuration.getAsyncConf().doRemoteRead() ?
-        serverData.getRemoteMessageStore() :
-        serverData.getCurrentMessageStore();
-
-    ByteArrayVertexIdMessages<I, Writable> vertexIdMessages =
-        new ByteArrayVertexIdMessages<I, Writable>(
-            configuration.getOutgoingMessageValueFactory());
-    vertexIdMessages.setConf(configuration);
-    vertexIdMessages.initialize();
+  private void sendPartitionMessagesHelper(
+      WorkerInfo workerInfo, int partitionId,
+      MessageStore<I, Writable> messageStore,
+      ByteArrayVertexIdMessages<I, Writable> vertexIdMessages) {
     for (I vertexId :
         messageStore.getPartitionDestinationVertices(partitionId)) {
       try {
@@ -241,6 +229,50 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
         vertexIdMessages.initialize();
       }
     }
+  }
+
+  /**
+   * Send all messages for a partition to another worker.
+   *
+   * @param workerInfo Worker to send the partition messages to
+   * @param partition Partition whose messages to send
+   */
+  private void sendPartitionMessages(WorkerInfo workerInfo,
+                                     Partition<I, V, E> partition) {
+    final int partitionId = partition.getId();
+
+    // TODO-YH: check correctness!! is this used at all?
+
+    // YH: iterate over remote (or BSP) message store first
+    MessageStore<I, Writable> messageStore =
+        configuration.getAsyncConf().doRemoteRead() ?
+        serverData.getRemoteMessageStore() :
+        serverData.getCurrentMessageStore();
+
+    ByteArrayVertexIdMessages<I, Writable> vertexIdMessages =
+        new ByteArrayVertexIdMessages<I, Writable>(
+            configuration.getOutgoingMessageValueFactory());
+    vertexIdMessages.setConf(configuration);
+    vertexIdMessages.initialize();
+
+    sendPartitionMessagesHelper(workerInfo, partitionId,
+                                messageStore, vertexIdMessages);
+
+    // YH: also iterate over local messages if needed
+    //
+    // Note that if neither local nor remote message stores are used,
+    // this is not executed, as we already handled BSP store above.
+    if (configuration.getAsyncConf().doRemoteRead() ||
+        configuration.getAsyncConf().doLocalRead()) {
+      messageStore =
+          configuration.getAsyncConf().doLocalRead() ?
+          serverData.getLocalMessageStore() :
+          serverData.getCurrentMessageStore();
+
+      sendPartitionMessagesHelper(workerInfo, partitionId,
+                                  messageStore, vertexIdMessages);
+    }
+
     if (!vertexIdMessages.isEmpty()) {
       WritableRequest messagesRequest = new
           SendPartitionCurrentMessagesRequest<I, V, E, Writable>(

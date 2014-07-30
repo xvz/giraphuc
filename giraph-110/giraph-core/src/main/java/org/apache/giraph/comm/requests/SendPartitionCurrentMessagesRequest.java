@@ -104,12 +104,16 @@ public class SendPartitionCurrentMessagesRequest<I extends WritableComparable,
    * @param isLocal Whether request is local or not
    */
   private void doRequest(ServerData<I, V, E> serverData, boolean isLocal) {
+    // TODO-YH: destinations should always be to remote workers
+    if (isLocal) {
+      throw new IllegalStateException("doLocalRequest: " +
+                                      "Destination is the local worker.");
+    }
+
     MessageStore msgStore;
-    if (isLocal && getConf().getAsyncConf().doLocalRead()) {
-      // YH: use local message store if doing async and request is local
-      msgStore = serverData.<M>getLocalMessageStore();
-    } else if (!isLocal && getConf().getAsyncConf().doRemoteRead()) {
-      // YH: use remote message store if doing async and request is remote
+    if (getConf().getAsyncConf().doRemoteRead()) {
+      // YH: use remote message store if doing async
+      // (request must always be remote)
       msgStore = serverData.<M>getRemoteMessageStore();
     } else {
       // otherwise use default BSP incoming message store
@@ -119,8 +123,7 @@ public class SendPartitionCurrentMessagesRequest<I extends WritableComparable,
     try {
       msgStore.addPartitionMessages(partitionId, vertexIdMessageMap);
     } catch (IOException e) {
-      throw new RuntimeException(isLocal ? "doRequest" : "doLocalRequest" +
-                                 ": Got IOException ", e);
+      throw new RuntimeException("doRequest: Got IOException ", e);
     }
   }
 

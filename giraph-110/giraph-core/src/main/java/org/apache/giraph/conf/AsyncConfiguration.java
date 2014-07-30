@@ -27,7 +27,7 @@ public class AsyncConfiguration {
   /** Whether or not to read most recently available remote values */
   private boolean doRemoteRead;
   /** Is the next superstep a new computation phase? */
-  // TODO: phases are not completed yet
+  // TODO-YH: phases are not completed yet
   private boolean isNewPhase;
   /** Maximum number of messages before flushing cached messages */
   private int maxNumMsgs;

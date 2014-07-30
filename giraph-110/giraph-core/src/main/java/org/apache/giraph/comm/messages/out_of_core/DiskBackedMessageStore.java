@@ -117,6 +117,9 @@ public class DiskBackedMessageStore<I extends WritableComparable,
 
   @Override
   public Iterable<M> getVertexMessages(I vertexId) throws IOException {
+    // TODO-YH: proper synchronization for async not implemented..
+    // everything is missing sync; some may need to be implemented in
+    // PartitionDiskBackedMessageStore, etc.
     if (hasMessagesForVertex(vertexId)) {
       return getMessageStore(vertexId).getVertexMessages(vertexId);
     } else {
