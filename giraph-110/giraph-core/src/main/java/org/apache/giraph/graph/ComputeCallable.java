@@ -108,8 +108,8 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
    *
    * @param context Context
    * @param graphState Current graph state (use to create own graph state)
-   * @param messageStore Message store
-   * @param localMessageStore Local message store
+   * @param messageStore Message store (remote-only, if using async)
+   * @param localMessageStore Local message store (local-only, if using async)
    * @param partitionIdQueue Queue of partition ids (thread-safe)
    * @param configuration Configuration
    * @param serviceWorker Service worker
@@ -237,11 +237,42 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       for (Vertex<I, V, E> vertex : partition) {
         Iterable<M1> messages;
 
-        // YH: message store is set correctly by GraphTaskManager,
-        // but we have to check for this case
+        // NOTE: This assumes messages are queued instantly, or in gaps
+        // of X vertices (cannot do it by size, b/c then # of old messages
+        // will vary).
+        //
+        // TODO-YH: this does not handle algs with multiple computation
+        // phases! We would need way of knowing phase transition BEFORE the
+        // superstep in which it occurs: b/c messages intended to be read
+        // in new phase will be immediately visible in local message store,
+        // and we should not read it.
+
+        // Two types of algorithms:
+        // 1. vertices need all messages (aka, stationary; e.g., PageRank)
+        //    -> newer messages always as up-to-date as older messages
+        //    -> edge case is exactly 1 superstep (b/c there, old messages
+        //       are valuable as they only appear once)
+        //
+        // 2. vertices can handle partial messages (e.g., SSSP/WCC)
+        //    -> this subsumes case where old messages are more valuable
+        //       than newer messages, as they won't be repeated
+        //
+        // Type 1 algs should clear old messages to make way for new,
+        // while type 2 algs should show them immediately.
+        //
+        // HOWEVER, algorithms typically only do initialization in first
+        // superstep, so we instead persist them to be processed in
+        // a subsequent superstep.
+        //
+        // NOTE: Correctly clearing for type 1 algs gives large performance
+        // benefits in terms of convergence (by at least 100x), but WILL
+        // cause correctness issues if algorithm is actually type 2 alg.
+
+        // YH: messageStore and localMessageStore are set correctly by
+        // GraphTaskManager to be remote-only/BSP and local-only/BSP
+
         if (configuration.getAsyncConf().doRemoteRead() &&
             configuration.getAsyncConf().isNewPhase()) {
-          // if new phase, do same thing as for local message store
           if (configuration.getAsyncConf().needAllMsgs()) {
             messageStore.clearVertexMessages(vertex.getId());
           }
@@ -251,44 +282,17 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
           messages = messageStore.removeVertexMessages(vertex.getId());
         }
 
-        if (configuration.getAsyncConf().doLocalRead()) {
-          // NOTE: This assumes messages are queued instantly, or in gaps
-          // of X vertices (cannot do it by size, b/c then # of old messages
-          // will vary).
-          //
-          // TODO-YH: this does not handle algs with multiple computation
-          // phases! We would need way of knowing phase transition BEFORE the
-          // superstep in which it occurs: b/c messages intended to be read
-          // in new phase will be immediately visible in local message store,
-          // and we should not read it.
-          if (configuration.getAsyncConf().isNewPhase()) {
-            // Two types of algorithms:
-            // 1. vertices need all messages (aka, stationary; e.g., PageRank)
-            //    -> newer messages always as up-to-date as older messages
-            //    -> edge case is exactly 1 superstep (b/c there, old messages
-            //       are valuable as they only appear once)
-            //
-            // 2. vertices can handle partial messages (e.g., SSSP/WCC)
-            //    -> this subsumes case where old messages are more valuable
-            //       than newer messages, as they won't be repeated
-            //
-            // Type 1 algs should clear old messages to make way for new,
-            // while type 2 algs should show them immediately.
-            //
-            // HOWEVER, algorithms typically only do initialization in first
-            // superstep, so we instead persist them to be processed in
-            // a subsequent superstep.
-            //
-            // NOTE: Correctly clearing for type 1 algs gives large performance
-            // benefits in terms of convergence (by at least 100x), but WILL
-            // cause correctness issues if algorithm is actually type 2 alg.
-            if (configuration.getAsyncConf().needAllMsgs()) {
-              localMessageStore.clearVertexMessages(vertex.getId());
-            }
-            // nothing else needed (not concating => local msgs not seen)
-          } else {
-            // YH: concat iterators for remote and local stores
-            // Note that local messages are *removed*
+        if (configuration.getAsyncConf().doLocalRead() &&
+            configuration.getAsyncConf().isNewPhase()) {
+          if (configuration.getAsyncConf().needAllMsgs()) {
+            localMessageStore.clearVertexMessages(vertex.getId());
+          }
+          // nothing else needed (not concating => local msgs not seen)
+        } else {
+          // concat w/ local store if at least one async mode is enabled
+          // (otherwise, messages is already reading BSP store)
+          if (configuration.getAsyncConf().doRemoteRead() ||
+              configuration.getAsyncConf().doLocalRead()) {
             messages = Iterables.concat(messages,
               localMessageStore.removeVertexMessages(vertex.getId()));
           }
@@ -336,6 +340,10 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       // TODO-YH: can partitions disappear?...
       if (!configuration.getAsyncConf().doRemoteRead()) {
         messageStore.clearPartition(partition.getId());
+      } else {
+        if (!configuration.getAsyncConf().doLocalRead()) {
+          localMessageStore.clearPartition(partition.getId());
+        }
       }
     }
     WorkerProgress.get().addVerticesComputed(verticesComputedProgress);
