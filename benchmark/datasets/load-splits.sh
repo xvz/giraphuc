@@ -11,7 +11,7 @@ source "$commondir"/get-dirs.sh
 source "$commondir"/get-hosts.sh
 
 if [ $# -eq 0 ]; then
-    case ${NUM_MACHINES} in
+    case ${_NUM_MACHINES} in
         4) size=1;;
         8) size=1;;
         16) size=2;;
@@ -36,18 +36,18 @@ hadoop dfsadmin -safemode wait > /dev/null
 hadoop dfs -mkdir ./input || true    # no problem if it already exists
 
 case ${size} in
-    1)  "${scriptdir}"/split-input.sh amazon-adj.txt ${NUM_MACHINES};
-        "${scriptdir}"/split-input.sh google-adj.txt ${NUM_MACHINES};
-        "${scriptdir}"/split-input.sh patents-adj.txt ${NUM_MACHINES};;
-    2)  "${scriptdir}"/split-input.sh livejournal-adj.txt ${NUM_MACHINES};
-        "${scriptdir}"/split-input.sh orkut-adj.txt ${NUM_MACHINES};
-        "${scriptdir}"/split-input.sh arabic-adj.txt ${NUM_MACHINES};
-        "${scriptdir}"/split-input.sh twitter-adj.txt ${NUM_MACHINES};;
-    3)  "${scriptdir}"/split-input.sh livejournal-adj.txt ${NUM_MACHINES};
-        "${scriptdir}"/split-input.sh orkut-adj.txt ${NUM_MACHINES};
-        "${scriptdir}"/split-input.sh arabic-adj.txt ${NUM_MACHINES};
-        "${scriptdir}"/split-input.sh twitter-adj.txt ${NUM_MACHINES};
-        "${scriptdir}"/split-input.sh uk0705-adj.txt ${NUM_MACHINES};;
+    1)  "${scriptdir}"/split-input.sh amazon-adj.txt ${_NUM_MACHINES};
+        "${scriptdir}"/split-input.sh google-adj.txt ${_NUM_MACHINES};
+        "${scriptdir}"/split-input.sh patents-adj.txt ${_NUM_MACHINES};;
+    2)  "${scriptdir}"/split-input.sh livejournal-adj.txt ${_NUM_MACHINES};
+        "${scriptdir}"/split-input.sh orkut-adj.txt ${_NUM_MACHINES};
+        "${scriptdir}"/split-input.sh arabic-adj.txt ${_NUM_MACHINES};
+        "${scriptdir}"/split-input.sh twitter-adj.txt ${_NUM_MACHINES};;
+    3)  "${scriptdir}"/split-input.sh livejournal-adj.txt ${_NUM_MACHINES};
+        "${scriptdir}"/split-input.sh orkut-adj.txt ${_NUM_MACHINES};
+        "${scriptdir}"/split-input.sh arabic-adj.txt ${_NUM_MACHINES};
+        "${scriptdir}"/split-input.sh twitter-adj.txt ${_NUM_MACHINES};
+        "${scriptdir}"/split-input.sh uk0705-adj.txt ${_NUM_MACHINES};;
     *) echo "Invalid size"; exit -1;;
 esac
 

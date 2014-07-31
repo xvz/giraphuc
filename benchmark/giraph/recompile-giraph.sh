@@ -21,9 +21,9 @@ else
 fi
 
 # copy compiled jars to worker machines
-for ((i = 1; i <= ${NUM_MACHINES}; i++)); do
-    scp ./giraph-examples/target/*.jar ${CLUSTER_NAME}${i}:"$GIRAPH_DIR"/giraph-examples/target/ &
-    scp ./giraph-core/target/*.jar ${CLUSTER_NAME}${i}:"$GIRAPH_DIR"/giraph-core/target/ &
+for ((i = 1; i <= ${_NUM_MACHINES}; i++)); do
+    scp ./giraph-examples/target/*.jar ${_MACHINES[$i]}:"$GIRAPH_DIR"/giraph-examples/target/ &
+    scp ./giraph-core/target/*.jar ${_MACHINES[$i]}:"$GIRAPH_DIR"/giraph-core/target/ &
 done
 wait
 

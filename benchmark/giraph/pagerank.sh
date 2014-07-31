@@ -43,7 +43,7 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop
     ${edgeclass} \
     -Dgiraph.metrics.enable=true \
     -Dgiraph.asyncLocalRead=true \
-    -Dgiraph.asyncPageRankLike=true \
+    -Dgiraph.asyncRemoteRead=true \
     -Dgiraph.numComputeThreads=${GIRAPH_THREADS} \
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \

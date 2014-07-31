@@ -9,7 +9,7 @@
 # maximum JVM heap size for Giraph (per machine)
 # NOTE: to put changes into effect without re-initializing everything (i.e., ../init-all.sh),
 #       run ../hadoop/init.sh; ../hadoop/restart-hadoop.sh 1
-GIRAPH_XMX=14500M
+GIRAPH_XMX=4000M
 
 # number of compute/input/output threads per machine
 GIRAPH_THREADS=2
