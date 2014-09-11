@@ -54,6 +54,27 @@ public class VerboseByteStructMessageWrite {
   }
 
   /**
+   * YH: verboseWriteCurrentMessage for message with source
+   * de-serialize, then write messages
+   *
+   * @param iterator iterator
+   * @param out DataOutput
+   * @param <I> vertexId
+   * @param <M> message
+   * @throws IOException
+   * @throws RuntimeException
+   */
+  public static <I extends WritableComparable, M extends Writable> void
+  verboseWriteCurrentMessage(VertexIdMessageWithSourceIterator<I, M> iterator,
+    DataOutput out) throws IOException {
+    try {
+      iterator.getCurrentMessage().write(out);
+    } catch (NegativeArraySizeException e) {
+      handleNegativeArraySize(iterator.getCurrentVertexId());
+    }
+  }
+
+  /**
    * message to present on NegativeArraySizeException
    *
    * @param vertexId vertexId
