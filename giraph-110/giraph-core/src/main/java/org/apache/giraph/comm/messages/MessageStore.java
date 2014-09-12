@@ -83,7 +83,8 @@ public interface MessageStore<I extends WritableComparable,
   boolean hasMessagesForVertex(I vertexId);
 
   /**
-   * YH: Adds an unserialized message for partition
+   * YH: Adds an unserialized message for partition.
+   * Caller must not invalidate destVertexId after the call.
    *
    * @param partitionId Id of partition
    * @param destVertexId Target vertex id (must be local to worker)

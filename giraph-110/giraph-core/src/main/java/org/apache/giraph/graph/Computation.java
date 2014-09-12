@@ -119,6 +119,19 @@ public interface Computation<I extends WritableComparable,
   long getTotalNumEdges();
 
   /**
+   * YH: Set the source vertex id for all messages that will be sent.
+   * By default, this is the current vertex being processed, or null
+   * if no vertex is currently being processed.
+   *
+   * Shouldn't be called by user code, UNLESS the current vertex being
+   * processed is not the source of messages to be sent. In that case,
+   * use this to set the correct source id before calling sendMessage*().
+   *
+   * @param id Id of vertex that will be sending messages.
+   */
+  void setCurrentSourceId(I id);
+
+  /**
    * Send a message to a vertex id.
    *
    * @param id Vertex id to send the message to

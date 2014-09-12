@@ -24,6 +24,7 @@ import org.apache.giraph.comm.messages.primitives.IntByteArrayMessageStore;
 import org.apache.giraph.comm.messages.primitives.IntFloatMessageStore;
 import org.apache.giraph.comm.messages.primitives.LongByteArrayMessageStore;
 import org.apache.giraph.comm.messages.primitives.LongDoubleMessageStore;
+import org.apache.giraph.comm.messages.with_source.ByteArrayMessagesPerSourceVertexStore;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.factories.MessageValueFactory;
 import org.apache.hadoop.io.DoubleWritable;
@@ -43,9 +44,12 @@ import org.apache.log4j.Logger;
  * @param <I> Vertex id
  * @param <M> Message data
  */
+// TODO-YH: to accomodate MessageWithSourceStore, which uses/returns
+// MessageStore<I, MessageWithStore<I, M>>, we change MS to use Writable
+// (This change isn't totally needed, since ServerData assumes M=Writable)
 public class InMemoryMessageStoreFactory<I extends WritableComparable,
     M extends Writable>
-    implements MessageStoreFactory<I, M, MessageStore<I, M>> {
+    implements MessageStoreFactory<I, M, MessageStore<I, Writable>> {
   /** Class logger */
   private static final Logger LOG =
       Logger.getLogger(InMemoryMessageStoreFactory.class);
@@ -62,7 +66,7 @@ public class InMemoryMessageStoreFactory<I extends WritableComparable,
   }
 
   @Override
-  public MessageStore<I, M> newStore(
+  public MessageStore<I, Writable> newStore(
       MessageValueFactory<M> messageValueFactory) {
     Class<M> messageClass = messageValueFactory.getValueClass();
     MessageStore messageStore;
@@ -100,6 +104,16 @@ public class InMemoryMessageStoreFactory<I extends WritableComparable,
         messageStore = new ByteArrayMessagesPerVertexStore<I, M>(
           messageValueFactory, service, conf);
       }
+    }
+
+    if (conf.getAsyncConf().needAllMsgs()) {
+      // TODO-YH: specialized message stores? combiners?
+
+      // TODO-YH: Note that this returns
+      // MessageStore<I, MessageWithSource<I, M>> rather than
+      // MessageStore<I, M>!!
+      messageStore = new ByteArrayMessagesPerSourceVertexStore<I, M>(
+        messageValueFactory, service, conf);
     }
 
     if (LOG.isInfoEnabled()) {

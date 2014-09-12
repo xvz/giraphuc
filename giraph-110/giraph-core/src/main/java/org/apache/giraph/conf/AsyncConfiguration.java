@@ -38,12 +38,6 @@ public class AsyncConfiguration {
   private boolean needAllMsgs;
 
   /**
-   * Default constructor.
-   */
-  public AsyncConfiguration() {
-  }
-
-  /**
    * Initialization constructor.
    *
    * @param conf GiraphConfiguration

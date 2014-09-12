@@ -67,6 +67,8 @@ public abstract class AbstractComputation<I extends WritableComparable,
   private WorkerAggregatorUsage workerAggregatorUsage;
   /** Worker context */
   private WorkerContext workerContext;
+  /** Current source id for sent messages */
+  private I srcId;
 
   /**
    * Must be defined by user to do computation on a single Vertex.
@@ -118,6 +120,7 @@ public abstract class AbstractComputation<I extends WritableComparable,
     this.graphTaskManager = graphTaskManager;
     this.workerAggregatorUsage = workerAggregatorUsage;
     this.workerContext = workerContext;
+    this.srcId = null;
   }
 
   /**
@@ -153,6 +156,22 @@ public abstract class AbstractComputation<I extends WritableComparable,
   }
 
   /**
+   * YH: Set the source vertex id for all messages that will be sent.
+   * By default, this is the current vertex being processed, or null
+   * if no vertex is currently being processed.
+   *
+   * Shouldn't be called by user code, UNLESS the current vertex being
+   * processed is not the source of messages to be sent. In that case,
+   * use this to set the correct source id before calling sendMessage*().
+   *
+   * @param id Id of vertex that will be sending messages.
+   */
+  @Override
+  public void setCurrentSourceId(I id) {
+    this.srcId = id;
+  }
+
+  /**
    * Send a message to a vertex id.
    *
    * @param id Vertex id to send the message to
@@ -160,7 +179,7 @@ public abstract class AbstractComputation<I extends WritableComparable,
    */
   @Override
   public void sendMessage(I id, M2 message) {
-    workerClientRequestProcessor.sendMessageRequest(id, message);
+    workerClientRequestProcessor.sendMessageRequest(srcId, id, message);
   }
 
   /**
@@ -171,7 +190,8 @@ public abstract class AbstractComputation<I extends WritableComparable,
    */
   @Override
   public void sendMessageToAllEdges(Vertex<I, V, E> vertex, M2 message) {
-    workerClientRequestProcessor.sendMessageToAllRequest(vertex, message);
+    workerClientRequestProcessor.sendMessageToAllRequest(
+        srcId, vertex, message);
   }
 
   /**
@@ -184,7 +204,7 @@ public abstract class AbstractComputation<I extends WritableComparable,
   public void sendMessageToMultipleEdges(
       Iterator<I> vertexIdIterator, M2 message) {
     workerClientRequestProcessor.sendMessageToAllRequest(
-        vertexIdIterator, message);
+        srcId, vertexIdIterator, message);
   }
 
   /**

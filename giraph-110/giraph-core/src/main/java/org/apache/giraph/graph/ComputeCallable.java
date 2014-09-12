@@ -20,6 +20,7 @@ package org.apache.giraph.graph;
 import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.comm.WorkerClientRequestProcessor;
 import org.apache.giraph.comm.messages.MessageStore;
+import org.apache.giraph.comm.messages.with_source.MessageWithSourceStore;
 import org.apache.giraph.comm.netty.NettyWorkerClientRequestProcessor;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.io.SimpleVertexWriter;
@@ -271,12 +272,19 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         // YH: messageStore and localMessageStore are set correctly by
         // GraphTaskManager to be remote-only/BSP and local-only/BSP
 
+        // TODO-YH: deal with pending mutations by skipping message remove()
+        // for vertices that don't yet exist
+
         if (configuration.getAsyncConf().doRemoteRead() &&
             configuration.getAsyncConf().isNewPhase()) {
-          if (configuration.getAsyncConf().needAllMsgs()) {
-            messageStore.clearVertexMessages(vertex.getId());
-          }
+          // for needAllMsgs(), nothing needs to be done either
           messages = (Iterable<M1>) Collections.<M1>emptyList();
+        } else if (configuration.getAsyncConf().doRemoteRead() &&
+                   configuration.getAsyncConf().needAllMsgs()) {
+          // we cast to Writable to be safe
+          // no need to remove, as we always overwrite
+          messages = ((MessageWithSourceStore) messageStore).
+            getVertexMessagesWithoutSource(vertex.getId());
         } else {
           // always remove messages immediately (rather than get and clear)
           messages = messageStore.removeVertexMessages(vertex.getId());
@@ -284,17 +292,21 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
 
         if (configuration.getAsyncConf().doLocalRead() &&
             configuration.getAsyncConf().isNewPhase()) {
-          if (configuration.getAsyncConf().needAllMsgs()) {
-            localMessageStore.clearVertexMessages(vertex.getId());
-          }
-          // nothing else needed (not concating => local msgs not seen)
+          // do nothing
+          messages = messages;
         } else {
           // concat w/ local store if at least one async mode is enabled
           // (otherwise, messages is already reading BSP store)
           if (configuration.getAsyncConf().doRemoteRead() ||
               configuration.getAsyncConf().doLocalRead()) {
-            messages = Iterables.concat(messages,
-              localMessageStore.removeVertexMessages(vertex.getId()));
+            if (configuration.getAsyncConf().needAllMsgs()) {
+              messages = Iterables.concat(messages,
+                ((MessageWithSourceStore) localMessageStore).
+                getVertexMessagesWithoutSource(vertex.getId()));
+            } else {
+              messages = Iterables.concat(messages,
+                localMessageStore.removeVertexMessages(vertex.getId()));
+            }
           }
         }
 
@@ -303,7 +315,14 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         }
         if (!vertex.isHalted()) {
           context.progress();
+
+          // YH: set source id before compute(), and remove the (stale)
+          // reference immediately after compute() is done. This is
+          // thread-safe as there is one Computation per thread.
+          computation.setCurrentSourceId(vertex.getId());
           computation.compute(vertex, messages);
+          computation.setCurrentSourceId(null);
+
           // Need to unwrap the mutated edges (possibly)
           vertex.unwrapMutableEdges();
           //Compact edges representation if possible
@@ -320,6 +339,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         }
         // Remove the messages now that the vertex has finished computation
         // YH: we do this right when we get messages, so this isn't needed
+        // (For needAllMsgs(), we overwrite, so this isn't needed as well)
         //messageStore.clearVertexMessages(vertex.getId());
 
         // Add statistics for this vertex
@@ -336,8 +356,10 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       // YH: clear partition if using normal BSP message store.
       // Should NOT clear partitions for stores otherwise, as they will
       // have picked up unprocessed messages during compute calls above.
+      // (Or, for needAllMsgs(), they will hold stale messages for reuse.)
       //
       // TODO-YH: can partitions disappear?...
+      // TODO-YH: is this buggy when needAllMsgs but still BSP?
       if (!configuration.getAsyncConf().doRemoteRead()) {
         messageStore.clearPartition(partition.getId());
       } else {

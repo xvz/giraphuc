@@ -25,12 +25,15 @@ import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.comm.SendEdgeCache;
 import org.apache.giraph.comm.SendMessageCache;
 import org.apache.giraph.comm.SendMessageToAllCache;
+import org.apache.giraph.comm.SendMessageWithSourceCache;
+import org.apache.giraph.comm.SendMessageWithSourceToAllCache;
 import org.apache.giraph.comm.SendMutationsCache;
 import org.apache.giraph.comm.SendPartitionCache;
 import org.apache.giraph.comm.ServerData;
 import org.apache.giraph.comm.WorkerClient;
 import org.apache.giraph.comm.WorkerClientRequestProcessor;
 import org.apache.giraph.comm.messages.MessageStore;
+import org.apache.giraph.comm.messages.with_source.MessageWithSource;
 import org.apache.giraph.comm.requests.SendPartitionCurrentMessagesRequest;
 import org.apache.giraph.comm.requests.SendPartitionMutationsRequest;
 import org.apache.giraph.comm.requests.SendVertexRequest;
@@ -135,13 +138,25 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
     maxVerticesSizePerWorker =
         GiraphConfiguration.MAX_VERTEX_REQUEST_SIZE.get(conf);
     if (this.configuration.isOneToAllMsgSendingEnabled()) {
-      sendMessageCache =
-        new SendMessageToAllCache<I, Writable>(conf, serviceWorker,
-          this, maxMessagesSizePerWorker);
+      if (conf.getAsyncConf().needAllMsgs()) {
+        sendMessageCache = (SendMessageToAllCache)
+          new SendMessageWithSourceToAllCache<I, Writable>(
+            conf, serviceWorker, this, maxMessagesSizePerWorker);
+      } else {
+        sendMessageCache =
+          new SendMessageToAllCache<I, Writable>(conf, serviceWorker,
+            this, maxMessagesSizePerWorker);
+      }
     } else {
-      sendMessageCache =
-        new SendMessageCache<I, Writable>(conf, serviceWorker,
-          this, maxMessagesSizePerWorker);
+      if (conf.getAsyncConf().needAllMsgs()) {
+        sendMessageCache = (SendMessageCache)
+          new SendMessageWithSourceCache<I, Writable>(
+            conf, serviceWorker, this, maxMessagesSizePerWorker);
+      } else {
+        sendMessageCache =
+          new SendMessageCache<I, Writable>(conf, serviceWorker,
+            this, maxMessagesSizePerWorker);
+      }
     }
     maxEdgesSizePerWorker =
         GiraphConfiguration.MAX_EDGE_REQUEST_SIZE.get(conf);
@@ -159,20 +174,37 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
   }
 
   @Override
-  public void sendMessageRequest(I destVertexId, Writable message) {
-    this.sendMessageCache.sendMessageRequest(destVertexId, message);
+  public void sendMessageRequest(I srcId, I destVertexId, Writable message) {
+    if (configuration.getAsyncConf().needAllMsgs()) {
+      // YH: source id need not be cloned, as it is the id object held by
+      // the actual vertex (=> user cannot modify this)
+      this.sendMessageCache.sendMessageRequest(
+          destVertexId, new MessageWithSource<I, Writable>(srcId, message));
+    } else {
+      this.sendMessageCache.sendMessageRequest(destVertexId, message);
+    }
   }
 
   @Override
   public void sendMessageToAllRequest(
-    Vertex<I, V, E> vertex, Writable message) {
-    this.sendMessageCache.sendMessageToAllRequest(vertex, message);
+    I srcId, Vertex<I, V, E> vertex, Writable message) {
+    if (configuration.getAsyncConf().needAllMsgs()) {
+      this.sendMessageCache.sendMessageToAllRequest(
+          vertex, new MessageWithSource<I, Writable>(srcId, message));
+    } else {
+      this.sendMessageCache.sendMessageToAllRequest(vertex, message);
+    }
   }
 
   @Override
   public void sendMessageToAllRequest(
-    Iterator<I> vertexIdIterator, Writable message) {
-    this.sendMessageCache.sendMessageToAllRequest(vertexIdIterator, message);
+    I srcId, Iterator<I> vertexIdIterator, Writable message) {
+    if (configuration.getAsyncConf().needAllMsgs()) {
+      this.sendMessageCache.sendMessageToAllRequest(
+          vertexIdIterator, new MessageWithSource<I, Writable>(srcId, message));
+    } else {
+      this.sendMessageCache.sendMessageToAllRequest(vertexIdIterator, message);
+    }
   }
 
   @Override
@@ -193,7 +225,7 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
   }
 
   /**
-   * Helper for sendPartitionMessages.
+   * YH: Helper for sendPartitionMessages.
    *
    * @param workerInfo Worker to send the partition messages to
    * @param partitionId Id of partition whose messages are to be sent
@@ -209,6 +241,9 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
       try {
         // Messages cannot be re-used from this iterable, but add()
         // serializes the message, making this safe
+        //
+        // YH: This also works for MessageWithSourceStore, since message
+        // type here is Writable
         Iterable<Writable> messages = messageStore.getVertexMessages(vertexId);
         for (Writable message : messages) {
           vertexIdMessages.add(vertexId, message);
