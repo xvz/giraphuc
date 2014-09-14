@@ -91,13 +91,14 @@ public class MockUtils {
         }
 
         /** assert that the test vertex message has been sent to a particular vertex */
+        // YH: pass null in for source, as this doesn't test message w/ source
         public void verifyMessageSent(I targetVertexId, M message) {
             Mockito.verify(workerClientRequestProcessor).sendMessageRequest
-                (targetVertexId, message);
+                (null, targetVertexId, message);
         }
         
         public void verifyMessageSentToAllEdges(Vertex<I, V, E> vertex, M message) {
-          Mockito.verify(workerClientRequestProcessor).sendMessageToAllRequest(vertex, message);
+          Mockito.verify(workerClientRequestProcessor).sendMessageToAllRequest(null, vertex, message);
       }
 
         /** assert that the test vertex has sent no message to a particular vertex */
