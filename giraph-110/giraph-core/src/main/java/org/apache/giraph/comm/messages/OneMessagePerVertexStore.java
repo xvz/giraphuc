@@ -32,6 +32,7 @@ import org.apache.giraph.utils.VertexIdMessageIterator;
 import org.apache.giraph.utils.VertexIdMessages;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
+import org.apache.hadoop.io.WritableUtils;
 
 /**
  * Implementation of {@link SimpleMessageStore} where we have a single
@@ -71,7 +72,9 @@ public class OneMessagePerVertexStore<I extends WritableComparable,
     M currentMessage = partitionMap.get(destVertexId);
     if (currentMessage == null) {
       M newMessage = messageCombiner.createInitialMessage();
-      currentMessage = partitionMap.putIfAbsent(destVertexId, newMessage);
+      // YH: always clone destVertexId
+      currentMessage = partitionMap.putIfAbsent(
+          WritableUtils.clone(destVertexId, config), newMessage);
       if (currentMessage == null) {
         currentMessage = newMessage;
       }

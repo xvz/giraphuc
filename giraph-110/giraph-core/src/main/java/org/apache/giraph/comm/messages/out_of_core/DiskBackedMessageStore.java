@@ -87,6 +87,7 @@ public class DiskBackedMessageStore<I extends WritableComparable,
       int partitionId, I destVertexId, M message) throws IOException {
     PartitionDiskBackedMessageStore<I, M> partitionMessageStore =
         getMessageStore(partitionId);
+    // TODO-YH: always clone destVertexId
     partitionMessageStore.addVertexMessages(destVertexId,
                                             Collections.singleton(message));
     checkMemory();

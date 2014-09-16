@@ -31,6 +31,7 @@ import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.factories.MessageValueFactory;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
+import org.apache.hadoop.io.WritableUtils;
 
 /**
  * Abstract class for {@link MessageWithSourceStore} which allows any kind
@@ -164,16 +165,24 @@ public abstract class SimpleMessageWithSourceStore<
    *
    * @param partitionMap Message map for this partition
    * @param dstId Id of the destination vertex (receiver)
+   * @param cloneDstId True if dstId must be cloned/copied before storage
    * @return Source map for the destination vertex
    */
   protected ConcurrentMap<I, T> getOrCreateSourceMap(
-      ConcurrentMap<I, ConcurrentMap<I, T>> partitionMap, I dstId) {
+      ConcurrentMap<I, ConcurrentMap<I, T>> partitionMap,
+      I dstId, boolean cloneDstId) {
     ConcurrentMap<I, T> srcMap = partitionMap.get(dstId);
 
     if (srcMap == null) {
       ConcurrentMap<I, T> tmpMap = new MapMaker().concurrencyLevel(
           config.getNettyServerExecutionConcurrency()).makeMap();
-      srcMap = partitionMap.putIfAbsent(dstId, tmpMap);
+
+      // YH: if needed, clone the dest vertex id. This is needed when the
+      // original object is user-accessible and/or can be invalidated on
+      // some iterator's next() call up the call chain.
+      I safeDstId = cloneDstId ? WritableUtils.clone(dstId, config) : dstId;
+
+      srcMap = partitionMap.putIfAbsent(safeDstId, tmpMap);
       if (srcMap == null) {
         srcMap = tmpMap;
       }

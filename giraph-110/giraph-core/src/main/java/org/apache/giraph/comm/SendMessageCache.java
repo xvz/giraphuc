@@ -34,7 +34,6 @@ import org.apache.giraph.utils.PairList;
 import org.apache.giraph.worker.WorkerInfo;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
-import org.apache.hadoop.io.WritableUtils;
 import org.apache.log4j.Logger;
 
 import static org.apache.giraph.conf.GiraphConstants.ADDITIONAL_MSG_REQUEST_SIZE;
@@ -196,14 +195,12 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
       // NegativeArraySizeException is copied from catch of write message
       // functions for vertex id iterators (see addPartitionMessages()).
       try {
-        // YH: MUST clone dest vertex id, as this is user-accessible and/or
-        // can be invalidated on some iterator's next() call in the caller
-        // (Code path for remote messages does not need to clone, as dst ids
-        //  there are serialized directly to byte array when caching)
-        I dstId = WritableUtils.clone(destVertexId, getConf());
-
+        // YH: Dest vertex id needs to be cloned, since we never serialize it.
+        // This is handled within message store implementations.
+        // (Code path for remote messages need not clone, as dst ids there
+        // are serialized to byte array when caching.)
         getServiceWorker().getServerData().getLocalMessageStore().
-          addPartitionMessage(partitionId, dstId, message);
+          addPartitionMessage(partitionId, destVertexId, message);
 
       } catch (NegativeArraySizeException e) {
         throw new RuntimeException("The numbers of bytes sent to vertex " +

@@ -113,6 +113,8 @@ public class ByteArrayMessagesPerSourceVertexStore<
     DataInputOutput dataInputOutput = srcMap.get(vertexId);
     if (dataInputOutput == null) {
       DataInputOutput newDataOutput = config.createMessagesInputOutput();
+      // YH: vertexId is held by internal graph, so no need to clone it
+      // (see NettyWorkerClientRequestProcessor's "new MessageWithSource")
       dataInputOutput = srcMap.putIfAbsent(vertexId, newDataOutput);
       if (dataInputOutput == null) {
         dataInputOutput = newDataOutput;
@@ -130,7 +132,7 @@ public class ByteArrayMessagesPerSourceVertexStore<
    * @param iterator Special iterator that can release ownerships of vertex ids
    * @return Source map for this destination vertex id (created if necessary)
    */
-  private ConcurrentMap<I, DataInputOutput> getSourceMap(
+  private ConcurrentMap<I, DataInputOutput> getOrCreateSourceMap(
       ConcurrentMap<I, ConcurrentMap<I, DataInputOutput>> partitionMap,
       VertexIdIterator<I> iterator) {
     ConcurrentMap<I, DataInputOutput> srcMap =
@@ -154,7 +156,8 @@ public class ByteArrayMessagesPerSourceVertexStore<
     throws IOException {
 
     ConcurrentMap<I, DataInputOutput> srcMap =
-      getOrCreateSourceMap(getOrCreatePartitionMap(partitionId), destVertexId);
+      getOrCreateSourceMap(getOrCreatePartitionMap(partitionId),
+                           destVertexId, true);
     DataInputOutput dataInputOutput =
       getDataInputOutput(srcMap, message.getSource());
 
@@ -192,7 +195,7 @@ public class ByteArrayMessagesPerSourceVertexStore<
         msgBytesItr.next();
 
         ConcurrentMap<I, DataInputOutput> srcMap =
-          getSourceMap(partitionMap, msgBytesItr);
+          getOrCreateSourceMap(partitionMap, msgBytesItr);
         DataInputOutput dataInputOutput = getDataInputOutput(
             srcMap, (SourceVertexIdIterator<I>) msgBytesItr);
 
@@ -213,7 +216,7 @@ public class ByteArrayMessagesPerSourceVertexStore<
         msgItr.next();
 
         ConcurrentMap<I, DataInputOutput> srcMap =
-          getSourceMap(partitionMap, msgItr);
+          getOrCreateSourceMap(partitionMap, msgItr);
         DataInputOutput dataInputOutput =
           getDataInputOutput(srcMap, (SourceVertexIdIterator<I>) msgItr);
 

@@ -35,6 +35,7 @@ import org.apache.giraph.utils.VerboseByteStructMessageWrite;
 import org.apache.giraph.utils.io.DataInputOutput;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
+import org.apache.hadoop.io.WritableUtils;
 
 import com.google.common.collect.Iterators;
 
@@ -93,15 +94,23 @@ public class ByteArrayMessagesPerVertexStore<I extends WritableComparable,
    *
    * @param partitionMap Partition map to look in
    * @param vertexId The vertex id of interest
+   * @param cloneVertexId True if vertexId must be cloned/copied before storage
    * @return Extended data output for this vertex id (created if necessary)
    */
   private DataInputOutput getDataInputOutput(
       ConcurrentMap<I, DataInputOutput> partitionMap,
-      I vertexId) {
+      I vertexId, boolean cloneVertexId) {
     DataInputOutput dataInputOutput = partitionMap.get(vertexId);
     if (dataInputOutput == null) {
       DataInputOutput newDataOutput = config.createMessagesInputOutput();
-      dataInputOutput = partitionMap.putIfAbsent(vertexId, newDataOutput);
+
+      // YH: if needed, clone the vertex id. This is needed when the
+      // original object is user-accessible and/or can be invalidated on
+      // some iterator's next() call up the call chain.
+      I safeVertexId = cloneVertexId ?
+          WritableUtils.clone(vertexId, config) : vertexId;
+
+      dataInputOutput = partitionMap.putIfAbsent(safeVertexId, newDataOutput);
       if (dataInputOutput == null) {
         dataInputOutput = newDataOutput;
       }
@@ -115,7 +124,7 @@ public class ByteArrayMessagesPerVertexStore<I extends WritableComparable,
     ConcurrentMap<I, DataInputOutput> partitionMap =
         getOrCreatePartitionMap(partitionId);
     DataInputOutput dataInputOutput =
-      getDataInputOutput(partitionMap, destVertexId);
+      getDataInputOutput(partitionMap, destVertexId, true);
 
     // YH: as per utils.ByteArrayVertexIdMessages...
     // a little messy to decouple serialization like this
