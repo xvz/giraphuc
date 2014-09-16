@@ -22,14 +22,10 @@ import com.google.common.collect.MapMaker;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.Collections;
-import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
 
 import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.comm.messages.MessageStoreFactory;
-import org.apache.giraph.comm.messages.MessagesIterable;
-import org.apache.giraph.comm.messages.MessageStore;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.factories.MessageValueFactory;
 import org.apache.giraph.utils.ExtendedDataOutput;
@@ -47,7 +43,6 @@ import org.apache.hadoop.io.WritableComparable;
 //import org.apache.log4j.Logger;
 
 import com.google.common.collect.Iterators;
-import com.google.common.collect.Iterables;
 
 /**
  * Implementation of {@link SimpleMessageWithSourceStore} where multiple
@@ -167,6 +162,7 @@ public class ByteArrayMessagesPerSourceVertexStore<
     // a little messy to decouple serialization like this
     synchronized (dataInputOutput) {
       // YH: always resetting means we only ever write one message
+      // TODO-YH: also implement reset for BigDataOutput
       if (dataInputOutput.getDataOutput() instanceof ExtendedDataOutput) {
         ((ExtendedDataOutput) dataInputOutput.getDataOutput()).reset();
       }
@@ -236,16 +232,15 @@ public class ByteArrayMessagesPerSourceVertexStore<
   @Override
   protected Iterable<MessageWithSource<I, M>> getMessagesAsIterable(
       ConcurrentMap<I, DataInputOutput> sourceMap) {
+    return new MessagesWithSourceIterable<I, M>(
+        sourceMap.entrySet().iterator(), messageValueFactory);
+  }
 
-    Iterable<MessageWithSource<I, M>> itr =
-      (Iterable<MessageWithSource<I, M>>) Collections.<M>emptyList();
-
-    for (Map.Entry<I, DataInputOutput> e : sourceMap.entrySet()) {
-      // TODO-YH: make a more efficient iterator that creates less objects
-      itr = Iterables.concat(itr, new MessageWithSourceIterable<I, M>(
-          e.getKey(), e.getValue(), messageValueFactory));
-    }
-    return itr;
+  @Override
+  protected Iterable<M> getMessagesWithoutSourceAsIterable(
+      ConcurrentMap<I, DataInputOutput> sourceMap) {
+    return new MessagesIterable<M>(sourceMap.values().iterator(),
+                                   messageValueFactory);
   }
 
   ///**
@@ -273,18 +268,6 @@ public class ByteArrayMessagesPerSourceVertexStore<
   //    }
   //  }
   //}
-
-  @Override
-  protected Iterable<M> getMessagesWithoutSourceAsIterable(
-      ConcurrentMap<I, DataInputOutput> sourceMap) {
-    Iterable<M> itr = (Iterable<M>) Collections.<M>emptyList();
-    for (DataInputOutput dio : sourceMap.values()) {
-      // TODO-YH: make a more efficient iterator that creates less objects
-      itr = Iterables.concat(itr, new MessagesIterable<M>(
-          dio, messageValueFactory));
-    }
-    return itr;
-  }
 
   @Override
   protected int getNumberOfMessagesIn(
@@ -329,7 +312,7 @@ public class ByteArrayMessagesPerSourceVertexStore<
    * @return Factory
    */
   public static <I extends WritableComparable, M extends Writable>
-  MessageStoreFactory<I, M, MessageStore<I, MessageWithSource<I, M>>>
+  MessageStoreFactory<I, M, MessageWithSourceStore<I, M>>
   newFactory(CentralizedServiceWorker<I, ?, ?> service,
              ImmutableClassesGiraphConfiguration<I, ?, ?> config) {
     return new Factory<I, M>(service, config);
@@ -342,8 +325,7 @@ public class ByteArrayMessagesPerSourceVertexStore<
    * @param <M> Message data
    */
   private static class Factory<I extends WritableComparable, M extends Writable>
-      implements MessageStoreFactory<I, M,
-      MessageStore<I, MessageWithSource<I, M>>> {
+      implements MessageStoreFactory<I, M, MessageWithSourceStore<I, M>> {
     /** Service worker */
     private CentralizedServiceWorker<I, ?, ?> service;
     /** Hadoop configuration */
@@ -360,7 +342,7 @@ public class ByteArrayMessagesPerSourceVertexStore<
     }
 
     @Override
-    public MessageStore<I, MessageWithSource<I, M>> newStore(
+    public MessageWithSourceStore<I, M> newStore(
         MessageValueFactory<M> messageValueFactory) {
       return new ByteArrayMessagesPerSourceVertexStore<I, M>(
           messageValueFactory, service, config);
