@@ -26,7 +26,7 @@ import org.apache.giraph.comm.SendEdgeCache;
 import org.apache.giraph.comm.SendMessageCache;
 import org.apache.giraph.comm.SendMessageToAllCache;
 import org.apache.giraph.comm.SendMessageWithSourceCache;
-import org.apache.giraph.comm.SendMessageWithSourceToAllCache;
+//import org.apache.giraph.comm.SendMessageWithSourceToAllCache;
 import org.apache.giraph.comm.SendMutationsCache;
 import org.apache.giraph.comm.SendPartitionCache;
 import org.apache.giraph.comm.ServerData;
@@ -138,15 +138,16 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
     maxVerticesSizePerWorker =
         GiraphConfiguration.MAX_VERTEX_REQUEST_SIZE.get(conf);
     if (this.configuration.isOneToAllMsgSendingEnabled()) {
-      if (conf.getAsyncConf().needAllMsgs()) {
-        sendMessageCache = (SendMessageToAllCache)
-          new SendMessageWithSourceToAllCache<I, Writable>(
-            conf, serviceWorker, this, maxMessagesSizePerWorker);
-      } else {
-        sendMessageCache =
-          new SendMessageToAllCache<I, Writable>(conf, serviceWorker,
-            this, maxMessagesSizePerWorker);
-      }
+      // TODO-YH: fix up SendMessageWithSourceToAllCache implementation
+      //if (conf.getAsyncConf().needAllMsgs()) {
+      //  sendMessageCache = (SendMessageToAllCache)
+      //    new SendMessageWithSourceToAllCache<I, Writable>(
+      //      conf, serviceWorker, this, maxMessagesSizePerWorker);
+      //} else {
+      //}
+      sendMessageCache =
+        new SendMessageToAllCache<I, Writable>(conf, serviceWorker,
+          this, maxMessagesSizePerWorker);
     } else {
       if (conf.getAsyncConf().needAllMsgs()) {
         sendMessageCache = (SendMessageCache)
