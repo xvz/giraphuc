@@ -45,6 +45,7 @@ public class MessageWithSource<I extends WritableComparable,
   /** Message */
   private M message;
 
+  // TODO-YH: simplify w/ conf.getOutgoingMessageValueFactory()
   /**
    * Constructor when deserialization is not required.
    *

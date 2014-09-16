@@ -24,7 +24,6 @@ import java.util.Iterator;
 
 import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.comm.netty.NettyWorkerClientRequestProcessor;
-import org.apache.giraph.comm.requests.SendWorkerMessagesRequest;
 import org.apache.giraph.comm.requests.SendWorkerOneToAllMessagesRequest;
 import org.apache.giraph.comm.requests.WritableRequest;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
@@ -251,8 +250,7 @@ public class SendMessageToAllCache<I extends WritableComparable,
         if (workerMessageSize >= maxMessagesSizePerWorker) {
           PairList<Integer, VertexIdMessages<I, M>>
             workerMessages = removeWorkerMessages(workerInfoList[i]);
-          writableRequest =
-            new SendWorkerMessagesRequest<I, M>(workerMessages, getConf());
+          writableRequest = createWritableRequest(workerMessages);
           totalMsgBytesSentInSuperstep += writableRequest.getSerializedSize();
           clientProcessor.doRequest(workerInfoList[i], writableRequest);
           // Notify sending

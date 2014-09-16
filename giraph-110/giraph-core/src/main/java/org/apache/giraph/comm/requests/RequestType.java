@@ -41,6 +41,16 @@ public enum RequestType {
   /** Sending one-to-all messages to a worker for next superstep */
   SEND_WORKER_ONETOALL_MESSAGES_REQUEST(
     SendWorkerOneToAllMessagesRequest.class),
+  /** YH: Sending a partition of messages with source for next superstep */
+  SEND_WORKER_MESSAGES_WITH_SOURCE_REQUEST(
+    SendWorkerMessagesWithSourceRequest.class),
+  // TODO-YH: implement
+  ///**
+  // * YH: Sending one-to-all messages with source to a
+  // * worker for next superstep
+  // */
+  //SEND_WORKER_ONETOALL_MESSAGES_WITH_SOURCE_REQUEST(
+  //  SendWorkerOneToAllMessagesWithSourceRequest.class),
   /**
    * Sending a partition of messages for current superstep
    * (used during partition exchange)

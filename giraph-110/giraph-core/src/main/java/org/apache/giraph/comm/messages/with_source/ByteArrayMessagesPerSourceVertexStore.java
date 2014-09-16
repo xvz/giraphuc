@@ -166,7 +166,7 @@ public class ByteArrayMessagesPerSourceVertexStore<
     // YH: as per utils.ByteArrayVertexIdMessages...
     // a little messy to decouple serialization like this
     synchronized (dataInputOutput) {
-      // TODO-YH: always resetting means we can only write one message!!
+      // YH: always resetting means we only ever write one message
       if (dataInputOutput.getDataOutput() instanceof ExtendedDataOutput) {
         ((ExtendedDataOutput) dataInputOutput.getDataOutput()).reset();
       }
@@ -201,6 +201,10 @@ public class ByteArrayMessagesPerSourceVertexStore<
             srcMap, (SourceVertexIdIterator<I>) msgBytesItr);
 
         synchronized (dataInputOutput) {
+          // YH: always resetting means we only ever write one message
+          if (dataInputOutput.getDataOutput() instanceof ExtendedDataOutput) {
+            ((ExtendedDataOutput) dataInputOutput.getDataOutput()).reset();
+          }
           msgBytesItr.writeCurrentMessageBytes(dataInputOutput.getDataOutput());
         }
       }
@@ -218,6 +222,10 @@ public class ByteArrayMessagesPerSourceVertexStore<
           getDataInputOutput(srcMap, (SourceVertexIdIterator<I>) msgItr);
 
         synchronized (dataInputOutput) {
+          // YH: always resetting means we only ever write one message
+          if (dataInputOutput.getDataOutput() instanceof ExtendedDataOutput) {
+            ((ExtendedDataOutput) dataInputOutput.getDataOutput()).reset();
+          }
           VerboseByteStructMessageWrite.verboseWriteCurrentMessage(
               msgItr, dataInputOutput.getDataOutput());
         }
@@ -243,7 +251,7 @@ public class ByteArrayMessagesPerSourceVertexStore<
   ///**
   // * Prints everything in the message store.
   // */
-  //private void printEverything() {
+  //private void printAll() {
   //  M tmp = messageValueFactory.newInstance();
   //
   //  for (ConcurrentMap<I, ConcurrentMap<I, DataInputOutput>>
@@ -254,6 +262,7 @@ public class ByteArrayMessagesPerSourceVertexStore<
   //      LOG.info("[[PR-store-all]]   dst=" + pm.getKey());
   //      for (Map.Entry<I, DataInputOutput> e : pm.getValue().entrySet()) {
   //        try {
+  //          // YH: this does NOT deserialize all the messages!!
   //          tmp.readFields(e.getValue().createDataInput());
   //        } catch (IOException ioe) {
   //          throw new RuntimeException("Deserialization failed!");

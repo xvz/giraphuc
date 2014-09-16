@@ -16,13 +16,9 @@
  * limitations under the License.
  */
 
-package org.apache.giraph.comm;
+package org.apache.giraph.comm.requests;
 
-import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.comm.messages.with_source.MessageWithSource;
-import org.apache.giraph.comm.netty.NettyWorkerClientRequestProcessor;
-import org.apache.giraph.comm.requests.SendWorkerMessagesWithSourceRequest;
-import org.apache.giraph.comm.requests.WritableRequest;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.utils.VertexIdMessages;
 import org.apache.giraph.utils.ByteArrayVertexIdMessagesWithSource;
@@ -31,44 +27,41 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 
 /**
- * YH: Aggregates the messages, with source, to be sent to workers
- * so they can be sent in bulk. Not thread-safe.
+ * YH: Send a collection of vertex messages with source for a partition.
  *
  * @param <I> Vertex id
  * @param <M> Message data
  */
 @SuppressWarnings("unchecked")
-public class SendMessageWithSourceCache<
+public class SendWorkerMessagesWithSourceRequest<
     I extends WritableComparable, M extends Writable>
-    extends SendMessageCache<I, MessageWithSource<I, M>> {
+    extends SendWorkerMessagesRequest<I, MessageWithSource<I, M>> {
+
+  /** Default constructor */
+  public SendWorkerMessagesWithSourceRequest() {
+  }
+
   /**
-   * Constructor
+   * Constructor used to send request.
    *
-   * @param conf Giraph configuration
-   * @param serviceWorker Service worker
-   * @param processor NettyWorkerClientRequestProcessor
-   * @param maxMsgSize Max message size sent to a worker
+   * @param partVertMsgs Map of remote partitions =>
+   *                     VertexIdMessages
+   * @param conf ImmutableClassesGiraphConfiguration
    */
-  public SendMessageWithSourceCache(
-      ImmutableClassesGiraphConfiguration conf,
-      CentralizedServiceWorker<?, ?, ?> serviceWorker,
-      NettyWorkerClientRequestProcessor<I, ?, ?> processor,
-      int maxMsgSize) {
-    super(conf, serviceWorker, processor, maxMsgSize);
+  public SendWorkerMessagesWithSourceRequest(
+      PairList<Integer, VertexIdMessages<I, MessageWithSource<I, M>>>
+      partVertMsgs, ImmutableClassesGiraphConfiguration conf) {
+    super(partVertMsgs, conf);
   }
 
   @Override
-  public VertexIdMessages<I, MessageWithSource<I, M>>
-  createVertexIdData() {
+  public VertexIdMessages<I, MessageWithSource<I, M>> createVertexIdData() {
     return new ByteArrayVertexIdMessagesWithSource<I, M>(
         getConf().getOutgoingMessageValueFactory());
   }
 
   @Override
-  protected WritableRequest createWritableRequest(
-      PairList<Integer, VertexIdMessages<I,
-      MessageWithSource<I, M>>> workerMessages) {
-    return new SendWorkerMessagesWithSourceRequest<I, M>(
-        workerMessages, getConf());
+  public RequestType getType() {
+    return RequestType.SEND_WORKER_MESSAGES_WITH_SOURCE_REQUEST;
   }
 }
