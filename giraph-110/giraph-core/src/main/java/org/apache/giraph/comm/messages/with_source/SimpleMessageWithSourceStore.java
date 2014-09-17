@@ -23,12 +23,12 @@ import com.google.common.collect.Maps;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.factories.MessageValueFactory;
+import org.apache.giraph.utils.EmptyIterable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableUtils;
@@ -194,7 +194,7 @@ public abstract class SimpleMessageWithSourceStore<
   @Override
   public Iterable<I> getPartitionDestinationVertices(int partitionId) {
     ConcurrentMap<I, ?> partitionMap = map.get(partitionId);
-    return (partitionMap == null) ? Collections.<I>emptyList() :
+    return (partitionMap == null) ? EmptyIterable.<I>get() :
         partitionMap.keySet();
   }
 
@@ -214,7 +214,7 @@ public abstract class SimpleMessageWithSourceStore<
     ConcurrentMap<I, ConcurrentMap<I, T>> partitionMap =
       map.get(getPartitionId(vertexId));
     if (partitionMap == null) {
-      return Collections.<MessageWithSource<I, M>>emptyList();
+      return EmptyIterable.<MessageWithSource<I, M>>get();
     }
 
     // srcMap (partitionMap.get(vertexId)) is always non-null, as
@@ -222,7 +222,7 @@ public abstract class SimpleMessageWithSourceStore<
     // and a message always has a source
     ConcurrentMap<I, T> srcMap = partitionMap.get(vertexId);
     return (srcMap == null) ?
-      Collections.<MessageWithSource<I, M>>emptyList() :
+      EmptyIterable.<MessageWithSource<I, M>>get() :
       getMessagesAsIterable(srcMap);
   }
 
@@ -232,12 +232,12 @@ public abstract class SimpleMessageWithSourceStore<
     ConcurrentMap<I, ConcurrentMap<I, T>> partitionMap =
       map.get(getPartitionId(vertexId));
     if (partitionMap == null) {
-      return Collections.<MessageWithSource<I, M>>emptyList();
+      return EmptyIterable.<MessageWithSource<I, M>>get();
     }
 
     ConcurrentMap<I, T> srcMap = partitionMap.remove(vertexId);
     return (srcMap == null) ?
-      Collections.<MessageWithSource<I, M>>emptyList() :
+      EmptyIterable.<MessageWithSource<I, M>>get() :
       getMessagesAsIterable(srcMap);
   }
 
@@ -249,11 +249,11 @@ public abstract class SimpleMessageWithSourceStore<
     ConcurrentMap<I, ConcurrentMap<I, T>> partitionMap =
       map.get(getPartitionId(vertexId));
     if (partitionMap == null) {
-      return Collections.<M>emptyList();
+      return EmptyIterable.<M>get();
     }
 
     ConcurrentMap<I, T> srcMap = partitionMap.get(vertexId);
-    return (srcMap == null) ? Collections.<M>emptyList() :
+    return (srcMap == null) ? EmptyIterable.<M>get() :
       getMessagesWithoutSourceAsIterable(srcMap);
   }
 
@@ -263,11 +263,11 @@ public abstract class SimpleMessageWithSourceStore<
     ConcurrentMap<I, ConcurrentMap<I, T>> partitionMap =
       map.get(getPartitionId(vertexId));
     if (partitionMap == null) {
-      return Collections.<M>emptyList();
+      return EmptyIterable.<M>get();
     }
 
     ConcurrentMap<I, T> srcMap = partitionMap.remove(vertexId);
-    return (srcMap == null) ? Collections.<M>emptyList() :
+    return (srcMap == null) ? EmptyIterable.<M>get() :
       getMessagesWithoutSourceAsIterable(srcMap);
   }
 

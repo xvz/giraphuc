@@ -32,6 +32,7 @@ import org.apache.giraph.partition.PartitionStats;
 import org.apache.giraph.time.SystemTime;
 import org.apache.giraph.time.Time;
 import org.apache.giraph.time.Times;
+import org.apache.giraph.utils.EmptyIterable;
 import org.apache.giraph.utils.MemoryUtils;
 import org.apache.giraph.utils.TimedLogger;
 import org.apache.giraph.utils.Trimmable;
@@ -48,7 +49,6 @@ import com.google.common.collect.Lists;
 import com.yammer.metrics.core.Counter;
 
 import java.io.IOException;
-import java.util.Collections;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -278,7 +278,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         if (configuration.getAsyncConf().doRemoteRead() &&
             configuration.getAsyncConf().isNewPhase()) {
           // for needAllMsgs(), nothing needs to be done either
-          messages = (Iterable<M1>) Collections.<M1>emptyList();
+          messages = EmptyIterable.<M1>get();
         } else if (configuration.getAsyncConf().doRemoteRead() &&
                    configuration.getAsyncConf().needAllMsgs()) {
           // we cast to Writable to be safe

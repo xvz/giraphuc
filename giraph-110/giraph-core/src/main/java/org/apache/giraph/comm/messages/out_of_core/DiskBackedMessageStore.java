@@ -147,7 +147,7 @@ public class DiskBackedMessageStore<I extends WritableComparable,
     PartitionDiskBackedMessageStore<I, M> messageStore =
         partitionMessageStores.get(partitionId);
     if (messageStore == null) {
-      return Collections.emptyList();
+      return EmptyIterable.get();
     } else {
       return messageStore.getDestinationVertices();
     }

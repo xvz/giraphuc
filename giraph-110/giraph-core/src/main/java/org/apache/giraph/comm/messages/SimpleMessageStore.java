@@ -23,12 +23,12 @@ import com.google.common.collect.Maps;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.factories.MessageValueFactory;
+import org.apache.giraph.utils.EmptyIterable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 
@@ -141,7 +141,7 @@ public abstract class SimpleMessageStore<I extends WritableComparable,
   @Override
   public Iterable<I> getPartitionDestinationVertices(int partitionId) {
     ConcurrentMap<I, ?> partitionMap = map.get(partitionId);
-    return (partitionMap == null) ? Collections.<I>emptyList() :
+    return (partitionMap == null) ? EmptyIterable.<I>get() :
         partitionMap.keySet();
   }
 
@@ -156,10 +156,10 @@ public abstract class SimpleMessageStore<I extends WritableComparable,
   public Iterable<M> getVertexMessages(I vertexId) throws IOException {
     ConcurrentMap<I, T> partitionMap = map.get(getPartitionId(vertexId));
     if (partitionMap == null) {
-      return Collections.<M>emptyList();
+      return EmptyIterable.<M>get();
     }
     T messages = partitionMap.get(vertexId);
-    return (messages == null) ? Collections.<M>emptyList() :
+    return (messages == null) ? EmptyIterable.<M>get() :
         getMessagesAsIterable(messages);
   }
 
@@ -169,11 +169,11 @@ public abstract class SimpleMessageStore<I extends WritableComparable,
     // YH: nearly identical to getVertexMessages...
     ConcurrentMap<I, T> partitionMap = map.get(getPartitionId(vertexId));
     if (partitionMap == null) {
-      return Collections.<M>emptyList();
+      return EmptyIterable.<M>get();
     }
     // ...except that we use remove() instead of get()
     T messages = partitionMap.remove(vertexId);
-    return (messages == null) ? Collections.<M>emptyList() :
+    return (messages == null) ? EmptyIterable.<M>get() :
         getMessagesAsIterable(messages);
   }
 
