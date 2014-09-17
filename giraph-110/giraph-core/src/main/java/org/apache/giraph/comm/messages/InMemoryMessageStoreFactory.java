@@ -25,6 +25,7 @@ import org.apache.giraph.comm.messages.primitives.IntFloatMessageStore;
 import org.apache.giraph.comm.messages.primitives.LongByteArrayMessageStore;
 import org.apache.giraph.comm.messages.primitives.LongDoubleMessageStore;
 import org.apache.giraph.comm.messages.with_source.ByteArrayMessagesPerSourceVertexStore;
+import org.apache.giraph.comm.messages.with_source.primitives.LongDoubleMessageWithSourceStore;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.factories.MessageValueFactory;
 import org.apache.hadoop.io.DoubleWritable;
@@ -68,10 +69,10 @@ public class InMemoryMessageStoreFactory<I extends WritableComparable,
   @Override
   public MessageStore<I, Writable> newStore(
       MessageValueFactory<M> messageValueFactory) {
+    Class<I> vertexIdClass = conf.getVertexIdClass();
     Class<M> messageClass = messageValueFactory.getValueClass();
     MessageStore messageStore;
     if (conf.useMessageCombiner()) {
-      Class<I> vertexIdClass = conf.getVertexIdClass();
       if (vertexIdClass.equals(IntWritable.class) &&
           messageClass.equals(FloatWritable.class)) {
         messageStore = new IntFloatMessageStore(
@@ -79,7 +80,7 @@ public class InMemoryMessageStoreFactory<I extends WritableComparable,
             (MessageCombiner<IntWritable, FloatWritable>)
                 conf.<FloatWritable>createMessageCombiner());
       } else if (vertexIdClass.equals(LongWritable.class) &&
-          messageClass.equals(DoubleWritable.class)) {
+                 messageClass.equals(DoubleWritable.class)) {
         messageStore = new LongDoubleMessageStore(
           (CentralizedServiceWorker<LongWritable, Writable, Writable>) service,
           (MessageCombiner<LongWritable, DoubleWritable>)
@@ -89,7 +90,6 @@ public class InMemoryMessageStoreFactory<I extends WritableComparable,
           service, conf.<M>createMessageCombiner(), conf);
       }
     } else {
-      Class<I> vertexIdClass = conf.getVertexIdClass();
       if (vertexIdClass.equals(IntWritable.class)) {
         messageStore = new IntByteArrayMessageStore<M>(messageValueFactory,
           (CentralizedServiceWorker<IntWritable, Writable, Writable>) service,
@@ -112,8 +112,14 @@ public class InMemoryMessageStoreFactory<I extends WritableComparable,
       // TODO-YH: Note that this returns
       // MessageStore<I, MessageWithSource<I, M>> rather than
       // MessageStore<I, M>!!
-      messageStore = new ByteArrayMessagesPerSourceVertexStore<I, M>(
-        messageValueFactory, service, conf);
+      if (vertexIdClass.equals(LongWritable.class) &&
+          messageClass.equals(DoubleWritable.class)) {
+        messageStore = new LongDoubleMessageWithSourceStore(
+          (CentralizedServiceWorker<LongWritable, Writable, Writable>) service);
+      } else {
+        messageStore = new ByteArrayMessagesPerSourceVertexStore<I, M>(
+          messageValueFactory, service, conf);
+      }
     }
 
     if (LOG.isInfoEnabled()) {
