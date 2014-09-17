@@ -279,9 +279,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
             configuration.getAsyncConf().isNewPhase()) {
           // for needAllMsgs(), nothing needs to be done either
           messages = EmptyIterable.<M1>get();
-        } else if (configuration.getAsyncConf().doRemoteRead() &&
-                   configuration.getAsyncConf().needAllMsgs()) {
-          // we cast to Writable to be safe
+        } else if (configuration.getAsyncConf().needAllMsgs()) {
           // no need to remove, as we always overwrite
           messages = ((MessageWithSourceStore) messageStore).
             getVertexMessagesWithoutSource(vertex.getId());
