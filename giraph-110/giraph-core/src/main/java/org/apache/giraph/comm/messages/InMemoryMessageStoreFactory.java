@@ -107,8 +107,6 @@ public class InMemoryMessageStoreFactory<I extends WritableComparable,
     }
 
     if (conf.getAsyncConf().needAllMsgs()) {
-      // TODO-YH: specialized message stores? combiners?
-
       // TODO-YH: Note that this returns
       // MessageStore<I, MessageWithSource<I, M>> rather than
       // MessageStore<I, M>!!

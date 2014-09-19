@@ -29,6 +29,7 @@ import org.apache.giraph.utils.VertexIdMessagesWithSource;
 import org.apache.giraph.utils.EmptyIterable;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.LongWritable;
+//import org.apache.log4j.Logger;
 
 import org.apache.hadoop.io.Writable;
 
@@ -55,6 +56,10 @@ import java.util.List;
  */
 public class LongDoubleMessageWithSourceStore
     implements MessageWithSourceStore<LongWritable, DoubleWritable> {
+
+  ///** Class logger */
+  //private static final Logger LOG =
+  //    Logger.getLogger(LongDoubleMessageWithSourceStore.class);
   /** Map from partition id to map from vertex id to message */
   private final Int2ObjectOpenHashMap<
     Long2ObjectOpenHashMap<Long2DoubleOpenHashMap>> map;
@@ -110,7 +115,8 @@ public class LongDoubleMessageWithSourceStore
       Long2DoubleOpenHashMap srcMap = partitionMap.get(dstId.get());
 
       if (srcMap == null) {
-        // TODO-YH: use number of dstId's neighbours as hint?
+        // YH: can't use number of dstId's neighbours as hint,
+        // b/c that counts its OUT-edges rather than IN-edges
         Long2DoubleOpenHashMap tmpMap = new Long2DoubleOpenHashMap();
         srcMap = partitionMap.put(dstId.get(), tmpMap);
         if (srcMap == null) {
@@ -181,6 +187,36 @@ public class LongDoubleMessageWithSourceStore
     // YH: used with single thread
     return getPartitionMap(vertexId).containsKey(vertexId.get());
   }
+
+  ///**
+  // * Prints everything in the message store.
+  // */
+  //private void printAll() {
+  //  for (Long2ObjectOpenHashMap<Long2DoubleOpenHashMap> partitionMap :
+  //         map.values()) {
+  //    synchronized (partitionMap) {
+  //      LOG.info("[[PR-store-all]] new partition");
+  //
+  //      ObjectIterator<Long2ObjectMap.Entry<Long2DoubleOpenHashMap>> itr =
+  //        partitionMap.long2ObjectEntrySet().fastIterator();
+  //
+  //      while (itr.hasNext()) {
+  //        Long2ObjectMap.Entry<Long2DoubleOpenHashMap> entry = itr.next();
+  //        LOG.info("[[PR-store-all]]   dst=" + entry.getLongKey());
+  //
+  //        Long2DoubleOpenHashMap srcMap = entry.getValue();
+  //        ObjectIterator<Long2DoubleMap.Entry> srcItr =
+  //          srcMap.long2DoubleEntrySet().fastIterator();
+  //
+  //        while (srcItr.hasNext()) {
+  //          Long2DoubleMap.Entry srcEntry = srcItr.next();
+  //          LOG.info("[[PR-store-all]]     src=" + srcEntry.getLongKey() +
+  //                   ", msg=" + srcEntry.getDoubleValue());
+  //        }
+  //      }
+  //    }
+  //  }
+  //}
 
   @Override
   public Iterable<MessageWithSource<LongWritable, DoubleWritable>>

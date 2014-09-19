@@ -354,10 +354,11 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       // YH: clear partition if using normal BSP message store.
       // Should NOT clear partitions for stores otherwise, as they will
       // have picked up unprocessed messages during compute calls above.
-      // (Or, for needAllMsgs(), they will hold stale messages for reuse.)
+      //
+      // (For needAllMsgs() without async, still need to clear message
+      //  stores, as BSP will rotate message stores)
       //
       // TODO-YH: can partitions disappear?...
-      // TODO-YH: is this buggy when needAllMsgs but still BSP?
       if (!configuration.getAsyncConf().doRemoteRead()) {
         messageStore.clearPartition(partition.getId());
       } else {
