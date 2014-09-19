@@ -27,7 +27,7 @@ import org.apache.giraph.master.DefaultMasterCompute;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.LongWritable;
-//import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.log4j.Logger;
 
@@ -66,10 +66,10 @@ public class PageRankTolFinderComputation extends BasicComputation<
   public void compute(
       Vertex<LongWritable, DoubleWritable, NullWritable> vertex,
       Iterable<DoubleWritable> messages) throws IOException {
+
     // NOTE: We follow GraphLab's alternative way of computing PageRank,
     // which is to not divide by |V|. To get the probability value at
     // each vertex, take its PageRank value and divide by |V|.
-
     double oldVal = vertex.getValue().get();
 
     if (getSuperstep() == 0) {
@@ -143,10 +143,10 @@ public class PageRankTolFinderComputation extends BasicComputation<
       public void writeVertex(
           Vertex<LongWritable, DoubleWritable, NullWritable> vertex)
         throws IOException, InterruptedException {
-        // don't need to output anything---we don't care about results
-        //getRecordWriter().write(
-        //    new Text(vertex.getId().toString()),
-        //    new Text(vertex.getValue().toString()));
+        // YH: can be commented out if results are not needed
+        getRecordWriter().write(
+            new Text(vertex.getId().toString()),
+            new Text(vertex.getValue().toString()));
       }
     }
   }
