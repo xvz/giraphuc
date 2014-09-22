@@ -20,8 +20,8 @@ package org.apache.giraph.examples;
 
 import org.apache.giraph.conf.IntConfOption;
 import org.apache.giraph.conf.FloatConfOption;
-import org.apache.giraph.aggregators.DoubleMaxAggregator;
-import org.apache.giraph.aggregators.DoubleMinAggregator;
+//import org.apache.giraph.aggregators.DoubleMaxAggregator;
+//import org.apache.giraph.aggregators.DoubleMinAggregator;
 import org.apache.giraph.aggregators.LongSumAggregator;
 import org.apache.giraph.edge.Edge;
 import org.apache.giraph.edge.EdgeFactory;
@@ -57,7 +57,7 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
   // can't rename this---it's needed by external test classes
   public static final int MAX_SUPERSTEPS = 30;
   /** Minimum error tolerance; for async only */
-  public static final float MIN_TOLERANCE = 0.001f;
+  public static final float MIN_TOLERANCE = 1.0f;
 
   /** Configurable max number of supersteps */
   public static final IntConfOption MAX_SS =
@@ -78,8 +78,8 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
   /** Max aggregator name */
   private static String MAX_AGG = "max";
 
-  /** Number of vertices done (for error tolerance) */
-  private static String DONE_AGG = "done";
+  /** Number of active vertices (for error tolerance) */
+  private static String NUM_ACTIVE_AGG = "num_active";
 
   @Override
   public void compute(
@@ -98,35 +98,22 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
       vertex.setValue(vertexValue);
 
     } else {
-      // termination when using error tolerance
-      if (((LongWritable) getAggregatedValue(DONE_AGG)).get() ==
-          getTotalNumVertices()) {
+      // termination when using error tolerance; must wait at least 1SS
+      // b/c tolerances >1.0 will cause immediate termination
+      if (getSuperstep() > 1 &&
+          ((LongWritable) getAggregatedValue(NUM_ACTIVE_AGG)).get() == 0) {
         vertex.voteToHalt();
         return;
       }
 
       double sum = 0;
 
-      //if (vertex.getId().get() % 1 == 0) {
-      //  LOG.info("[[PR]] vertex " + vertex.getId() +
-      //           " old value: " + vertex.getValue());
-      //  LOG.info("[[PR]] vertex " + vertex.getId() + " msgs:");
-      //}
-
       for (DoubleWritable message : messages) {
-        //if (vertex.getId().get() % 1 == 0) {
-        //  LOG.info("[[PR]]  " + message);
-        //}
         sum += message.get();
       }
       DoubleWritable vertexValue = new DoubleWritable(0.15f + 0.85f * sum);
       //new DoubleWritable((0.15f / getTotalNumVertices()) + 0.85f * sum);
       vertex.setValue(vertexValue);
-
-      //if (vertex.getId().get() % 1 == 0) {
-      //  LOG.info("[[PR]] vertex " + vertex.getId() +
-      //           " new value: " + vertexValue);
-      //}
 
       // NOTE: this logging is unnecessary for benchmarking!
       //aggregate(MAX_AGG, vertexValue);
@@ -151,9 +138,11 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
     sendMessageToAllEdges(vertex,
         new DoubleWritable(vertex.getValue().get() / vertex.getNumEdges()));
 
-    if (Math.abs(oldVal - vertex.getValue().get()) <= MIN_TOL.get(getConf())) {
-      aggregate(DONE_AGG, new LongWritable(1));
+    if (Math.abs(oldVal - vertex.getValue().get()) <=
+        MIN_TOL.get(getConf())) {
       vertex.voteToHalt();
+    } else {
+      aggregate(NUM_ACTIVE_AGG, new LongWritable(1));
     }
   }
 
@@ -231,12 +220,12 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
     @Override
     public void initialize() throws InstantiationException,
         IllegalAccessException {
-      registerAggregator(SUM_AGG, LongSumAggregator.class);
-      registerPersistentAggregator(MIN_AGG, DoubleMinAggregator.class);
-      registerPersistentAggregator(MAX_AGG, DoubleMaxAggregator.class);
+      //registerAggregator(SUM_AGG, LongSumAggregator.class);
+      //registerPersistentAggregator(MIN_AGG, DoubleMinAggregator.class);
+      //registerPersistentAggregator(MAX_AGG, DoubleMaxAggregator.class);
 
       // YH: for tolerance
-      registerAggregator(DONE_AGG, LongSumAggregator.class);
+      registerAggregator(NUM_ACTIVE_AGG, LongSumAggregator.class);
     }
   }
 
