@@ -74,26 +74,25 @@ public class DeltaPageRankComputation extends BasicComputation<LongWritable,
     double delta = 0;
 
     if (getSuperstep() == 0) {
-      vertex.setValue(new DoubleWritable(0.15));
+      vertex.setValue(new DoubleWritable(0.0));
       delta = 0.15;
+    }
 
-    } else {
-      // termination when using error tolerance; must wait at least 1SS
-      // b/c tolerances >1.0 will cause immediate termination
-      //if (getSuperstep() > 1 &&
-      //    ((LongWritable) getAggregatedValue(NUM_ACTIVE_AGG)).get() == 0) {
-      //  vertex.voteToHalt();
-      //  return;
-      //}
+    // termination when using error tolerance; must wait at least 1SS
+    // b/c tolerances >1.0 will cause immediate termination
+    //if (getSuperstep() > 1 &&
+    //    ((LongWritable) getAggregatedValue(NUM_ACTIVE_AGG)).get() == 0) {
+    //  vertex.voteToHalt();
+    //  return;
+    //}
 
-      for (DoubleWritable message : messages) {
-        delta += message.get();
-      }
-      vertex.setValue(new DoubleWritable(vertex.getValue().get() + delta));
+    for (DoubleWritable message : messages) {
+      delta += message.get();
     }
 
     // termination when using supersteps
     if (getSuperstep() < MAX_SS.get(getConf()) && delta > 0) {
+      vertex.setValue(new DoubleWritable(vertex.getValue().get() + delta));
       sendMessageToAllEdges(vertex,
           new DoubleWritable(0.85 * delta / vertex.getNumEdges()));
     }

@@ -46,7 +46,7 @@ import java.io.IOException;
  * function helps determine what tolerance value should be used.
  */
 @Algorithm(
-    name = "PageRank Tolerance Finder"
+    name = "Delta PageRank Tolerance Finder"
 )
 public class DeltaPageRankTolFinderComputation extends BasicComputation<
     LongWritable, DoubleWritable, NullWritable, DoubleWritable> {
@@ -73,23 +73,22 @@ public class DeltaPageRankTolFinderComputation extends BasicComputation<
     double delta = 0;
 
     if (getSuperstep() == 0) {
-      vertex.setValue(new DoubleWritable(0.15));
+      vertex.setValue(new DoubleWritable(0.0));
       delta = 0.15;
-
-    } else {
-      for (DoubleWritable message : messages) {
-        delta += message.get();
-      }
-      vertex.setValue(new DoubleWritable(vertex.getValue().get() + delta));
     }
 
-    aggregate(MAX_AGG, new DoubleWritable(delta));
+    for (DoubleWritable message : messages) {
+      delta += message.get();
+    }
 
     // Termination condition based on max supersteps
     if (getSuperstep() < MAX_SS.get(getConf()) && delta > 0) {
+      vertex.setValue(new DoubleWritable(vertex.getValue().get() + delta));
       sendMessageToAllEdges(vertex,
           new DoubleWritable(0.85 * delta / vertex.getNumEdges()));
     }
+
+    aggregate(MAX_AGG, new DoubleWritable(delta));
 
     // always vote to halt
     vertex.voteToHalt();
