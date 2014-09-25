@@ -73,15 +73,7 @@ public class DeltaPageRankComputation extends BasicComputation<LongWritable,
     // each vertex, take its PageRank value and divide by |V|.
     double delta = 0;
 
-    // YH: MUST add missing vertices first, hence wasting this superstep.
-    // If this is not done, PR values do not sum up correctly.
     if (getSuperstep() == 0) {
-      sendMessageToAllEdges(vertex, new DoubleWritable(0.0));
-      return;
-    }
-
-    // only initialize values at SS1
-    if (getSuperstep() == 1) {
       vertex.setValue(new DoubleWritable(0.0));
       delta = 0.15;
     }
