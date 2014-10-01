@@ -176,7 +176,8 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
     // Namely, if number of messages is 0 and all vertices are halted,
     // then entire computation terminates. So don't mess with this.
     //
-    // TODO-YH: totalMsgBytesSentInSuperstep seems to only be used for stats
+    // Note that this includes local messages (if using async), while
+    // totalMsgBytesSentInSuperstep *excludes* local messages.
     ++totalMsgsSentInSuperstep;
 
     // YH: short-circuit local messages directly to message store.

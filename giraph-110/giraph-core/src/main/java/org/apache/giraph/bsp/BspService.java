@@ -257,6 +257,8 @@ public abstract class BspService<I extends WritableComparable,
   private final Mapper<?, ?, ?, ?>.Context context;
   /** Cached superstep (from ZooKeeper) */
   private long cachedSuperstep = UNSET_SUPERSTEP;
+  /** YH: Logical superstep of this worker (NOT global) */
+  private long logicalSuperstep = UNSET_SUPERSTEP;
   /** Restarted from a checkpoint (manual or automatic) */
   private long restartedSuperstep = UNSET_SUPERSTEP;
   /** Cached application attempt (from ZooKeeper) */
@@ -318,6 +320,7 @@ public abstract class BspService<I extends WritableComparable,
     this.restartedSuperstep = conf.getLong(
         GiraphConstants.RESTART_SUPERSTEP, UNSET_SUPERSTEP);
     this.cachedSuperstep = restartedSuperstep;
+    this.logicalSuperstep = cachedSuperstep;
     if ((restartedSuperstep != UNSET_SUPERSTEP) &&
         (restartedSuperstep < 0)) {
       throw new IllegalArgumentException(
@@ -812,6 +815,7 @@ public abstract class BspService<I extends WritableComparable,
    *
    * @return the latest superstep
    */
+  @Override
   public final long getSuperstep() {
     if (cachedSuperstep != UNSET_SUPERSTEP) {
       return cachedSuperstep;
@@ -854,19 +858,28 @@ public abstract class BspService<I extends WritableComparable,
           Long.parseLong(Collections.max(superstepList));
     }
 
+    // YH: special case---need to set logical SS too
+    if (logicalSuperstep == UNSET_SUPERSTEP) {
+      logicalSuperstep = cachedSuperstep;
+    }
+
     return cachedSuperstep;
   }
 
   /**
-   * Increment the cached superstep.  Shouldn't be the initial value anymore.
+   * Increment the cached superstep. Shouldn't be the initial value anymore.
+   * YH: this also increments the logical superstep (the two must be identical
+   * if using regular BSP execution).
    */
   public final void incrCachedSuperstep() {
-    if (cachedSuperstep == UNSET_SUPERSTEP) {
+    if (cachedSuperstep == UNSET_SUPERSTEP ||
+        logicalSuperstep == UNSET_SUPERSTEP) {
       throw new IllegalStateException(
           "incrSuperstep: Invalid unset cached superstep " +
               UNSET_SUPERSTEP);
     }
     ++cachedSuperstep;
+    ++logicalSuperstep;
   }
 
   /**
@@ -877,6 +890,31 @@ public abstract class BspService<I extends WritableComparable,
    */
   public final void setCachedSuperstep(long superstep) {
     cachedSuperstep = superstep;
+    // YH: no checkpointing is implemented between logical supersteps,
+    // so we start from scratch, from this barrier. (Even when checkpointing
+    // is supported, it will require a global barrier to serialize
+    // everything => cachedSuperstep == logicalSuperstep)
+    logicalSuperstep = cachedSuperstep;
+  }
+
+  @Override
+  public final long getLogicalSuperstep() {
+    return logicalSuperstep;
+  }
+
+  /**
+   * YH: Increment the logical superstep.
+   *
+   * Note that this can be incremented independently of the cached
+   * global superstep counter, which is used for coordination.
+   */
+  public final void incrLogicalSuperstep() {
+    if (logicalSuperstep == UNSET_SUPERSTEP) {
+      throw new IllegalStateException(
+          "incrLogicalSuperstep: Invalid unset logical superstep " +
+              UNSET_SUPERSTEP);
+    }
+    ++logicalSuperstep;
   }
 
   /**

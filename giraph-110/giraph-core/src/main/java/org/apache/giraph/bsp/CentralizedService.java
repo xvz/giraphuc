@@ -44,6 +44,19 @@ public interface CentralizedService<I extends WritableComparable,
   long getSuperstep();
 
   /**
+   * YH: Get the worker's current logical superstep.
+   *
+   * When using asynchronous execution with ASYNC_DISABLE_BARRIERS
+   * enabled, this will be a LOCAL superstep counter, not global.
+   *
+   * Otherwise, this is also the global superstep and is guaranteed
+   * to be identical to getSuperstep().
+   *
+   * @return logical superstep (begins at INPUT_SUPERSTEP)
+   */
+  long getLogicalSuperstep();
+
+  /**
    * Get the restarted superstep
    *
    * @return -1 if not manually restarted, otherwise the superstep id

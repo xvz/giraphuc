@@ -1519,7 +1519,9 @@ public class BspServiceMaster<I extends WritableComparable,
    * @return Superstep classes set by masterCompute
    */
   private SuperstepClasses prepareMasterCompute(long superstep) {
-    GraphState graphState = new GraphState(superstep ,
+    // TODO-YH: master has no notion of logical superstep
+    GraphState graphState = new GraphState(superstep,
+        superstep,
         GiraphStats.getInstance().getVertices().getValue(),
         GiraphStats.getInstance().getEdges().getValue(),
         getContext());

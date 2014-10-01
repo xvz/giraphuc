@@ -1113,6 +1113,11 @@ public interface GiraphConstants {
       new BooleanConfOption("giraph.asyncRemoteRead", false,
           "Whether to read most recently available remote value or not");
 
+  /** YH: Whether or not BSP barriers for async execution should be disabled */
+  BooleanConfOption ASYNC_DISABLE_BARRIERS =
+      new BooleanConfOption("giraph.asyncDisableBarriers", false,
+          "Whether to disable BSP barriers or not (async only)");
+
   /**
    * YH: Whether algorithm needs every vertex to have all messages from
    * all its neighbours for every superstep (for async only)

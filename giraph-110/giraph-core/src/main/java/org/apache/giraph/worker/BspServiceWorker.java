@@ -785,66 +785,99 @@ public class BspServiceWorker<I extends WritableComparable,
     // 2. Register my health for the next superstep.
     // 3. Wait until the partition assignment is complete and get it
     // 4. Get the aggregator values from the previous superstep
+
     if (getSuperstep() != INPUT_SUPERSTEP) {
+      // TODO-YH: see mutations in this function call!!!
       workerServer.prepareSuperstep();
     }
 
-    registerHealth(getSuperstep());
+    // YH: SKIP getting assignments/rebalancing---master is unaware
+    // of workers' pseudsupersteps. Also skip registering health,
+    // as global SS has not changed (re-registering for same SS will
+    // cause exception).
+    //
+    // Note that needBarrier() is set by finishSuperstep(). That is,
+    // if barrier was deemed necessary in previous pseudo or non-pseudo
+    // superstep, then it will be executed now. needBarrier() is also
+    // "reset" in finishSuperstep() as needed.
+    if (getConfiguration().getAsyncConf().needBarrier()) {
+      registerHealth(getSuperstep());
 
-    String addressesAndPartitionsPath =
-        getAddressesAndPartitionsPath(getApplicationAttempt(),
-            getSuperstep());
-    AddressesAndPartitionsWritable addressesAndPartitions =
-        new AddressesAndPartitionsWritable(
-            workerGraphPartitioner.createPartitionOwner().getClass());
-    try {
-      while (getZkExt().exists(addressesAndPartitionsPath, true) ==
-          null) {
-        getAddressesAndPartitionsReadyChangedEvent().waitForever();
-        getAddressesAndPartitionsReadyChangedEvent().reset();
+      String addressesAndPartitionsPath =
+          getAddressesAndPartitionsPath(getApplicationAttempt(),
+              getSuperstep());
+      AddressesAndPartitionsWritable addressesAndPartitions =
+          new AddressesAndPartitionsWritable(
+              workerGraphPartitioner.createPartitionOwner().getClass());
+      try {
+        while (getZkExt().exists(addressesAndPartitionsPath, true) ==
+            null) {
+          getAddressesAndPartitionsReadyChangedEvent().waitForever();
+          getAddressesAndPartitionsReadyChangedEvent().reset();
+        }
+        WritableUtils.readFieldsFromZnode(
+            getZkExt(),
+            addressesAndPartitionsPath,
+            false,
+            null,
+            addressesAndPartitions);
+      } catch (KeeperException e) {
+        throw new IllegalStateException(
+            "startSuperstep: KeeperException getting assignments", e);
+      } catch (InterruptedException e) {
+        throw new IllegalStateException(
+            "startSuperstep: InterruptedException getting assignments", e);
       }
-      WritableUtils.readFieldsFromZnode(
-          getZkExt(),
-          addressesAndPartitionsPath,
-          false,
-          null,
-          addressesAndPartitions);
-    } catch (KeeperException e) {
-      throw new IllegalStateException(
-          "startSuperstep: KeeperException getting assignments", e);
-    } catch (InterruptedException e) {
-      throw new IllegalStateException(
-          "startSuperstep: InterruptedException getting assignments", e);
-    }
 
-    workerInfoList.clear();
-    workerInfoList = addressesAndPartitions.getWorkerInfos();
-    masterInfo = addressesAndPartitions.getMasterInfo();
+      workerInfoList.clear();
+      workerInfoList = addressesAndPartitions.getWorkerInfos();
+      masterInfo = addressesAndPartitions.getMasterInfo();
 
-    if (LOG.isInfoEnabled()) {
-      LOG.info("startSuperstep: " + masterInfo);
-      LOG.info("startSuperstep: Ready for computation on superstep " +
-          getSuperstep() + " since worker " +
-          "selection and vertex range assignments are done in " +
-          addressesAndPartitionsPath);
-    }
-
-    getContext().setStatus("startSuperstep: " +
-        getGraphTaskManager().getGraphFunctions().toString() +
-        " - Attempt=" + getApplicationAttempt() +
-        ", Superstep=" + getSuperstep());
-
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("startSuperstep: addressesAndPartitions" +
-          addressesAndPartitions.getWorkerInfos());
-      for (PartitionOwner partitionOwner : addressesAndPartitions
-          .getPartitionOwners()) {
-        LOG.debug(partitionOwner.getPartitionId() + " " +
-            partitionOwner.getWorkerInfo());
+      if (LOG.isInfoEnabled()) {
+        LOG.info("startSuperstep: " + masterInfo);
+        LOG.info("startSuperstep: Ready for computation on superstep " +
+            getSuperstep() + " (logical superstep " +
+            getLogicalSuperstep() + ") since worker " +
+            "selection and vertex range assignments are done in " +
+            addressesAndPartitionsPath);
       }
-    }
 
-    return addressesAndPartitions.getPartitionOwners();
+      getContext().setStatus("startSuperstep: " +
+          getGraphTaskManager().getGraphFunctions().toString() +
+          " - Attempt=" + getApplicationAttempt() +
+          ", Superstep=" + getSuperstep() +
+          " (logicalSuperstep=" + getLogicalSuperstep() + ")");
+
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("startSuperstep: addressesAndPartitions" +
+            addressesAndPartitions.getWorkerInfos());
+        for (PartitionOwner partitionOwner : addressesAndPartitions
+            .getPartitionOwners()) {
+          LOG.debug(partitionOwner.getPartitionId() + " " +
+              partitionOwner.getWorkerInfo());
+        }
+      }
+
+      return addressesAndPartitions.getPartitionOwners();
+
+    } else {
+      // YH: some duplicate status-update code
+      if (LOG.isInfoEnabled()) {
+        LOG.info("startSuperstep: " + masterInfo);
+        LOG.info("startSuperstep: Ready for computation on superstep " +
+            getSuperstep() + " (logical superstep " +
+            getLogicalSuperstep() + ") since we skipped assignments.");
+      }
+
+      getContext().setStatus("startSuperstep: " +
+          getGraphTaskManager().getGraphFunctions().toString() +
+          " - Attempt=" + getApplicationAttempt() +
+          ", Superstep=" + getSuperstep() +
+          " (logicalSuperstep=" + getLogicalSuperstep() + ")");
+
+      // Return junk---GraphTaskManager ignores it.
+      return null;
+    }
   }
 
   @Override
@@ -863,9 +896,44 @@ public class BspServiceWorker<I extends WritableComparable,
     //    of this worker
     // 5. Let the master know it is finished.
     // 6. Wait for the master's superstep info, and check if done
-    waitForRequestsToFinish();
 
-    getGraphTaskManager().notifyFinishedCommunication();
+    // YH: note that this resets needBarrier() to false on every
+    // pseudo (and non-pseudo) superstep if conditions below fail
+    boolean needBarrier = false;
+
+    // YH: need barriers up until the one after SS1, as that's
+    // when all missing vertices in the graph are added
+    if (!getConfiguration().getAsyncConf().disableBarriers() ||
+        getLogicalSuperstep() < 2) {
+      needBarrier = true;
+    } else {
+      // else, check if (1) all vertices in all partitions are halted
+      // OR (2) there are still pending messages in stores
+      //
+      // (this IGNORES fact that there may still be in-flight messages
+      // coming from remote workers!!)
+      needBarrier = true;
+      for (PartitionStats ps : partitionStatsList) {
+        if (ps.getVertexCount() != ps.getFinishedVertexCount() ||
+            ps.getMessagesSentCount() > 0) {
+          needBarrier = false;
+        }
+      }
+    }
+    getConfiguration().getAsyncConf().setNeedBarrier(needBarrier);
+
+    //LOG.info("[[PR-internal]] finish: ss=" + getSuperstep() +
+    //         ", lss=" + getLogicalSuperstep() +
+    //         ", nb=" + needBarrier + "-" +
+    //         getConfiguration().getAsyncConf().needBarrier());
+
+    if (getConfiguration().getAsyncConf().needBarrier()) {
+      waitForRequestsToFinish();
+
+      // TODO-YH: this function doesn't actually do anything?...
+      // (communicationTimerContext looks to always be null)
+      getGraphTaskManager().notifyFinishedCommunication();
+    }
 
     long workerSentMessages = 0;
     long workerSentMessageBytes = 0;
@@ -876,14 +944,18 @@ public class BspServiceWorker<I extends WritableComparable,
       localVertices += partitionStats.getVertexCount();
     }
 
-    if (getSuperstep() != INPUT_SUPERSTEP) {
-      postSuperstepCallbacks();
-    }
+    // TODO-YH: post-superstep callbacks may not be safe??
+    postSuperstepCallbacks();
 
-    aggregatorHandler.finishSuperstep(workerAggregatorRequestProcessor);
+    // YH: aggregators are unsupported between pseudosupersteps,
+    // as Giraph aggregators are all blocking (=> need global barrier)
+    if (getConfiguration().getAsyncConf().needBarrier()) {
+      aggregatorHandler.finishSuperstep(workerAggregatorRequestProcessor);
+    }
 
     if (LOG.isInfoEnabled()) {
       LOG.info("finishSuperstep: Superstep " + getSuperstep() +
+          " (logicalSuperstep " + getLogicalSuperstep() + ")" +
           ", messages = " + workerSentMessages + " " +
           ", message bytes = " + workerSentMessageBytes + " , " +
           MemoryUtils.getRuntimeMemoryStats());
@@ -892,44 +964,65 @@ public class BspServiceWorker<I extends WritableComparable,
     if (superstepTimerContext != null) {
       superstepTimerContext.stop();
     }
-    writeFinshedSuperstepInfoToZK(partitionStatsList,
-      workerSentMessages, workerSentMessageBytes);
 
-    LoggerUtils.setStatusAndLog(getContext(), LOG, Level.INFO,
-        "finishSuperstep: (waiting for rest " +
-            "of workers) " +
-            getGraphTaskManager().getGraphFunctions().toString() +
-            " - Attempt=" + getApplicationAttempt() +
-            ", Superstep=" + getSuperstep());
+    if (getConfiguration().getAsyncConf().needBarrier()) {
+      writeFinshedSuperstepInfoToZK(partitionStatsList,
+        workerSentMessages, workerSentMessageBytes);
 
-    String superstepFinishedNode =
-        getSuperstepFinishedPath(getApplicationAttempt(), getSuperstep());
+      LoggerUtils.setStatusAndLog(getContext(), LOG, Level.INFO,
+          "finishSuperstep: (waiting for rest " +
+              "of workers) " +
+              getGraphTaskManager().getGraphFunctions().toString() +
+              " - Attempt=" + getApplicationAttempt() +
+              ", Superstep=" + getSuperstep() +
+              " (logicalSuperstep=" + getLogicalSuperstep() + ")");
 
-    waitForOtherWorkers(superstepFinishedNode);
+      String superstepFinishedNode =
+          getSuperstepFinishedPath(getApplicationAttempt(), getSuperstep());
 
-    GlobalStats globalStats = new GlobalStats();
-    SuperstepClasses superstepClasses = new SuperstepClasses();
-    WritableUtils.readFieldsFromZnode(
-        getZkExt(), superstepFinishedNode, false, null, globalStats,
-        superstepClasses);
-    if (LOG.isInfoEnabled()) {
-      LOG.info("finishSuperstep: Completed superstep " + getSuperstep() +
-          " with global stats " + globalStats + " and classes " +
+      waitForOtherWorkers(superstepFinishedNode);
+
+      GlobalStats globalStats = new GlobalStats();
+      SuperstepClasses superstepClasses = new SuperstepClasses();
+      WritableUtils.readFieldsFromZnode(
+          getZkExt(), superstepFinishedNode, false, null, globalStats,
           superstepClasses);
-    }
-    getContext().setStatus("finishSuperstep: (all workers done) " +
-        getGraphTaskManager().getGraphFunctions().toString() +
-        " - Attempt=" + getApplicationAttempt() +
-        ", Superstep=" + getSuperstep());
-    incrCachedSuperstep();
-    getConfiguration().updateSuperstepClasses(superstepClasses);
+      if (LOG.isInfoEnabled()) {
+        LOG.info("finishSuperstep: Completed superstep " + getSuperstep() +
+            " with global stats " + globalStats + " and classes " +
+            superstepClasses);
+      }
+      getContext().setStatus("finishSuperstep: (all workers done) " +
+          getGraphTaskManager().getGraphFunctions().toString() +
+          " - Attempt=" + getApplicationAttempt() +
+          ", Superstep=" + getSuperstep() +
+          " (logicalSuperstep=" + getLogicalSuperstep() + ")");
 
-    return new FinishedSuperstepStats(
-        localVertices,
-        globalStats.getHaltComputation(),
-        globalStats.getVertexCount(),
-        globalStats.getEdgeCount(),
-        false);
+      incrCachedSuperstep();
+      getConfiguration().updateSuperstepClasses(superstepClasses);
+
+      return new FinishedSuperstepStats(
+          localVertices,
+          globalStats.getHaltComputation(),
+          globalStats.getVertexCount(),
+          globalStats.getEdgeCount(),
+          false);
+
+    } else {
+      // YH: if in pseudosuperstep, increment only "logicalSuperstep".
+      // This enables "superstep" to be used for coordination (master
+      // and ZK will just see it as a very long superstep), with minimal
+      // code modifications.
+      incrLogicalSuperstep();
+
+      // Return junk---GraphTaskManager ignores it.
+      // Note that we CANNOT fake "halt" (2nd param) as that
+      // is a GLOBAL condition.
+      return null;
+    }
+
+    // TODO-YH: see partitionExchange.getMyDependencyWorkerSet()
+    // for how to (possibly) track incoming message dependencies
   }
 
   /**
@@ -942,7 +1035,8 @@ public class BspServiceWorker<I extends WritableComparable,
     getContext().progress();
 
     for (WorkerObserver obs : getWorkerObservers()) {
-      obs.postSuperstep(getSuperstep());
+      // YH: use logical superstep
+      obs.postSuperstep(getLogicalSuperstep());
       getContext().progress();
     }
   }

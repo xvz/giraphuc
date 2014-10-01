@@ -126,6 +126,10 @@ public class NettyWorkerServer<I extends WritableComparable,
     // where missing vertices are added. This is b/c if vertex doesn't
     // exist yet, we won't encounter them in compute loop, so their messages
     // are correctly delayed until subsequent superstep.
+    //
+    // This is also safe even between pseudosupersteps, since mutations
+    // are for vertices that belong to this partition.
+    // TODO-YH: ^^^^^^^^^^^ TRUE?!?!?!?!?
     resolveMutations();
   }
 

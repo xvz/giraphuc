@@ -278,9 +278,11 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
     // main superstep processing loop
     while (!finishedSuperstepStats.allVerticesHalted()) {
       final long superstep = serviceWorker.getSuperstep();
+      final long logicalSuperstep = serviceWorker.getLogicalSuperstep();
       GiraphTimerContext superstepTimerContext =
         getTimerForThisSuperstep(superstep);
       GraphState graphState = new GraphState(superstep,
+          logicalSuperstep,
           finishedSuperstepStats.getVertexCount(),
           finishedSuperstepStats.getEdgeCount(),
           context);
@@ -290,42 +292,63 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
         LOG.debug("execute: " + MemoryUtils.getRuntimeMemoryStats());
       }
       context.progress();
-      serviceWorker.exchangeVertexPartitions(masterAssignedPartitionOwners);
-      context.progress();
+
+      // YH: exchange vertices if global barrier has occurred
+      if (conf.getAsyncConf().needBarrier()) {
+        serviceWorker.exchangeVertexPartitions(masterAssignedPartitionOwners);
+        context.progress();
+      }
+      // YH: used to restarted supersteps (manual or automatic)
       graphState = checkSuperstepRestarted(superstep, graphState);
       prepareForSuperstep(graphState);
       context.progress();
+
       // YH: pass in correct message store (either remote-only or BSP)
+      // TODO-YH: put this logic into ServerData instead?
+      //   (also see BspServiceWorker#finishSuperstep)
       MessageStore<I, Writable> messageStore =
         conf.getAsyncConf().doRemoteRead() ?
         serviceWorker.getServerData().getRemoteMessageStore() :
         serviceWorker.getServerData().getCurrentMessageStore();
+
       // YH: pass in correct local message store (either local-only or BSP)
       // Note: if everything is BSP, currentMessageStore will only be read once
       MessageStore<I, Writable> localMessageStore =
         conf.getAsyncConf().doLocalRead() ?
         serviceWorker.getServerData().getLocalMessageStore() :
         serviceWorker.getServerData().getCurrentMessageStore();
+
       int numPartitions = serviceWorker.getPartitionStore().getNumPartitions();
       int numThreads = Math.min(numComputeThreads, numPartitions);
       if (LOG.isInfoEnabled()) {
         LOG.info("execute: " + numPartitions + " partitions to process with " +
           numThreads + " compute thread(s), originally " +
-          numComputeThreads + " thread(s) on superstep " + superstep);
+          numComputeThreads + " thread(s) on superstep " + superstep +
+          " (logical superstep " + logicalSuperstep + ")");
       }
       partitionStatsList.clear();
+
       // execute the current superstep
       if (numPartitions > 0) {
         processGraphPartitions(context, partitionStatsList, graphState,
           messageStore, localMessageStore, numPartitions, numThreads);
       }
-      finishedSuperstepStats = completeSuperstepAndCollectStats(
-        partitionStatsList, superstepTimerContext);
+
+      // YH: need tmp stats, as this call sets needBarrier()
+      FinishedSuperstepStats tmpStats = completeSuperstepAndCollectStats(
+          partitionStatsList, superstepTimerContext);
+
+      // YH: get new stats if global barrier occurred; else reuse old stats
+      if (conf.getAsyncConf().needBarrier()) {
+        finishedSuperstepStats = tmpStats;
+      }
 
       // YH: store and update whether the upcoming superstep is a new
       // computation phase and reset isPhaseChanged flag
       conf.getAsyncConf().setNewPhase(isPhaseChanged);
       isPhaseChanged = false;
+
+      // YH: needBarrier() is "reset" in BspServiceWorker#finishSuperstep()
 
       // END of superstep compute loop
     }
@@ -333,6 +356,8 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
     if (LOG.isInfoEnabled()) {
       LOG.info("execute: BSP application done (global vertices marked done)");
     }
+
+    // YH: these are both fine---this is after computation has completed
     updateSuperstepGraphState();
     postApplication();
   }
@@ -420,6 +445,7 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
   private void updateSuperstepGraphState() {
     serviceWorker.getWorkerContext().setGraphState(
         new GraphState(serviceWorker.getSuperstep(),
+            serviceWorker.getLogicalSuperstep(),
             finishedSuperstepStats.getVertexCount(),
             finishedSuperstepStats.getEdgeCount(), context));
   }
@@ -438,12 +464,14 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
     // the superstep timer is stopped inside the finishSuperstep function
     // (otherwise metrics are not available at the end of the computation
     //  using giraph.metrics.enable=true).
-    finishedSuperstepStats =
+    //
+    // YH: bug fix... turn this into proper local variable
+    FinishedSuperstepStats finishedStats =
       serviceWorker.finishSuperstep(partitionStatsList, superstepTimerContext);
     if (conf.metricsEnabled()) {
       GiraphMetrics.get().perSuperstep().printSummary(System.err);
     }
-    return finishedSuperstepStats;
+    return finishedStats;
   }
 
   /**
@@ -452,16 +480,26 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
    * @param graphState graph state metadata object
    */
   private void prepareForSuperstep(GraphState graphState) {
-    serviceWorker.prepareSuperstep();
+    // YH: This is startSuperstep() analog to first few lines
+    // in BSPServiceWorker's finishSuperstep()
+
+    // YH: aggregators are unsupported between pseudosupersteps,
+    // as Giraph aggregators are all blocking (=> need global barrier)
+    if (conf.getAsyncConf().needBarrier()) {
+      serviceWorker.prepareSuperstep();
+    }
 
     serviceWorker.getWorkerContext().setGraphState(graphState);
+
+    // TODO-YH: pre-superstep callback may not be safe??
     GiraphTimerContext preSuperstepTimer = wcPreSuperstepTimer.time();
     serviceWorker.getWorkerContext().preSuperstep();
     preSuperstepTimer.stop();
     context.progress();
 
     for (WorkerObserver obs : serviceWorker.getWorkerObservers()) {
-      obs.preSuperstep(graphState.getSuperstep());
+      // YH: use logical superstep
+      obs.preSuperstep(graphState.getLogicalSuperstep());
       context.progress();
     }
   }
@@ -786,7 +824,9 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
       finishedSuperstepStats = new FinishedSuperstepStats(0, false,
           vertexEdgeCount.getVertexCount(), vertexEdgeCount.getEdgeCount(),
           false);
+      // YH: when loading checkpoint, logical SS is set to be same as SS
       graphState = new GraphState(superstep,
+          superstep,
           finishedSuperstepStats.getVertexCount(),
           finishedSuperstepStats.getEdgeCount(),
           context);

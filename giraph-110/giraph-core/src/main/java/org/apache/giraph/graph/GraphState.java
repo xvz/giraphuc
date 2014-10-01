@@ -26,6 +26,8 @@ import org.apache.hadoop.mapreduce.Mapper;
 public class GraphState {
   /** Graph-wide superstep */
   private final long superstep;
+  /** YH: Worker-local logical superstep */
+  private final long logicalSuperstep;
   /** Graph-wide number of vertices */
   private final long numVertices;
   /** Graph-wide number of edges */
@@ -33,18 +35,32 @@ public class GraphState {
   /** Graph-wide map context */
   private final Mapper<?, ?, ?, ?>.Context context;
 
+  // YH: If using asynchronous execution with ASYNC_DISABLE_BARRIERS
+  // enabled, "superstep" is the current/cached global superstep while
+  // "logicalSuperstep" is current local superstep. "superstep" is used
+  // to coordinate workers when global barriers are needed.
+  //
+  // Otherwise, both values are identical---they both indicate current
+  // or cached global superstep.
+  //
+  // Note that naming is SWITCHED in the user API!! (See graph.Computation)
+  // We do this to avoid refactoring large chunks of code.
+
   /**
    * Constructor
    *
    * @param superstep Current superstep
+   * @param logicalSuperstep Current logical superstep
    * @param numVertices Current graph-wide vertices
    * @param numEdges Current graph-wide edges
    * @param context Context
    *
    */
-  public GraphState(long superstep, long numVertices, long numEdges,
+  public GraphState(long superstep, long logicalSuperstep,
+                    long numVertices, long numEdges,
       Mapper<?, ?, ?, ?>.Context context) {
     this.superstep = superstep;
+    this.logicalSuperstep = logicalSuperstep;
     this.numVertices = numVertices;
     this.numEdges = numEdges;
     this.context = context;
@@ -52,6 +68,10 @@ public class GraphState {
 
   public long getSuperstep() {
     return superstep;
+  }
+
+  public long getLogicalSuperstep() {
+    return logicalSuperstep;
   }
 
   public long getTotalNumVertices() {
@@ -68,7 +88,8 @@ public class GraphState {
 
   @Override
   public String toString() {
-    return "(superstep=" + superstep + ",numVertices=" + numVertices + "," +
+    return "(superstep=" + superstep + ",logicalSuperstep=" +
+        logicalSuperstep + ",numVertices=" + numVertices + "," +
         "numEdges=" + numEdges + ",context=" + context + ")";
   }
 }
