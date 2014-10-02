@@ -92,7 +92,7 @@ public class PageRankTolFinderComputation extends BasicComputation<
               new DoubleWritable(Math.abs(oldVal - vertex.getValue().get())));
 
     // Termination condition based on max supersteps
-    if (getSuperstep() < MAX_SUPERSTEPS.get(getConf())) {
+    if (getLogicalSuperstep() < MAX_SUPERSTEPS.get(getConf())) {
       long edges = vertex.getNumEdges();
       sendMessageToAllEdges(vertex,
           new DoubleWritable(vertex.getValue().get() / edges));

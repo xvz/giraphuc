@@ -96,29 +96,28 @@ public interface Computation<I extends WritableComparable,
       WorkerAggregatorUsage workerAggregatorUsage, WorkerContext workerContext);
 
   /**
-   * Retrieves the current superstep.
+   * Retrieves the current (global) superstep.
    *
-   * TODO-YH: change this back to return global
+   * YH: This is always the number of global supersteps---i.e., supersteps
+   * separated by global barriers. This differs from getLogicalSuperstep()
+   * only with asynchronous execution and ASYNC_DISABLE_BARRIERS enabled.
+   * Otherwise it is identical to getLogicalSuperstep().
    *
-   * YH: If using asynchronous execution with ASYNC_DISABLE_BARRIERS enabled,
-   * this will be the LOCAL superstep counter for this worker. Otherwise,
-   * this will be the regular global superstep (same ar all workers).
-   *
-   * @return Current superstep
+   * @return Current (global) superstep
    */
   long getSuperstep();
 
   /**
-   * YH: Retrieves the current global superstep.
+   * YH: Retrieves the current logical superstep.
    *
-   * This will always be the number of global supersteps---i.e., supersteps
-   * separated by global barriers. This differs from getSuperstep() only when
-   * asynchronous execution is used with ASYNC_DISABLE_BARRIERS enabled.
-   * Otherwise it is identical to getSuperstep().
+   * If using asynchronous execution with ASYNC_DISABLE_BARRIERS enabled,
+   * this will be the LOCAL superstep counter for this worker, which CAN
+   * differ from other workers---even if they are in the same global superstep.
+   * Otherwise, this is the regular global superstep (same for all workers).
    *
-   * @return Current global superstep
+   * @return Current logical superstep
    */
-  long getGlobalSuperstep();
+  long getLogicalSuperstep();
 
   /**
    * Get the total (all workers) number of vertices that

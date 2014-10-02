@@ -124,35 +124,33 @@ public abstract class AbstractComputation<I extends WritableComparable,
   }
 
   /**
-   * Retrieves the current superstep.
+   * Retrieves the current (global) superstep.
    *
-   * YH: If using asynchronous execution with ASYNC_DISABLE_BARRIERS enabled,
-   * this will be the LOCAL superstep counter for this worker. Otherwise,
-   * this will be the regular global superstep (same ar all workers).
+   * YH: This is always the number of global supersteps---i.e., supersteps
+   * separated by global barriers. This differs from getLogicalSuperstep()
+   * only with asynchronous execution and ASYNC_DISABLE_BARRIERS enabled.
+   * Otherwise it is identical to getLogicalSuperstep().
    *
-   * @return Current superstep
+   * @return Current (global) superstep
    */
   @Override
   public long getSuperstep() {
-    // YH: this is a little ugly, as the name "superstep" in the API
-    // does not correspond to "superstep" in underlying system...
-    // but this avoids refactoring large amounts of system code.
-    return graphState.getLogicalSuperstep();
+    return graphState.getSuperstep();
   }
 
   /**
-   * YH: Retrieves the current global superstep.
+   * YH: Retrieves the current logical superstep.
    *
-   * This will always be the number of global supersteps---i.e., supersteps
-   * separated by global barriers. This differs from getSuperstep() only when
-   * asynchronous execution is used with ASYNC_DISABLE_BARRIERS enabled.
-   * Otherwise it is identical to getSuperstep().
+   * If using asynchronous execution with ASYNC_DISABLE_BARRIERS enabled,
+   * this will be the LOCAL superstep counter for this worker, which CAN
+   * differ from other workers---even if they are in the same global superstep.
+   * Otherwise, this is the regular global superstep (same for all workers).
    *
-   * @return Current global superstep
+   * @return Current logical superstep
    */
   @Override
-  public long getGlobalSuperstep() {
-    return graphState.getSuperstep();
+  public long getLogicalSuperstep() {
+    return graphState.getLogicalSuperstep();
   }
 
   /**

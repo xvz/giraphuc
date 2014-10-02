@@ -38,13 +38,11 @@ public class GraphState {
   // YH: If using asynchronous execution with ASYNC_DISABLE_BARRIERS
   // enabled, "superstep" is the current/cached global superstep while
   // "logicalSuperstep" is current local superstep. "superstep" is used
-  // to coordinate workers when global barriers are needed.
+  // to coordinate workers when global barriers are needed. Workers always
+  // share the same "superstep" but can have differing "logicalSuperstep"s!
   //
   // Otherwise, both values are identical---they both indicate current
   // or cached global superstep.
-  //
-  // Note that naming is SWITCHED in the user API!! (See graph.Computation)
-  // We do this to avoid refactoring large chunks of code.
 
   /**
    * Constructor

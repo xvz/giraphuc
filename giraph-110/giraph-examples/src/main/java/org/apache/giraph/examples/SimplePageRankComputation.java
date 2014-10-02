@@ -100,7 +100,7 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
     } else {
       // termination when using error tolerance; must wait at least 1SS
       // b/c tolerances >1.0 will cause immediate termination
-      //if (getSuperstep() > 1 &&
+      //if (getLogicalSuperstep() > 1 &&
       //    ((LongWritable) getAggregatedValue(NUM_ACTIVE_AGG)).get() == 0) {
       //  vertex.voteToHalt();
       //  return;
@@ -125,7 +125,7 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
     }
 
     // termination when using supersteps
-    if (getSuperstep() < MAX_SS.get(getConf())) {
+    if (getLogicalSuperstep() < MAX_SS.get(getConf())) {
       sendMessageToAllEdges(vertex,
           new DoubleWritable(vertex.getValue().get() / vertex.getNumEdges()));
     } else {
