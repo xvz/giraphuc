@@ -202,6 +202,15 @@ public class PartitionDiskBackedMessageStore<I extends WritableComparable,
   }
 
   /**
+   * Check if we have any unprocessed messages.
+   *
+   * @return True if we have unprocessed messages
+   */
+  public boolean hasMessages() {
+    return !destinationVertices.isEmpty();
+  }
+
+  /**
    * Gets vertex ids which we have messages for
    *
    * @return Iterable over vertex ids which we have messages for

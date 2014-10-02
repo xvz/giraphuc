@@ -18,16 +18,19 @@
 
 package org.apache.giraph.conf;
 
+import org.apache.log4j.Logger;
+
 /**
  * YH: Tracks configuration specific to async mode.
  */
 public class AsyncConfiguration {
+  /** Class logger */
+  private static final Logger LOG = Logger.getLogger(AsyncConfiguration.class);
+
   /** Whether or not to read most recently available local values */
   private boolean doLocalRead;
   /** Whether or not to read most recently available remote values */
   private boolean doRemoteRead;
-  /** Whether or not to disable BSP barriers for async execution */
-  private boolean disableBarriers;
   /** Maximum number of messages before flushing cached messages */
   private int maxNumMsgs;
   /**
@@ -40,8 +43,18 @@ public class AsyncConfiguration {
   // TODO-YH: phases are not completed yet
   private boolean isNewPhase;
 
+  /** Whether or not to disable BSP barriers for async execution */
+  private boolean disableBarriers;
   /** Is a global barrier needed? */
   private boolean needBarrier;
+  /** Local in-flight message bytes */
+  private long inFlightBytes;
+
+  // YH: inFlightBytes tracks the number of bytes this worker has sent
+  // to remote workers MINUS the bytes this worker has received from
+  // remote workers. By itself, this value is meaningless. However, when
+  // summed across ALL workers, the master can learn if any bytes are
+  // still in-flight (=> whether to terminate or not).
 
   /**
    * Initialization constructor.
@@ -143,5 +156,53 @@ public class AsyncConfiguration {
    */
   public void setNeedBarrier(boolean needBarrier) {
     this.needBarrier = needBarrier;
+  }
+
+
+  /**
+   * Return the local number of in-flight message bytes for
+   * the previous global superstep.
+   *
+   * This value is meaningful ONLY if summed up with values from
+   * ALL workers. This value by itself has NO meaning!!
+   *
+   * @return Local in-flight bytes
+   */
+  public synchronized long getInFlightBytes() {
+    return inFlightBytes;
+  }
+
+  /**
+   * Reset the local in-flight message bytes
+   */
+  public synchronized void resetInFlightBytes() {
+    inFlightBytes = 0;
+  }
+
+  /**
+   * Add the number of message bytes received. Only used when
+   * running with asynchronous execution and barriers disabled.
+   *
+   * This is cumulative over multiple logical/pseudo-supersteps,
+   * but for exactly a single global superstep.
+   *
+   * @param recvBytes Received message bytes
+   */
+  public synchronized void addRecvBytes(long recvBytes) {
+    // must synchronize, as multiple comm threads can cause race
+    inFlightBytes -= recvBytes;
+  }
+
+  /**
+   * Add the number of message bytes sent. Only used when
+   * running with asynchronous execution and barriers disabled.
+   *
+   * This is cumulative over multiple logical/pseudo-supersteps,
+   * but for exactly a single global superstep.
+   *
+   * @param sentBytes Sent message bytes
+   */
+  public synchronized void addSentBytes(long sentBytes) {
+    inFlightBytes += sentBytes;
   }
 }

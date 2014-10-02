@@ -153,6 +153,16 @@ public abstract class SimpleMessageStore<I extends WritableComparable,
   }
 
   @Override
+  public boolean hasMessages() {
+    for (ConcurrentMap<I, ?> partitionMap : map.values()) {
+      if (!partitionMap.isEmpty()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @Override
   public Iterable<M> getVertexMessages(I vertexId) throws IOException {
     ConcurrentMap<I, T> partitionMap = map.get(getPartitionId(vertexId));
     if (partitionMap == null) {

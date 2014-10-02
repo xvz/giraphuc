@@ -189,6 +189,18 @@ public class LongByteArrayMessageStore<M extends Writable>
   }
 
   @Override
+  public boolean hasMessages() {
+    for (Long2ObjectOpenHashMap<?> partitionMap : map.values()) {
+      synchronized (partitionMap) {
+        if (!partitionMap.isEmpty()) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  @Override
   public Iterable<M> getVertexMessages(
       LongWritable vertexId) throws IOException {
     Long2ObjectOpenHashMap<DataInputOutput> partitionMap =

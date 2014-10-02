@@ -188,6 +188,18 @@ public class IntByteArrayMessageStore<M extends Writable>
   }
 
   @Override
+  public boolean hasMessages() {
+    for (Int2ObjectOpenHashMap<?> partitionMap : map.values()) {
+      synchronized (partitionMap) {
+        if (!partitionMap.isEmpty()) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  @Override
   public Iterable<M> getVertexMessages(
       IntWritable vertexId) throws IOException {
     Int2ObjectOpenHashMap<DataInputOutput> partitionMap =

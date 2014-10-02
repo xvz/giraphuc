@@ -205,6 +205,15 @@ public abstract class SimpleMessageWithSourceStore<
     return partitionMap != null && partitionMap.containsKey(vertexId);
   }
 
+  @Override
+  public boolean hasMessages() {
+    for (ConcurrentMap<I, ?> partitionMap : map.values()) {
+      if (!partitionMap.isEmpty()) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   // TODO-YH: lots of duplicated code... consolidate?
   // YH: MessageStore's overriden functions return MessageWithSource<I, M>

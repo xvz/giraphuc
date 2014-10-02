@@ -160,6 +160,18 @@ public class LongDoubleMessageStore
   }
 
   @Override
+  public boolean hasMessages() {
+    for (Long2DoubleOpenHashMap partitionMap : map.values()) {
+      synchronized (partitionMap) {
+        if (!partitionMap.isEmpty()) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  @Override
   public Iterable<DoubleWritable> getVertexMessages(
       LongWritable vertexId) throws IOException {
     Long2DoubleOpenHashMap partitionMap = getPartitionMap(vertexId);

@@ -98,6 +98,8 @@ public interface Computation<I extends WritableComparable,
   /**
    * Retrieves the current superstep.
    *
+   * TODO-YH: change this back to return global
+   *
    * YH: If using asynchronous execution with ASYNC_DISABLE_BARRIERS enabled,
    * this will be the LOCAL superstep counter for this worker. Otherwise,
    * this will be the regular global superstep (same ar all workers).

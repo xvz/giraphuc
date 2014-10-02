@@ -169,6 +169,17 @@ public class SendWorkerOneToAllMessagesRequest<I extends WritableComparable,
       msgStore = serverData.getIncomingMessageStore();
     }
 
+    // YH: if not using barriers, we have to track the number of
+    // received bytes. This is the "counterpart" to counting sent
+    // bytes in SendMessageCache#sendMessageRequest().
+    //
+    // Note: this is prone to comm thread contention, but there's nowhere
+    // else to easily track this statistic---received messages go straight
+    // from raw channel read to decoding to request processing (here).
+    if (!isLocal && getConf().getAsyncConf().disableBarriers()) {
+      getConf().getAsyncConf().addRecvBytes(this.getSerializedSize());
+    }
+
     try {
       for (Entry<Integer, ByteArrayVertexIdMessages> idMsgs :
           partitionIdMsgs.entrySet()) {

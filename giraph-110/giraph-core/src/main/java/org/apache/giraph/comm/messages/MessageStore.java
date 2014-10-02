@@ -83,6 +83,13 @@ public interface MessageStore<I extends WritableComparable,
   boolean hasMessagesForVertex(I vertexId);
 
   /**
+   * Check if we have any unprocessed messages.
+   *
+   * @return True if we have unprocessed messages
+   */
+  boolean hasMessages();
+
+  /**
    * YH: Adds an unserialized message for partition.
    * Caller can invalidate destVertexId or message after the call.
    *

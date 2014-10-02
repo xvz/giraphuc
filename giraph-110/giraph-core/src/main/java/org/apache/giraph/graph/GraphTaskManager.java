@@ -338,6 +338,19 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
       FinishedSuperstepStats tmpStats = completeSuperstepAndCollectStats(
           partitionStatsList, superstepTimerContext);
 
+      // TODO-YH: delete this
+      //LOG.info("[[SP-internal]] pending messages");
+      //PartitionStore<I, V, E> pStore = serviceWorker.getPartitionStore();
+      //for (Integer pId : pStore.getPartitionIds()) {
+      //  for (Vertex<I, V, E> v : pStore.getOrCreatePartition(pId)) {
+      //    LOG.info("[[SP-internal]]   id=" + v.getId() +
+      //             ": local? " + localMessageStore.
+      //             hasMessagesForVertex(v.getId()) +
+      //             ", remote? " +
+      //             messageStore.hasMessagesForVertex(v.getId()));
+      //  }
+      //}
+
       // YH: get new stats if global barrier occurred; else reuse old stats
       if (conf.getAsyncConf().needBarrier()) {
         finishedSuperstepStats = tmpStats;

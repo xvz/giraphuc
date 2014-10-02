@@ -168,9 +168,14 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         PartitionStats partitionStats =
             computePartition(computation, partition);
         partitionStatsList.add(partitionStats);
+        // YH: if barriers are disabled, number of messages is LOCAL
+        // number of messages; otherwise it is total (local + remote)
+        // TODO-YH: Note that this can make metrics incorrect!!
         long partitionMsgs = workerClientRequestProcessor.resetMessageCount();
         partitionStats.addMessagesSentCount(partitionMsgs);
         messagesSentCounter.inc(partitionMsgs);
+        // YH: if async is enabled, messages bytes is always for
+        // REMOTE messages; otherwise it is total (local + remote)
         long partitionMsgBytes =
           workerClientRequestProcessor.resetMessageBytesCount();
         partitionStats.addMessageBytesSentCount(partitionMsgBytes);

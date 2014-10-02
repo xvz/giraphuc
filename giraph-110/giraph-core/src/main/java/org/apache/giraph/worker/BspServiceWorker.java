@@ -26,10 +26,12 @@ import org.apache.giraph.comm.WorkerClient;
 import org.apache.giraph.comm.WorkerClientRequestProcessor;
 import org.apache.giraph.comm.WorkerServer;
 import org.apache.giraph.comm.aggregators.WorkerAggregatorRequestProcessor;
+import org.apache.giraph.comm.messages.MessageStore;
 import org.apache.giraph.comm.netty.NettyWorkerAggregatorRequestProcessor;
 import org.apache.giraph.comm.netty.NettyWorkerClient;
 import org.apache.giraph.comm.netty.NettyWorkerClientRequestProcessor;
 import org.apache.giraph.comm.netty.NettyWorkerServer;
+import org.apache.giraph.conf.AsyncConfiguration;
 import org.apache.giraph.conf.GiraphConstants;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.edge.Edge;
@@ -786,6 +788,15 @@ public class BspServiceWorker<I extends WritableComparable,
     // 3. Wait until the partition assignment is complete and get it
     // 4. Get the aggregator values from the previous superstep
 
+    //LOG.info("[[SP-internal]] ##START##: ss=" + getSuperstep() +
+    //         ", lss=" + getLogicalSuperstep() +
+    //         ", nb=" + getConfiguration().getAsyncConf().needBarrier());
+
+    // YH: reset counter on new global superstep
+    if (getConfiguration().getAsyncConf().disableBarriers()) {
+      getConfiguration().getAsyncConf().resetInFlightBytes();
+    }
+
     if (getSuperstep() != INPUT_SUPERSTEP) {
       // TODO-YH: see mutations in this function call!!!
       workerServer.prepareSuperstep();
@@ -897,15 +908,55 @@ public class BspServiceWorker<I extends WritableComparable,
     // 5. Let the master know it is finished.
     // 6. Wait for the master's superstep info, and check if done
 
+    long workerSentMessages = 0;
+    long workerSentMessageBytes = 0;
+    long localVertices = 0;
+    for (PartitionStats partitionStats : partitionStatsList) {
+      workerSentMessages += partitionStats.getMessagesSentCount();
+      workerSentMessageBytes += partitionStats.getMessageBytesSentCount();
+      localVertices += partitionStats.getVertexCount();
+    }
+
+    AsyncConfiguration asyncConf = getConfiguration().getAsyncConf();
+
+    if (asyncConf.disableBarriers()) {
+      // YH: tracking sent bytes is well-supported, so batch increment
+      // it here (avoids contention between compute threads)
+      asyncConf.addSentBytes(workerSentMessageBytes);
+
+      // Subtle race condition: a remote message can arrive at ANY time,
+      // so we must treat it either as received but unprocessed OR
+      // still in-flight. To do so, we must get the in-flight bytes
+      // count (possibly stale) BEFORE checking remote message store.
+      //
+      // If message was *actually* received and we just missed seeing
+      // that it was, then we treat it as in-flight to handle in the
+      // next global superstep. If message was actually received and
+      // we do see it, then we ignore in-flight bytes and spend another
+      // logical superstep processing the message. Either way, it gets
+      // processed (i.e., we don't erroneously terminate).
+      workerSentMessageBytes = asyncConf.getInFlightBytes();
+    }
+
     // YH: note that this resets needBarrier() to false on every
     // pseudo (and non-pseudo) superstep if conditions below fail
     boolean needBarrier = false;
 
+    MessageStore<I, Writable> remoteMessageStore =
+      asyncConf.doRemoteRead() ?
+      getServerData().getRemoteMessageStore() :
+      getServerData().getCurrentMessageStore();
+
     // YH: need barriers up until the one after SS1, as that's
     // when all missing vertices in the graph are added
-    if (!getConfiguration().getAsyncConf().disableBarriers() ||
-        getLogicalSuperstep() < 2) {
+    if (!asyncConf.disableBarriers() || getLogicalSuperstep() < 2) {
       needBarrier = true;
+
+    } else if (remoteMessageStore.hasMessages()) {
+      // if we received a remote message, spend another logical
+      // superstep to process it (i.e., don't do barrier yet)
+      needBarrier = false;
+
     } else {
       // else, check if (1) all vertices in all partitions are halted
       // OR (2) there are still pending messages in stores
@@ -918,16 +969,16 @@ public class BspServiceWorker<I extends WritableComparable,
             ps.getMessagesSentCount() > 0) {
           needBarrier = false;
         }
+        // TODO-YH: check ZK for incoming??
       }
     }
-    getConfiguration().getAsyncConf().setNeedBarrier(needBarrier);
+    asyncConf.setNeedBarrier(needBarrier);
 
-    //LOG.info("[[PR-internal]] finish: ss=" + getSuperstep() +
+    //LOG.info("[[SP-internal]] ##FINISH##: ss=" + getSuperstep() +
     //         ", lss=" + getLogicalSuperstep() +
-    //         ", nb=" + needBarrier + "-" +
-    //         getConfiguration().getAsyncConf().needBarrier());
+    //         ", nb=" + asyncConf.needBarrier());
 
-    if (getConfiguration().getAsyncConf().needBarrier()) {
+    if (asyncConf.needBarrier()) {
       waitForRequestsToFinish();
 
       // TODO-YH: this function doesn't actually do anything?...
@@ -935,21 +986,12 @@ public class BspServiceWorker<I extends WritableComparable,
       getGraphTaskManager().notifyFinishedCommunication();
     }
 
-    long workerSentMessages = 0;
-    long workerSentMessageBytes = 0;
-    long localVertices = 0;
-    for (PartitionStats partitionStats : partitionStatsList) {
-      workerSentMessages += partitionStats.getMessagesSentCount();
-      workerSentMessageBytes += partitionStats.getMessageBytesSentCount();
-      localVertices += partitionStats.getVertexCount();
-    }
-
     // TODO-YH: post-superstep callbacks may not be safe??
     postSuperstepCallbacks();
 
     // YH: aggregators are unsupported between pseudosupersteps,
     // as Giraph aggregators are all blocking (=> need global barrier)
-    if (getConfiguration().getAsyncConf().needBarrier()) {
+    if (asyncConf.needBarrier()) {
       aggregatorHandler.finishSuperstep(workerAggregatorRequestProcessor);
     }
 
@@ -965,8 +1007,8 @@ public class BspServiceWorker<I extends WritableComparable,
       superstepTimerContext.stop();
     }
 
-    if (getConfiguration().getAsyncConf().needBarrier()) {
-      writeFinshedSuperstepInfoToZK(partitionStatsList,
+    if (asyncConf.needBarrier()) {
+      writeFinishedSuperstepInfoToZK(partitionStatsList,
         workerSentMessages, workerSentMessageBytes);
 
       LoggerUtils.setStatusAndLog(getContext(), LOG, Level.INFO,
@@ -1085,7 +1127,7 @@ public class BspServiceWorker<I extends WritableComparable,
    * @param workerSentMessageBytes Number of message bytes sent
    *                               in superstep.
    */
-  private void writeFinshedSuperstepInfoToZK(
+  private void writeFinishedSuperstepInfoToZK(
       List<PartitionStats> partitionStatsList, long workerSentMessages,
       long workerSentMessageBytes) {
     Collection<PartitionStats> finalizedPartitionStats =

@@ -56,6 +56,8 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
       Logger.getLogger(SendMessageCache.class);
   /** Messages sent during the last superstep */
   protected long totalMsgsSentInSuperstep = 0;
+  /** Local messages sent during the last superstep */
+  protected long totalLocalMsgsSentInSuperstep = 0;
   /** Message bytes sent during the last superstep */
   protected long totalMsgBytesSentInSuperstep = 0;
   /** Max message size sent to a worker */
@@ -196,6 +198,8 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
       // NegativeArraySizeException is copied from catch of write message
       // functions for vertex id iterators (see addPartitionMessages()).
       try {
+        ++totalLocalMsgsSentInSuperstep;
+
         // YH: Dest vertex id needs to be cloned, since we never serialize it.
         // This is handled within message store implementations.
         // (Code path for remote messages need not clone, as dst ids there
@@ -251,6 +255,8 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
       PairList<Integer, VertexIdMessages<I, M>>
         workerMessages = removeWorkerMessages(workerInfo);
       WritableRequest writableRequest = createWritableRequest(workerMessages);
+      // YH: incrSentBytes for AsyncConfiguration (if needed) is done in
+      // BSPServiceWorker to reduce contention
       totalMsgBytesSentInSuperstep += writableRequest.getSerializedSize();
       clientProcessor.doRequest(workerInfo, writableRequest);
       // Notify sending
@@ -342,8 +348,16 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
    * @return The message count sent in last superstep
    */
   public long resetMessageCount() {
-    long messagesSentInSuperstep = totalMsgsSentInSuperstep;
+    // YH: if barriers are disabled, return only local sent messages
+    long messagesSentInSuperstep;
+    if (getConf().getAsyncConf().disableBarriers()) {
+      messagesSentInSuperstep = totalLocalMsgsSentInSuperstep;
+    } else {
+      messagesSentInSuperstep = totalMsgsSentInSuperstep;
+    }
+
     totalMsgsSentInSuperstep = 0;
+    totalLocalMsgsSentInSuperstep = 0;
     return messagesSentInSuperstep;
   }
 
