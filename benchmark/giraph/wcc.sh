@@ -1,10 +1,11 @@
 #!/bin/bash -e
 
 if [ $# -ne 3 ]; then
-    echo "usage: $0 input-graph machines edge-type"
+    echo "usage: $0 input-graph machines exec-mode"
     echo ""
-    echo "edge-type: 0 for byte array edges"
-    echo "           1 for hash map edges"
+    echo "exec-mode: 0 for synchronous BSP"
+    echo "           1 for asynchronous"
+    echo "           2 for barrierless asynchronous"
     exit -1
 fi
 
@@ -22,16 +23,19 @@ hadoop dfs -rmr "$outputdir" || true
 # machine is inefficient! Use more Giraph threads instead (see below).
 machines=$2
 
-edgetype=$3
-case ${edgetype} in
-    0) edgeclass="";;     # byte array edges are used by default
-    1) edgeclass="-Dgiraph.inputOutEdgesClass=org.apache.giraph.edge.HashMapEdges \
-                  -Dgiraph.outEdgesClass=org.apache.giraph.edge.HashMapEdges";;
-    *) echo "Invalid edge-type"; exit -1;;
+execmode=$3
+case ${execmode} in
+    0) execopt="";;     # sync BSP are used by default
+    1) execopt="-Dgiraph.asyncLocalRead=true \
+                -Dgiraph.asyncRemoteRead=true";;
+    2) execopt="-Dgiraph.asyncLocalRead=true \
+                -Dgiraph.asyncRemoteRead=true \
+                -Digraph.asyncDisableBarriers=true";;
+    *) echo "Invalid exec-mode"; exit -1;;
 esac
 
 ## log names
-logname=wcc_${inputgraph}_${machines}_${edgetype}_"$(date +%Y%m%d-%H%M%S)"
+logname=wcc_${inputgraph}_${machines}_${execmode}_"$(date +%Y%m%d-%H%M%S)"
 logfile=${logname}_time.txt       # running time
 
 
@@ -40,10 +44,10 @@ logfile=${logname}_time.txt       # running time
 
 ## start algorithm run
 hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop-1.0.4-jar-with-dependencies.jar org.apache.giraph.GiraphRunner \
-    ${edgeclass} \
-    -Dgiraph.metrics.enable=true \
+    ${execopt} \
     -Dgiraph.asyncLocalRead=true \
     -Dgiraph.asyncRemoteRead=true \
+    -Dgiraph.asyncDisableBarriers=true \
     -Dgiraph.numComputeThreads=${GIRAPH_THREADS} \
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \

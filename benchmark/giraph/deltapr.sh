@@ -1,10 +1,11 @@
 #!/bin/bash -e
 
-if [ $# -ne 3 ]; then
-    echo "usage: $0 input-graph machines edge-type"
+if [ $# -ne 4 ]; then
+    echo "usage: $0 input-graph machines exec-mode supersteps"
     echo ""
-    echo "edge-type: 0 for byte array edges"
-    echo "           1 for hash map edges"
+    echo "exec-mode: 0 for synchronous BSP"
+    echo "           1 for asynchronous"
+    echo "           2 for barrierless asynchronous"
     exit -1
 fi
 
@@ -22,16 +23,21 @@ hadoop dfs -rmr "$outputdir" || true
 # machine is inefficient! Use more Giraph threads instead (see below).
 machines=$2
 
-edgetype=$3
-case ${edgetype} in
-    0) edgeclass="";;     # byte array edges are used by default
-    1) edgeclass="-Dgiraph.inputOutEdgesClass=org.apache.giraph.edge.HashMapEdges \
-                  -Dgiraph.outEdgesClass=org.apache.giraph.edge.HashMapEdges";;
-    *) echo "Invalid edge-type"; exit -1;;
+execmode=$3
+case ${execmode} in
+    0) execopt="";;     # sync BSP are used by default
+    1) execopt="-Dgiraph.asyncLocalRead=true \
+                -Dgiraph.asyncRemoteRead=true";;
+    2) execopt="-Dgiraph.asyncLocalRead=true \
+                -Dgiraph.asyncRemoteRead=true \
+                -Digraph.asyncDisableBarriers=true";;
+    *) echo "Invalid exec-mode"; exit -1;;
 esac
 
+supersteps=$4
+
 ## log names
-logname=deltapr_${inputgraph}_${machines}_${edgetype}_"$(date +%Y%m%d-%H%M%S)"
+logname=deltapr_${inputgraph}_${machines}_${execmode}_${supersteps}_"$(date +%Y%m%d-%H%M%S)"
 logfile=${logname}_time.txt       # running time
 
 
@@ -40,21 +46,23 @@ logfile=${logname}_time.txt       # running time
 
 ## start algorithm run
 hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop-1.0.4-jar-with-dependencies.jar org.apache.giraph.GiraphRunner \
-    ${edgeclass} \
-    -Dgiraph.asyncLocalRead=true \
-    -Dgiraph.asyncRemoteRead=true \
+    ${execopt} \
     -Dgiraph.numComputeThreads=${GIRAPH_THREADS} \
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \
     org.apache.giraph.examples.DeltaPageRankComputation \
     -c org.apache.giraph.combiner.DoubleSumMessageCombiner \
-    -ca DeltaPageRankComputation.maxSS=30 \
-    -ca DeltaPageRankComputation.minTol=2.3 \
+    -ca DeltaPageRankComputation.maxSS=${supersteps} \
     -vif org.apache.giraph.examples.io.formats.SimplePageRankInputFormat \
     -vip /user/${USER}/input/${inputgraph} \
     -vof org.apache.giraph.examples.DeltaPageRankComputation\$DeltaPageRankVertexOutputFormat \
     -op "$outputdir" \
     -w ${machines} 2>&1 | tee -a ./logs/${logfile}
+
+#    -ca DeltaPageRankComputation.minTol=2.3 \
+#    -Dgiraph.inputOutEdgesClass=org.apache.giraph.edge.HashMapEdges \
+#    -Dgiraph.outEdgesClass=org.apache.giraph.edge.HashMapEdges
+
 #    -mc org.apache.giraph.examples.DeltaPageRankComputation\$DeltaPageRankMasterCompute \
 # mc only needed when aggregators needed (which is for error tols)
 # alternative output format: -vof org.apache.giraph.io.formats.IdWithValueTextOutputFormat
