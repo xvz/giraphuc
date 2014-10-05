@@ -269,7 +269,7 @@ def single_iteration(log):
 
     # cut via range, in case somebody decides to put _time.txt in the path
     logname = os.path.basename(log)[:-len('_time.txt')]
-    alg, _, machines, _, _ = logname.split('_')
+    alg, _, machines = logname.split('_')[:3]
 
     # header string
     if (system == SYS_MIZAN) and (alg != ALG_PREMIZAN):
