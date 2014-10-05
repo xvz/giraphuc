@@ -1638,17 +1638,15 @@ public class BspServiceMaster<I extends WritableComparable,
     // are no more messages in the system, stop the computation
     GlobalStats globalStats = aggregateWorkerStats(getSuperstep());
     if (masterCompute.isHalted() ||
-        // YH: if barriers are disabled, must use message bytes
+        // YH: if barriers are disabled, must also use message bytes
         // to see if anything is still in-flight
-        (getConfiguration().getAsyncConf().disableBarriers() &&
-         globalStats.getFinishedVertexCount() ==
+        // (Note: w/ barriers disabled, we don't need to check
+        // message count after SS2, but we DO need to before that)
+        (globalStats.getFinishedVertexCount() ==
          globalStats.getVertexCount() &&
-         globalStats.getMessageBytesCount() == 0) ||
-        // regular termination condition using msg count
-        (!getConfiguration().getAsyncConf().disableBarriers() &&
-         globalStats.getFinishedVertexCount() ==
-         globalStats.getVertexCount() &&
-         globalStats.getMessageCount() == 0)) {
+         globalStats.getMessageCount() == 0 &&
+         (!getConfiguration().getAsyncConf().disableBarriers() ||
+          globalStats.getMessageBytesCount() == 0))) {
       globalStats.setHaltComputation(true);
     } else if (getZkExt().exists(haltComputationPath, false) != null) {
       if (LOG.isInfoEnabled()) {

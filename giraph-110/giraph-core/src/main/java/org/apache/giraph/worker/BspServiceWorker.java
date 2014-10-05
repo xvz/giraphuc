@@ -919,7 +919,9 @@ public class BspServiceWorker<I extends WritableComparable,
 
     AsyncConfiguration asyncConf = getConfiguration().getAsyncConf();
 
-    if (asyncConf.disableBarriers()) {
+    // YH: need barriers up until the one after SS1, as that's
+    // when all missing vertices in the graph are added
+    if (!asyncConf.disableBarriers() || getLogicalSuperstep() < 2) {
       // YH: tracking sent bytes is well-supported, so batch increment
       // it here (avoids contention between compute threads)
       asyncConf.addSentBytes(workerSentMessageBytes);

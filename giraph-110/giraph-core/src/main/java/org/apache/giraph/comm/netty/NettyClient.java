@@ -94,7 +94,11 @@ public class NettyClient {
   public static final String MAX_NUMBER_OF_OPEN_REQUESTS =
       "giraph.maxNumberOfOpenRequests";
   /** Default maximum number of requests without confirmation */
-  public static final int MAX_NUMBER_OF_OPEN_REQUESTS_DEFAULT = 10000;
+  // YH: set this MUCH lower so we don't end up w/ too many open requests
+  // note that this is for, roughly, req/ms rather than req/s
+  //
+  // TODO-YH: tune?
+  public static final int MAX_NUMBER_OF_OPEN_REQUESTS_DEFAULT = 100;
   /** Maximum number of requests to list (for debugging) */
   public static final int MAX_REQUESTS_TO_LIST = 10;
   /**
@@ -192,9 +196,11 @@ public class NettyClient {
     sendBufferSize = CLIENT_SEND_BUFFER_SIZE.get(conf);
     receiveBufferSize = CLIENT_RECEIVE_BUFFER_SIZE.get(conf);
 
+    // YH: have to do this; else we get too many pending requests to wait on
     limitNumberOfOpenRequests = conf.getBoolean(
         LIMIT_NUMBER_OF_OPEN_REQUESTS,
-        LIMIT_NUMBER_OF_OPEN_REQUESTS_DEFAULT);
+        conf.getAsyncConf().disableBarriers());
+    //        LIMIT_NUMBER_OF_OPEN_REQUESTS_DEFAULT);
     if (limitNumberOfOpenRequests) {
       maxNumberOfOpenRequests = conf.getInt(
           MAX_NUMBER_OF_OPEN_REQUESTS,
