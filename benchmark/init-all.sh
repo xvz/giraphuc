@@ -25,6 +25,12 @@ for ((i = 0; i <= ${_NUM_MACHINES}; i++)); do
 done
 wait
 
+#echo "Copying Hadoop as necessary..."
+#for ((i = 0; i <= ${_NUM_MACHINES}; i++)); do
+#    rsync -az "$HADOOP_DIR"/ ${_MACHINES[$i]}:"$HADOOP_DIR"/ &
+#done
+#wait
+
 echo "Updating Hadoop configs..."
 ./hadoop/init.sh > /dev/null      # quiet
 
