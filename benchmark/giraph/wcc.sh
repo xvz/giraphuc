@@ -30,7 +30,7 @@ case ${execmode} in
                 -Dgiraph.asyncRemoteRead=true";;
     2) execopt="-Dgiraph.asyncLocalRead=true \
                 -Dgiraph.asyncRemoteRead=true \
-                -Digraph.asyncDisableBarriers=true";;
+                -Dgiraph.asyncDisableBarriers=true";;
     *) echo "Invalid exec-mode"; exit -1;;
 esac
 
