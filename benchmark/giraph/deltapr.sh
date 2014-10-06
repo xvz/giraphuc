@@ -50,6 +50,7 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop
     -Dgiraph.numComputeThreads=${GIRAPH_THREADS} \
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \
+    -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.DeltaPageRankComputation\$DeltaPageRankVertexValueFactory \
     org.apache.giraph.examples.DeltaPageRankComputation \
     -c org.apache.giraph.combiner.DoubleSumMessageCombiner \
     -ca DeltaPageRankComputation.maxSS=${supersteps} \

@@ -37,10 +37,11 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop
     -Dgiraph.numComputeThreads=${GIRAPH_THREADS} \
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \
+    -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.DeltaPageRankTolFinderComputation\$DeltaPageRankTolFinderVertexValueFactory \
     org.apache.giraph.examples.DeltaPageRankTolFinderComputation \
     -c org.apache.giraph.combiner.DoubleSumMessageCombiner \
     -mc org.apache.giraph.examples.DeltaPageRankTolFinderComputation\$DeltaPageRankTolFinderMasterCompute \
-    -ca DeltaPageRankTolFinderComputation.maxSS=30 \
+    -ca DeltaPageRankTolFinderComputation.maxSS=100 \
     -vif org.apache.giraph.examples.io.formats.SimplePageRankInputFormat \
     -vip /user/${USER}/input/${inputgraph} \
     -vof org.apache.giraph.examples.DeltaPageRankTolFinderComputation\$DeltaPageRankTolFinderVertexOutputFormat \

@@ -92,4 +92,7 @@ public class ConnectedComponentsComputation extends
     }
     vertex.voteToHalt();
   }
+
+  // NOTE: custom vertex value factory not needed---newly added
+  // vertices will have messages indicating their component ID
 }

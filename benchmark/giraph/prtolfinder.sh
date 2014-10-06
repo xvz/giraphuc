@@ -35,18 +35,17 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop
     -Dgiraph.numComputeThreads=${GIRAPH_THREADS} \
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \
-    -Dgiraph.asyncLocalRead=true \
-    -Dgiraph.asyncPageRankLike=true \
+    -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.PageRankTolFinderComputation\$PageRankTolFinderVertexValueFactory \
     org.apache.giraph.examples.PageRankTolFinderComputation \
     -mc org.apache.giraph.examples.PageRankTolFinderComputation\$PageRankTolFinderMasterCompute \
-    -c org.apache.giraph.combiner.DoubleSumMessageCombiner \
-    -ca PageRankTolFinderComputation.maxSS=30 \
+    -ca PageRankTolFinderComputation.maxSS=100 \
     -vif org.apache.giraph.examples.io.formats.SimplePageRankInputFormat \
     -vip /user/${USER}/input/${inputgraph} \
     -vof org.apache.giraph.examples.PageRankTolFinderComputation\$PageRankTolFinderVertexOutputFormat \
     -op "$outputdir" \
     -w ${machines} 2>&1 | tee -a ./logs/${logfile}
-
+#!!!!!!!!!!NOTE!!!!!!!!!!!! combiner is disabled!!!!!!!!!!!!!!!!!!
+#    -c org.apache.giraph.combiner.DoubleSumMessageCombiner \
 # -wc org.apache.giraph.examples.PageRankTolFinderComputation\$PageRankTolFinderWorkerContext
 
 ## finish logging memory + network usage

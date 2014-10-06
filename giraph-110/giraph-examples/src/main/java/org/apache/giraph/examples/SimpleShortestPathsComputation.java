@@ -21,6 +21,7 @@ package org.apache.giraph.examples;
 import org.apache.giraph.graph.BasicComputation;
 import org.apache.giraph.conf.LongConfOption;
 import org.apache.giraph.edge.Edge;
+import org.apache.giraph.factories.DefaultVertexValueFactory;
 import org.apache.giraph.graph.Vertex;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.FloatWritable;
@@ -60,7 +61,7 @@ public class SimpleShortestPathsComputation extends BasicComputation<
   public void compute(
       Vertex<LongWritable, DoubleWritable, FloatWritable> vertex,
       Iterable<DoubleWritable> messages) throws IOException {
-    if (getSuperstep() == 0) {
+    if (getLogicalSuperstep() == 0) {
       vertex.setValue(new DoubleWritable(Double.MAX_VALUE));
     }
     double minDist = isSource(vertex) ? 0d : Double.MAX_VALUE;
@@ -83,5 +84,19 @@ public class SimpleShortestPathsComputation extends BasicComputation<
       }
     }
     vertex.voteToHalt();
+  }
+
+  /**
+   * Value factory context used with {@link SimpleShortestPathsComputation}.
+   *
+   * NOTE: Without this, the results will be INCORRECT because missing
+   * vertices are added with an initial value of 0 rather than +INF.
+   */
+  public static class SimpleShortestPathsVertexValueFactory
+    extends DefaultVertexValueFactory<DoubleWritable> {
+    @Override
+    public DoubleWritable newInstance() {
+      return new DoubleWritable(Double.MAX_VALUE);
+    }
   }
 }

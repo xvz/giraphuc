@@ -25,6 +25,7 @@ import org.apache.giraph.conf.FloatConfOption;
 import org.apache.giraph.aggregators.LongSumAggregator;
 import org.apache.giraph.edge.Edge;
 import org.apache.giraph.edge.EdgeFactory;
+import org.apache.giraph.factories.DefaultVertexValueFactory;
 import org.apache.giraph.graph.BasicComputation;
 import org.apache.giraph.graph.Vertex;
 import org.apache.giraph.io.VertexReader;
@@ -56,17 +57,17 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
   /** Number of supersteps for this test */
   // can't rename this---it's needed by external test classes
   public static final int MAX_SUPERSTEPS = 30;
-  /** Minimum error tolerance; for async only */
-  public static final float MIN_TOLERANCE = 1.0f;
+  ///** Minimum error tolerance; for async only */
+  //public static final float MIN_TOLERANCE = 1.0f;
 
   /** Configurable max number of supersteps */
   public static final IntConfOption MAX_SS =
     new IntConfOption("SimplePageRankComputation.maxSS", MAX_SUPERSTEPS,
                       "The maximum number of supersteps");
-  /** Configurable min error tolerance; for async only */
-  public static final FloatConfOption MIN_TOL =
-    new FloatConfOption("SimplePageRankComputation.minTol", MIN_TOLERANCE,
-                        "The delta/error tolerance to halt at");
+  ///** Configurable min error tolerance; for async only */
+  //public static final FloatConfOption MIN_TOL =
+  //  new FloatConfOption("SimplePageRankComputation.minTol", MIN_TOLERANCE,
+  //                      "The delta/error tolerance to halt at");
 
   /** Logger */
   private static final Logger LOG =
@@ -91,11 +92,10 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
     // each vertex, take its PageRank value and divide by |V|.
     double oldVal = vertex.getValue().get();
 
-    if (getSuperstep() == 0) {
+    if (getLogicalSuperstep() == 0) {
       // FIX: initial value is 1/|V| (or 1), not 0.15/|V| (or 0.15)
-      DoubleWritable vertexValue = new DoubleWritable(1.0);
+      vertex.setValue(new DoubleWritable(1.0));
       // new DoubleWritable(0.15f / getTotalNumVertices());
-      vertex.setValue(vertexValue);
 
     } else {
       // termination when using error tolerance; must wait at least 1SS
@@ -144,6 +144,20 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
     //} else {
     //  aggregate(NUM_ACTIVE_AGG, new LongWritable(1));
     //}
+  }
+
+  /**
+   * Value factory context used with {@link SimplePageRankComputation}.
+   *
+   * NOTE: Without this, the results will be INCORRECT because missing
+   * vertices are added with an initial value of 0 rather than 1.0.
+   */
+  public static class SimplePageRankVertexValueFactory
+    extends DefaultVertexValueFactory<DoubleWritable> {
+    @Override
+    public DoubleWritable newInstance() {
+      return new DoubleWritable(1.0);
+    }
   }
 
   // NOTE: we can't comment these out, as there are test

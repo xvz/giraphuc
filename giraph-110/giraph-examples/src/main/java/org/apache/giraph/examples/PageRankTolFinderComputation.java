@@ -21,6 +21,7 @@ package org.apache.giraph.examples;
 import org.apache.giraph.graph.BasicComputation;
 import org.apache.giraph.conf.IntConfOption;
 import org.apache.giraph.aggregators.DoubleMaxAggregator;
+import org.apache.giraph.factories.DefaultVertexValueFactory;
 import org.apache.giraph.graph.Vertex;
 import org.apache.giraph.io.formats.TextVertexOutputFormat;
 import org.apache.giraph.master.DefaultMasterCompute;
@@ -72,7 +73,7 @@ public class PageRankTolFinderComputation extends BasicComputation<
     // each vertex, take its PageRank value and divide by |V|.
     double oldVal = vertex.getValue().get();
 
-    if (getSuperstep() == 0) {
+    if (getLogicalSuperstep() == 0) {
       // FIX: initial value is 1/|V| (or 1), not 0.15/|V| (or 0.15)
       DoubleWritable vertexValue = new DoubleWritable(1.0);
       //new DoubleWritable(0.15f / getTotalNumVertices());
@@ -102,6 +103,20 @@ public class PageRankTolFinderComputation extends BasicComputation<
   }
 
   /**
+   * Value factory context used with {@link PageRankTolFinderComputation}.
+   *
+   * NOTE: Without this, the results will be INCORRECT because missing
+   * vertices are added with an initial value of 0 rather than 1.0.
+   */
+  public static class PageRankTolFinderVertexValueFactory
+    extends DefaultVertexValueFactory<DoubleWritable> {
+    @Override
+    public DoubleWritable newInstance() {
+      return new DoubleWritable(1.0);
+    }
+  }
+
+  /**
    * Master compute associated with {@link PageRankTolFinderComputation}.
    * It registers required aggregators.
    */
@@ -116,8 +131,8 @@ public class PageRankTolFinderComputation extends BasicComputation<
     @Override
     public void compute() {
       // this is result of aggregators from the *previous* superstep
-      if (getSuperstep() > 0) {
-        LOG.info("SS " + (getSuperstep() - 1) + " max change: " +
+      if (getSuperstep() >= 0) {
+        LOG.info("SS " + getSuperstep() + " max change: " +
                  ((DoubleWritable) getAggregatedValue(MAX_AGG)).get());
       }
     }

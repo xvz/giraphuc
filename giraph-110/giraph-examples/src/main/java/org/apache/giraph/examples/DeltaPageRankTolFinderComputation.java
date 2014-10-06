@@ -21,6 +21,7 @@ package org.apache.giraph.examples;
 import org.apache.giraph.graph.BasicComputation;
 import org.apache.giraph.conf.IntConfOption;
 import org.apache.giraph.aggregators.DoubleMaxAggregator;
+import org.apache.giraph.factories.DefaultVertexValueFactory;
 import org.apache.giraph.graph.Vertex;
 import org.apache.giraph.io.formats.TextVertexOutputFormat;
 import org.apache.giraph.master.DefaultMasterCompute;
@@ -72,7 +73,7 @@ public class DeltaPageRankTolFinderComputation extends BasicComputation<
     // each vertex, take its PageRank value and divide by |V|.
     double delta = 0;
 
-    if (getSuperstep() == 0) {
+    if (getLogicalSuperstep() == 0) {
       vertex.setValue(new DoubleWritable(0.0));
       delta = 0.15;
     }
@@ -95,6 +96,20 @@ public class DeltaPageRankTolFinderComputation extends BasicComputation<
   }
 
   /**
+   * Value factory context used with {@link DeltaPageRankTolFinderComputation}.
+   *
+   * NOTE: Without this, the results will be INCORRECT because missing
+   * vertices are added with an initial value of 0 rather than 0.15.
+   */
+  public static class DeltaPageRankTolFinderVertexValueFactory
+    extends DefaultVertexValueFactory<DoubleWritable> {
+    @Override
+    public DoubleWritable newInstance() {
+      return new DoubleWritable(0.15);
+    }
+  }
+
+  /**
    * Master compute associated with {@link DeltaPageRankTolFinderComputation}.
    * It registers required aggregators.
    */
@@ -109,8 +124,8 @@ public class DeltaPageRankTolFinderComputation extends BasicComputation<
     @Override
     public void compute() {
       // this is result of aggregators from the *previous* superstep
-      if (getSuperstep() > 0) {
-        LOG.info("SS " + (getSuperstep() - 1) + " max change: " +
+      if (getSuperstep() >= 0) {
+        LOG.info("SS " + getSuperstep() + " max change: " +
                  ((DoubleWritable) getAggregatedValue(MAX_AGG)).get());
       }
     }

@@ -21,6 +21,7 @@ package org.apache.giraph.examples;
 import org.apache.giraph.conf.IntConfOption;
 import org.apache.giraph.conf.FloatConfOption;
 import org.apache.giraph.aggregators.LongSumAggregator;
+import org.apache.giraph.factories.DefaultVertexValueFactory;
 import org.apache.giraph.graph.BasicComputation;
 import org.apache.giraph.graph.Vertex;
 import org.apache.giraph.io.formats.TextVertexOutputFormat;
@@ -44,17 +45,17 @@ public class DeltaPageRankComputation extends BasicComputation<LongWritable,
     DoubleWritable, NullWritable, DoubleWritable> {
   /** Number of supersteps for this test */
   public static final int MAX_SUPERSTEPS = 30;
-  /** Minimum error tolerance; for async only */
-  public static final float MIN_TOLERANCE = 1.0f;
+  ///** Minimum error tolerance; for async only */
+  //public static final float MIN_TOLERANCE = 1.0f;
 
   /** Configurable max number of supersteps */
   public static final IntConfOption MAX_SS =
     new IntConfOption("DeltaPageRankComputation.maxSS", MAX_SUPERSTEPS,
                       "The maximum number of supersteps");
-  /** Configurable min error tolerance; for async only */
-  public static final FloatConfOption MIN_TOL =
-    new FloatConfOption("DeltaPageRankComputation.minTol", MIN_TOLERANCE,
-                        "The delta/error tolerance to halt at");
+  ///** Configurable min error tolerance; for async only */
+  //public static final FloatConfOption MIN_TOL =
+  //  new FloatConfOption("DeltaPageRankComputation.minTol", MIN_TOLERANCE,
+  //                      "The delta/error tolerance to halt at");
 
   /** Logger */
   private static final Logger LOG =
@@ -73,7 +74,7 @@ public class DeltaPageRankComputation extends BasicComputation<LongWritable,
     // each vertex, take its PageRank value and divide by |V|.
     double delta = 0;
 
-    if (getSuperstep() == 0) {
+    if (getLogicalSuperstep() == 0) {
       vertex.setValue(new DoubleWritable(0.0));
       delta = 0.15;
     }
@@ -97,7 +98,6 @@ public class DeltaPageRankComputation extends BasicComputation<LongWritable,
           new DoubleWritable(0.85 * delta / vertex.getNumEdges()));
     }
 
-
     // YH: must always send to neighbours, even when we have converged,
     // as otherwise the old value of this vertex is cached. Note that
     // this can potentially wake up many vertices...
@@ -110,6 +110,20 @@ public class DeltaPageRankComputation extends BasicComputation<LongWritable,
 
     // always vote to halt
     vertex.voteToHalt();
+  }
+
+  /**
+   * Value factory context used with {@link DeltaPageRankComputation}.
+   *
+   * NOTE: Without this, the results will be INCORRECT because missing
+   * vertices are added with an initial value of 0 rather than 0.15.
+   */
+  public static class DeltaPageRankVertexValueFactory
+    extends DefaultVertexValueFactory<DoubleWritable> {
+    @Override
+    public DoubleWritable newInstance() {
+      return new DoubleWritable(0.15);
+    }
   }
 
   /**
