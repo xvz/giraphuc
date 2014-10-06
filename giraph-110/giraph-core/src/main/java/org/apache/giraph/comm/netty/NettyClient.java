@@ -97,8 +97,8 @@ public class NettyClient {
   // YH: set this MUCH lower so we don't end up w/ too many open requests
   // note that this is for, roughly, req/ms rather than req/s
   //
-  // TODO-YH: tune?
-  public static final int MAX_NUMBER_OF_OPEN_REQUESTS_DEFAULT = 100;
+  // TODO-YH: tune? (empirically, should keep it <100 for good performance)
+  public static final int MAX_NUMBER_OF_OPEN_REQUESTS_DEFAULT = 30;
   /** Maximum number of requests to list (for debugging) */
   public static final int MAX_REQUESTS_TO_LIST = 10;
   /**

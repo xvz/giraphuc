@@ -1640,8 +1640,10 @@ public class BspServiceMaster<I extends WritableComparable,
     if (masterCompute.isHalted() ||
         // YH: if barriers are disabled, must also use message bytes
         // to see if anything is still in-flight
-        // (Note: w/ barriers disabled, we don't need to check
-        // message count after SS2, but we DO need to before that)
+        //
+        // Note: if barriers disabled after SS X (X >= -1), then we don't
+        // need to check message count after SS X, but we DO need to before
+        // SS X (relevant if X > -1, not so much if X == -1)
         (globalStats.getFinishedVertexCount() ==
          globalStats.getVertexCount() &&
          globalStats.getMessageCount() == 0 &&

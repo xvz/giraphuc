@@ -127,9 +127,9 @@ public class NettyWorkerServer<I extends WritableComparable,
     // exist yet, we won't encounter them in compute loop, so their messages
     // are correctly delayed until subsequent superstep.
     //
-    // This is also safe even between pseudosupersteps, since mutations
-    // are for vertices that belong to this partition.
-    // TODO-YH: ^^^^^^^^^^^ TRUE?!?!?!?!?
+    // This is also safe even between logical supersteps, since mutations
+    // are for vertices that belong to this partition AND because there
+    // are no race conditions (exactly one thread executes this).
     resolveMutations();
   }
 

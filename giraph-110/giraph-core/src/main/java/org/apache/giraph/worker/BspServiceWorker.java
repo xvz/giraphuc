@@ -788,22 +788,21 @@ public class BspServiceWorker<I extends WritableComparable,
     // 3. Wait until the partition assignment is complete and get it
     // 4. Get the aggregator values from the previous superstep
 
-    //LOG.info("[[SP-internal]] ##START##: ss=" + getSuperstep() +
+    //LOG.info("[[PR-internal]] ##START##: ss=" + getSuperstep() +
     //         ", lss=" + getLogicalSuperstep() +
     //         ", nb=" + getConfiguration().getAsyncConf().needBarrier());
 
     // YH: reset counter on new global superstep
-    if (getConfiguration().getAsyncConf().disableBarriers()) {
+    if (getConfiguration().getAsyncConf().needBarrier()) {
       getConfiguration().getAsyncConf().resetInFlightBytes();
     }
 
     if (getSuperstep() != INPUT_SUPERSTEP) {
-      // TODO-YH: see mutations in this function call!!!
       workerServer.prepareSuperstep();
     }
 
     // YH: SKIP getting assignments/rebalancing---master is unaware
-    // of workers' pseudsupersteps. Also skip registering health,
+    // of workers' logical supersteps. Also skip registering health,
     // as global SS has not changed (re-registering for same SS will
     // cause exception).
     //
@@ -919,11 +918,13 @@ public class BspServiceWorker<I extends WritableComparable,
 
     AsyncConfiguration asyncConf = getConfiguration().getAsyncConf();
 
-    // YH: only use in-flight bytes when we're beyond SS1 (otherwise
-    // we can run into case where remote messages ARE received,
-    // but we can't spend a logical SS to process them b/c we need
-    // another barrier (for mutations) => master erroneously terminates)
-    if (asyncConf.disableBarriers() && getLogicalSuperstep() >= 2) {
+    // YH: only use in-flight bytes when we're beyond SS -1 (INPUT_SUPERSTEP)
+    //
+    // More generally, when barriers are disabled after SS X (X >= -1), we
+    // can run into case where remote messages ARE received, but we can't
+    // spend a logical SS to process them b/c another global barrier is needed
+    // => master erroneously terminates.
+    if (asyncConf.disableBarriers() && getLogicalSuperstep() >= 0) {
       // YH: tracking sent bytes is well-supported, so batch increment
       // it here (avoids contention between compute threads)
       asyncConf.addSentBytes(workerSentMessageBytes);
@@ -951,9 +952,8 @@ public class BspServiceWorker<I extends WritableComparable,
       getServerData().getRemoteMessageStore() :
       getServerData().getCurrentMessageStore();
 
-    // YH: need barriers up until the one after SS1, as that's
-    // when all missing vertices in the graph are added
-    if (!asyncConf.disableBarriers() || getLogicalSuperstep() < 2) {
+    // YH: need barriers until after SS -1 (INPUT_SUPERSTEP)
+    if (!asyncConf.disableBarriers() || getLogicalSuperstep() < 0) {
       needBarrier = true;
 
     } else if (remoteMessageStore.hasMessages()) {
@@ -978,7 +978,7 @@ public class BspServiceWorker<I extends WritableComparable,
     }
     asyncConf.setNeedBarrier(needBarrier);
 
-    //LOG.info("[[SP-internal]] ##FINISH##: ss=" + getSuperstep() +
+    //LOG.info("[[PR-internal]] ##FINISH##: ss=" + getSuperstep() +
     //         ", lss=" + getLogicalSuperstep() +
     //         ", nb=" + asyncConf.needBarrier());
 
