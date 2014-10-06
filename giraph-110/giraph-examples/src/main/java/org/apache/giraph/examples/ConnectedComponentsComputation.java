@@ -20,6 +20,7 @@ package org.apache.giraph.examples;
 
 import org.apache.giraph.graph.BasicComputation;
 //import org.apache.giraph.edge.Edge;
+import org.apache.giraph.factories.DefaultVertexValueFactory;
 import org.apache.giraph.graph.Vertex;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
@@ -60,23 +61,16 @@ public class ConnectedComponentsComputation extends
   public void compute(
       Vertex<LongWritable, LongWritable, NullWritable> vertex,
       Iterable<LongWritable> messages) throws IOException {
+
     long currentComponent = vertex.getValue().get();
+    boolean changed = false;    // did we get a smaller id?
 
-    // in first superstep, load proper vertex values and then broadcast
-    if (getSuperstep() == 0) {
+    // vertices initially start w/ their own id as component id
+    if (getLogicalSuperstep() == 0) {
       currentComponent = vertex.getId().get();
-      vertex.setValue(new LongWritable(currentComponent));
-
-      // indiscriminately send messages to all neighbours,
-      // as this mirrors GPS and Mizan implementations
-      sendMessageToAllEdges(vertex, vertex.getValue());
-
-      vertex.voteToHalt();
-      return;
+      changed = true;
     }
 
-    boolean changed = false;
-    // did we get a smaller id ?
     for (LongWritable message : messages) {
       long candidateComponent = message.get();
       if (candidateComponent < currentComponent) {
@@ -93,6 +87,18 @@ public class ConnectedComponentsComputation extends
     vertex.voteToHalt();
   }
 
-  // NOTE: custom vertex value factory not needed---newly added
-  // vertices will have messages indicating their component ID
+  /**
+   * Value factory context used with {@link ConnectedComponentsComputation}.
+   *
+   * NOTE: Without this, the results will be INCORRECT because missing
+   * vertices are added with an initial value of 0 and so do not take
+   * on any component IDs larger than that.
+   */
+  public static class ConnectedComponentsVertexValueFactory
+    extends DefaultVertexValueFactory<LongWritable> {
+    @Override
+    public LongWritable newInstance() {
+      return new LongWritable(Long.MAX_VALUE);
+    }
+  }
 }
