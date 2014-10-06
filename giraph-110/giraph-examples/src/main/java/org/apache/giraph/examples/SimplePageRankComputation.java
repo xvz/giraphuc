@@ -19,7 +19,7 @@
 package org.apache.giraph.examples;
 
 import org.apache.giraph.conf.IntConfOption;
-import org.apache.giraph.conf.FloatConfOption;
+//import org.apache.giraph.conf.FloatConfOption;
 //import org.apache.giraph.aggregators.DoubleMaxAggregator;
 //import org.apache.giraph.aggregators.DoubleMinAggregator;
 import org.apache.giraph.aggregators.LongSumAggregator;

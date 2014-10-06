@@ -19,7 +19,7 @@
 package org.apache.giraph.examples;
 
 import org.apache.giraph.conf.IntConfOption;
-import org.apache.giraph.conf.FloatConfOption;
+//import org.apache.giraph.conf.FloatConfOption;
 import org.apache.giraph.aggregators.LongSumAggregator;
 import org.apache.giraph.factories.DefaultVertexValueFactory;
 import org.apache.giraph.graph.BasicComputation;
