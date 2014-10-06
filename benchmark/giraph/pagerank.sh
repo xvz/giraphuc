@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-if [ $# -ne 3 ]; then
+if [ $# -ne 4 ]; then
     echo "usage: $0 input-graph machines exec-mode supersteps"
     echo ""
     echo "exec-mode: 0 for synchronous BSP"
