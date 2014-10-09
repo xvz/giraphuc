@@ -18,6 +18,7 @@
 
 package org.apache.giraph.conf;
 
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.log4j.Logger;
 
 /**
@@ -48,7 +49,7 @@ public class AsyncConfiguration {
   /** Is a global barrier needed? */
   private boolean needBarrier;
   /** Local in-flight message bytes */
-  private long inFlightBytes;
+  private AtomicLong inFlightBytes;
 
   // YH: inFlightBytes tracks the number of bytes this worker has sent
   // to remote workers MINUS the bytes this worker has received from
@@ -79,6 +80,8 @@ public class AsyncConfiguration {
     isNewPhase = true;
     // special case: first superstep always needs barrier after
     needBarrier = true;
+
+    inFlightBytes = new AtomicLong();
   }
 
   /**
@@ -175,15 +178,15 @@ public class AsyncConfiguration {
    *
    * @return Local in-flight bytes
    */
-  public synchronized long getInFlightBytes() {
-    return inFlightBytes;
+  public long getInFlightBytes() {
+    return inFlightBytes.get();
   }
 
   /**
    * Reset the local in-flight message bytes
    */
-  public synchronized void resetInFlightBytes() {
-    inFlightBytes = 0;
+  public void resetInFlightBytes() {
+    inFlightBytes.set(0);
   }
 
   /**
@@ -195,9 +198,9 @@ public class AsyncConfiguration {
    *
    * @param recvBytes Received message bytes
    */
-  public synchronized void addRecvBytes(long recvBytes) {
-    // must synchronize, as multiple comm threads can cause race
-    inFlightBytes -= recvBytes;
+  public void addRecvBytes(long recvBytes) {
+    // note that this is subtracting
+    inFlightBytes.addAndGet(-recvBytes);
   }
 
   /**
@@ -209,7 +212,7 @@ public class AsyncConfiguration {
    *
    * @param sentBytes Sent message bytes
    */
-  public synchronized void addSentBytes(long sentBytes) {
-    inFlightBytes += sentBytes;
+  public void addSentBytes(long sentBytes) {
+    inFlightBytes.addAndGet(sentBytes);
   }
 }
