@@ -184,8 +184,18 @@ public class LongDoubleMessageWithSourceStore
 
   @Override
   public boolean hasMessagesForVertex(LongWritable vertexId) {
-    // YH: used with single thread
-    return getPartitionMap(vertexId).containsKey(vertexId.get());
+    Long2ObjectOpenHashMap<?> partitionMap = getPartitionMap(vertexId);
+    synchronized (partitionMap) {
+      return partitionMap.containsKey(vertexId.get());
+    }
+  }
+
+  @Override
+  public boolean hasMessagesForPartition(int partitionId) {
+    Long2ObjectOpenHashMap<?> partitionMap = map.get(partitionId);
+    synchronized (partitionMap) {
+      return partitionMap != null && !partitionMap.isEmpty();
+    }
   }
 
   @Override

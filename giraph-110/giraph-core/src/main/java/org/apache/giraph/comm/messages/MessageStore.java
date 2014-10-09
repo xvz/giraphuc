@@ -83,7 +83,15 @@ public interface MessageStore<I extends WritableComparable,
   boolean hasMessagesForVertex(I vertexId);
 
   /**
-   * Check if we have any unprocessed messages.
+   * YH: Check if we have any unprocessed messages for a partition.
+   *
+   * @param partitionId Id of partition
+   * @return True if we have unprocessed messages for the partition
+   */
+  boolean hasMessagesForPartition(int partitionId);
+
+  /**
+   * YH: Check if we have any unprocessed messages.
    *
    * @return True if we have unprocessed messages
    */

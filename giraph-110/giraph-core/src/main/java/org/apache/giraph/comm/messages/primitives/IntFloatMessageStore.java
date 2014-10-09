@@ -158,8 +158,18 @@ public class IntFloatMessageStore
 
   @Override
   public boolean hasMessagesForVertex(IntWritable vertexId) {
-    // YH: used with single thread
-    return getPartitionMap(vertexId).containsKey(vertexId.get());
+    Int2FloatOpenHashMap partitionMap = getPartitionMap(vertexId);
+    synchronized (partitionMap) {
+      return partitionMap.containsKey(vertexId.get());
+    }
+  }
+
+  @Override
+  public boolean hasMessagesForPartition(int partitionId) {
+    Int2FloatOpenHashMap partitionMap = map.get(partitionId);
+    synchronized (partitionMap) {
+      return partitionMap != null && !partitionMap.isEmpty();
+    }
   }
 
   @Override

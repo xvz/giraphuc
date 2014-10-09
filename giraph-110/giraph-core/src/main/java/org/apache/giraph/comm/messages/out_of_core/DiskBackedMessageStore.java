@@ -143,6 +143,13 @@ public class DiskBackedMessageStore<I extends WritableComparable,
   }
 
   @Override
+  public boolean hasMessagesForPartition(int partitionId) {
+    PartitionDiskBackedMessageStore<I, M> msgStore =
+      partitionMessageStores.get(partitionId);
+    return msgStore != null && msgStore.hasMessages();
+  }
+
+  @Override
   public boolean hasMessages() {
     for (PartitionDiskBackedMessageStore<I, M> msgStore :
            partitionMessageStores.values()) {

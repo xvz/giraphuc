@@ -206,6 +206,12 @@ public abstract class SimpleMessageWithSourceStore<
   }
 
   @Override
+  public boolean hasMessagesForPartition(int partitionId) {
+    ConcurrentMap<I, ?> partitionMap = map.get(partitionId);
+    return partitionMap != null && !partitionMap.isEmpty();
+  }
+
+  @Override
   public boolean hasMessages() {
     for (ConcurrentMap<I, ?> partitionMap : map.values()) {
       if (!partitionMap.isEmpty()) {
