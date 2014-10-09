@@ -18,6 +18,7 @@
 
 package org.apache.giraph.comm.requests;
 
+import org.apache.giraph.bsp.BspService;
 import org.apache.giraph.comm.ServerData;
 import org.apache.giraph.comm.messages.MessageStore;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
@@ -72,6 +73,13 @@ public class SendWorkerMessagesRequest<I extends WritableComparable,
   @Override
   public void doRequest(ServerData serverData) {
     doRequest(serverData, false);  // YH: wrapper call
+
+    if (getConf().getAsyncConf().disableBarriers()) {
+      // YH: signal to notify worker that remote message has arrived
+      // (in case worker is blocking on "ready to finish" barrier)
+      ((BspService) serverData.getServiceWorker()).
+        getSuperstepReadyToFinishEvent().signal();
+    }
   }
 
   @Override

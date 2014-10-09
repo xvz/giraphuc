@@ -25,6 +25,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map.Entry;
 
+import org.apache.giraph.bsp.BspService;
 import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.comm.ServerData;
 import org.apache.giraph.comm.messages.MessageStore;
@@ -93,6 +94,13 @@ public class SendWorkerOneToAllMessagesRequest<I extends WritableComparable,
   @Override
   public void doRequest(ServerData serverData) {
     doRequest(serverData, false);  // YH: wrapper call
+
+    if (getConf().getAsyncConf().disableBarriers()) {
+      // YH: signal to notify worker that remote message has arrived
+      // (in case worker is blocking on "ready to finish" barrier)
+      ((BspService) serverData.getServiceWorker()).
+        getSuperstepReadyToFinishEvent().signal();
+    }
   }
 
   @Override

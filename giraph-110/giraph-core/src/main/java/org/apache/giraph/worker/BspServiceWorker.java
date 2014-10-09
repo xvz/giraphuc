@@ -924,7 +924,8 @@ public class BspServiceWorker<I extends WritableComparable,
     // can run into case where remote messages ARE received, but we can't
     // spend a logical SS to process them b/c another global barrier is needed
     // => master erroneously terminates.
-    if (asyncConf.disableBarriers() && getLogicalSuperstep() >= 0) {
+    if (asyncConf.disableBarriers() &&
+        getLogicalSuperstep() > INPUT_SUPERSTEP) {
       // YH: tracking sent bytes is well-supported, so batch increment
       // it here (avoids contention between compute threads)
       asyncConf.addSentBytes(workerSentMessageBytes);
@@ -953,7 +954,8 @@ public class BspServiceWorker<I extends WritableComparable,
       getServerData().getCurrentMessageStore();
 
     // YH: need barriers until after SS -1 (INPUT_SUPERSTEP)
-    if (!asyncConf.disableBarriers() || getLogicalSuperstep() < 0) {
+    if (!asyncConf.disableBarriers() ||
+        getLogicalSuperstep() <= INPUT_SUPERSTEP) {
       needBarrier = true;
 
     } else if (remoteMessageStore.hasMessages()) {
@@ -973,7 +975,6 @@ public class BspServiceWorker<I extends WritableComparable,
             ps.getMessagesSentCount() > 0) {
           needBarrier = false;
         }
-        // TODO-YH: check ZK for incoming??
       }
     }
     asyncConf.setNeedBarrier(needBarrier);
@@ -985,10 +986,24 @@ public class BspServiceWorker<I extends WritableComparable,
     if (asyncConf.needBarrier()) {
       waitForRequestsToFinish();
 
-      // TODO-YH: this function doesn't actually do anything?...
-      // (communicationTimerContext looks to always be null)
-      getGraphTaskManager().notifyFinishedCommunication();
+      // YH: if barriers are disabled and we are going to wait for
+      // global superstep, approach "ready to sync" barrier first.
+      //
+      // Must place this here b/c:
+      // (1) barrier must be AFTER all requests are ACKed by their destinations
+      //     => this must be after waitForRequestsToFinish()
+      // (2) post global-SS tasks must be done AFTER committing to wait
+      //     at global barrier without leaving (here, workers can leave)
+      //     => this must be before post-superstep/aggregator finish, etc.
+      if (asyncConf.disableBarriers() &&
+          getLogicalSuperstep() > INPUT_SUPERSTEP) {
+        if (!waitForWorkersOrMessages()) {
+          asyncConf.setNeedBarrier(false);
+        }
+      }
     }
+
+    getGraphTaskManager().notifyFinishedCommunication();
 
     // TODO-YH: post-superstep callbacks may not be safe??
     postSuperstepCallbacks();
@@ -1066,9 +1081,6 @@ public class BspServiceWorker<I extends WritableComparable,
       // is a GLOBAL condition.
       return null;
     }
-
-    // TODO-YH: see partitionExchange.getMyDependencyWorkerSet()
-    // for how to (possibly) track incoming message dependencies
   }
 
   /**
@@ -1099,6 +1111,93 @@ public class BspServiceWorker<I extends WritableComparable,
     GiraphTimerContext timerContext = waitRequestsTimer.time();
     workerClient.waitAllRequests();
     timerContext.stop();
+  }
+
+  /**
+   * YH: Create required ZK path and wait for all other workers to finish, but
+   * exit wait state (and delete ZK path) if a remote message arrives.
+   *
+   * @return True on successful wait. False if interrupted by message arrival.
+   */
+  private boolean waitForWorkersOrMessages() {
+    MessageStore<I, Writable> remoteMessageStore =
+      getConfiguration().getAsyncConf().doRemoteRead() ?
+      getServerData().getRemoteMessageStore() :
+      getServerData().getCurrentMessageStore();
+
+    // ZK path to wait on (created by master)
+    String superstepReadyToFinishNode =
+      getSuperstepReadyToFinishPath(getApplicationAttempt(), getSuperstep());
+
+    // create ZK path
+    String finishedWorkerPath =
+      getWorkerReadyToFinishPath(getApplicationAttempt(), getSuperstep()) +
+      "/" + getHostnamePartitionId();
+
+    try {
+      // YH: "true" for recursive not really needed but false won't make it
+      // any faster, so leave it to be safe
+      getZkExt().createExt(finishedWorkerPath,
+          null,
+          Ids.OPEN_ACL_UNSAFE,
+          CreateMode.PERSISTENT,
+          true);
+    } catch (KeeperException.NodeExistsException e) {
+      LOG.warn("finishSuperstep: ready to finish worker path " +
+               finishedWorkerPath + " already exists!");
+    } catch (KeeperException e) {
+      throw new IllegalStateException("Creating " + finishedWorkerPath +
+          " failed with KeeperException", e);
+    } catch (InterruptedException e) {
+      throw new IllegalStateException("Creating " + finishedWorkerPath +
+          " failed with InterruptedException", e);
+    }
+
+    try {
+      // YH: first, we check whether or not ZK node/path exists (this path
+      // is created by master when all workers are present) and also register
+      // a "watch". This tells ZK to notify this client when the watched path
+      // is created/deleted/changed, etc. Then, we go ahead and wait on a
+      // BspEvent, basically a condition var.
+      //
+      // When desired WatchEvent occurs, we can process it (in another thread)
+      // by signalling the condition var that this thread is waiting on. Since
+      // watches are one-time only, we don't need to explicitly remove it.
+      while (getZkExt().exists(superstepReadyToFinishNode, true) == null) {
+        // signalled in BspService#process OR upon message arrival
+        getSuperstepReadyToFinishEvent().waitForever();
+
+        // check if signal was due to message arrival
+        if (remoteMessageStore.hasMessages()) {
+          try {
+            // YH: "true" for recursive not really needed but false
+            // won't make it any faster, so leave it to be safe
+            getZkExt().deleteExt(finishedWorkerPath, -1, true);
+            return false;
+
+          } catch (KeeperException e) {
+            throw new IllegalStateException("Deleting " + finishedWorkerPath +
+                " failed with KeeperException", e);
+          } catch (InterruptedException e) {
+            throw new IllegalStateException("Deleting " + finishedWorkerPath +
+                " failed with InterruptedException", e);
+          }
+        }
+
+        // not a message; reset condition var
+        getSuperstepReadyToFinishEvent().reset();
+      }
+      return true;
+
+    } catch (KeeperException e) {
+      throw new IllegalStateException(
+          "finishSuperstep: Failed while waiting for master to " +
+              "signal prepare-to-finish superstep " + getSuperstep(), e);
+    } catch (InterruptedException e) {
+      throw new IllegalStateException(
+          "finishSuperstep: Failed while waiting for master to " +
+              "signal prepare-to-finish superstep " + getSuperstep(), e);
+    }
   }
 
   /**

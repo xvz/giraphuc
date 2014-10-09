@@ -62,9 +62,16 @@ public class AsyncConfiguration {
    * @param conf GiraphConfiguration
    */
   public AsyncConfiguration(GiraphConfiguration conf) {
-    doLocalRead = GiraphConfiguration.ASYNC_LOCAL_READ.get(conf);
-    doRemoteRead = GiraphConfiguration.ASYNC_REMOTE_READ.get(conf);
     disableBarriers = GiraphConfiguration.ASYNC_DISABLE_BARRIERS.get(conf);
+
+    if (disableBarriers) {
+      doLocalRead = true;
+      doRemoteRead = true;
+    } else {
+      doLocalRead = GiraphConfiguration.ASYNC_LOCAL_READ.get(conf);
+      doRemoteRead = GiraphConfiguration.ASYNC_REMOTE_READ.get(conf);
+    }
+
     maxNumMsgs = GiraphConfiguration.ASYNC_MAX_NUM_MSGS.get(conf);
     needAllMsgs = GiraphConfiguration.ASYNC_NEED_ALL_MSGS.get(conf);
 

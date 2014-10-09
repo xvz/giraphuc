@@ -1414,7 +1414,7 @@ public class BspServiceMaster<I extends WritableComparable,
   /**
    * Clean up old superstep data from Zookeeper
    *
-   * @param removeableSuperstep Supersteo to clean up
+   * @param removeableSuperstep Superstep to clean up
    * @throws InterruptedException
    */
   private void cleanUpOldSuperstep(long removeableSuperstep) throws
@@ -1617,6 +1617,27 @@ public class BspServiceMaster<I extends WritableComparable,
         coordinateInputSplits(edgeInputSplitsPaths, edgeInputSplitsEvents,
             "Edge");
       }
+    }
+
+    if (getConfiguration().getAsyncConf().disableBarriers() &&
+        getSuperstep() > INPUT_SUPERSTEP) {
+      // YH: these paths are also cleaned up when master removes old SS dirs
+      String readyToFinishWorkerPath =
+        getWorkerReadyToFinishPath(getApplicationAttempt(), getSuperstep());
+      if (!barrierOnWorkerList(readyToFinishWorkerPath,
+                               chosenWorkerInfoList,
+                               getSuperstepStateChangedEvent())) {
+        return SuperstepState.WORKER_FAILURE;
+      }
+
+      // YH: let workers know (via ZK) that this barrier is done
+      String superstepReadyToFinishNode =
+        getSuperstepReadyToFinishPath(getApplicationAttempt(), getSuperstep());
+      getZkExt().createExt(superstepReadyToFinishNode,
+          null,
+          Ids.OPEN_ACL_UNSAFE,
+          CreateMode.PERSISTENT,
+          true);
     }
 
     String finishedWorkerPath =
@@ -1957,6 +1978,15 @@ public class BspServiceMaster<I extends WritableComparable,
             "in " + event.getPath());
       }
       checkHealthyWorkerFailure(event.getPath());
+      superstepStateChanged.signal();
+      foundEvent = true;
+    } else if (event.getPath().contains(WORKER_READY_TO_FINISH_DIR) &&
+        event.getType() == EventType.NodeChildrenChanged) {
+      // YH: same as one below, but duplicated for clarity
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("processEvent: Worker ready to finish (or received msg) " +
+            "event - superstepStateChanged signaled");
+      }
       superstepStateChanged.signal();
       foundEvent = true;
     } else if (event.getPath().contains(WORKER_FINISHED_DIR) &&

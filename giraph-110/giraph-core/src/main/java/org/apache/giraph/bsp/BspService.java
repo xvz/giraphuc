@@ -147,6 +147,9 @@ public abstract class BspService<I extends WritableComparable,
   /** Workers which wrote checkpoint notify here */
   public static final String WORKER_WROTE_CHECKPOINT_DIR =
       "/_workerWroteCheckpointDir";
+  /** YH: Ready to finish workers notify here */
+  public static final String WORKER_READY_TO_FINISH_DIR =
+    "/_workerReadyToFinishDir";
   /** Finished workers notify here */
   public static final String WORKER_FINISHED_DIR = "/_workerFinishedDir";
   /** Where the master and worker addresses and partition assignments are set */
@@ -155,6 +158,9 @@ public abstract class BspService<I extends WritableComparable,
   /** Helps coordinate the partition exchnages */
   public static final String PARTITION_EXCHANGE_DIR =
       "/_partitionExchangeDir";
+  /** YH: Denotes that the pre-"superstep finish" barrier is done */
+  public static final String SUPERSTEP_READY_TO_FINISH_NODE =
+    "/_superstepReadyToFinish";
   /** Denotes that the superstep is done */
   public static final String SUPERSTEP_FINISHED_NODE = "/_superstepFinished";
   /** Stores progress info for workers */
@@ -242,6 +248,8 @@ public abstract class BspService<I extends WritableComparable,
   private final BspEvent addressesAndPartitionsReadyChanged;
   /** Application attempt changed */
   private final BspEvent applicationAttemptChanged;
+  /** YH: Pre-"superstep finished" synchronization */
+  private final BspEvent superstepReadyToFinish;
   /** Superstep finished synchronization */
   private final BspEvent superstepFinished;
   /** Master election changed for any waited on attempt */
@@ -296,6 +304,7 @@ public abstract class BspService<I extends WritableComparable,
     this.workerHealthRegistrationChanged = new PredicateLock(context);
     this.addressesAndPartitionsReadyChanged = new PredicateLock(context);
     this.applicationAttemptChanged = new PredicateLock(context);
+    this.superstepReadyToFinish = new PredicateLock(context);
     this.superstepFinished = new PredicateLock(context);
     this.masterElectionChildrenChanged = new PredicateLock(context);
     this.cleanedUpChildrenChanged = new PredicateLock(context);
@@ -308,6 +317,7 @@ public abstract class BspService<I extends WritableComparable,
     registerBspEvent(edgeInputSplitsEvents.getStateChanged());
     registerBspEvent(addressesAndPartitionsReadyChanged);
     registerBspEvent(applicationAttemptChanged);
+    registerBspEvent(superstepReadyToFinish);
     registerBspEvent(superstepFinished);
     registerBspEvent(masterElectionChildrenChanged);
     registerBspEvent(cleanedUpChildrenChanged);
@@ -500,6 +510,20 @@ public abstract class BspService<I extends WritableComparable,
   }
 
   /**
+   * YH: Generate the worker "ready to finish" directory path for a
+   * superstep
+   *
+   * @param attempt application attempt number
+   * @param superstep superstep to use
+   * @return directory path based on the a superstep
+   */
+  public final String getWorkerReadyToFinishPath(long attempt,
+                                                 long superstep) {
+    return applicationAttemptsPath + "/" + attempt +
+        SUPERSTEP_DIR + "/" + superstep + WORKER_READY_TO_FINISH_DIR;
+  }
+
+  /**
    * Generate the worker "finished" directory path for a
    * superstep
    *
@@ -552,6 +576,20 @@ public abstract class BspService<I extends WritableComparable,
       WorkerInfo workerInfo) {
     return getPartitionExchangePath(attempt, superstep) +
         "/" + workerInfo.getHostnameId();
+  }
+
+  /**
+   * YH: Generate the "superstep ready to finish" directory path
+   * for a superstep
+   *
+   * @param attempt application attempt number
+   * @param superstep superstep to use
+   * @return directory path based on the a superstep
+   */
+  public final String getSuperstepReadyToFinishPath(long attempt,
+                                                    long superstep) {
+    return applicationAttemptsPath + "/" + attempt +
+        SUPERSTEP_DIR + "/" + superstep + SUPERSTEP_READY_TO_FINISH_NODE;
   }
 
   /**
@@ -688,6 +726,10 @@ public abstract class BspService<I extends WritableComparable,
 
   public final BspEvent getApplicationAttemptChangedEvent() {
     return applicationAttemptChanged;
+  }
+
+  public final BspEvent getSuperstepReadyToFinishEvent() {
+    return superstepReadyToFinish;
   }
 
   public final BspEvent getSuperstepFinishedEvent() {
@@ -1032,6 +1074,14 @@ public abstract class BspService<I extends WritableComparable,
             "(partitions are assigned)");
       }
       addressesAndPartitionsReadyChanged.signal();
+      eventProcessed = true;
+    } else if (event.getPath().contains(SUPERSTEP_READY_TO_FINISH_NODE) &&
+        event.getType() == EventType.NodeCreated) {
+      // YH: this is only used for async w/ barriers disabled
+      if (LOG.isInfoEnabled()) {
+        LOG.info("process: superstepReadyToFinish signaled");
+      }
+      superstepReadyToFinish.signal();
       eventProcessed = true;
     } else if (event.getPath().contains(SUPERSTEP_FINISHED_NODE) &&
         event.getType() == EventType.NodeCreated) {

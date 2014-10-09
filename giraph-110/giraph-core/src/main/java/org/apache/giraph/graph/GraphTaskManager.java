@@ -305,7 +305,7 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
 
       // YH: pass in correct message store (either remote-only or BSP)
       // TODO-YH: put this logic into ServerData instead?
-      //   (also see BspServiceWorker#finishSuperstep)
+      //   (also see BspServiceWorker#finishSuperstep & message requests)
       MessageStore<I, Writable> messageStore =
         conf.getAsyncConf().doRemoteRead() ?
         serviceWorker.getServerData().getRemoteMessageStore() :
