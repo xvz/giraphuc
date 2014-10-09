@@ -22,6 +22,7 @@ import org.apache.giraph.comm.WorkerClientRequestProcessor;
 import org.apache.giraph.comm.messages.MessageStore;
 import org.apache.giraph.comm.messages.with_source.MessageWithSourceStore;
 import org.apache.giraph.comm.netty.NettyWorkerClientRequestProcessor;
+import org.apache.giraph.conf.AsyncConfiguration;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.io.SimpleVertexWriter;
 import org.apache.giraph.metrics.GiraphMetrics;
@@ -168,18 +169,24 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         PartitionStats partitionStats =
             computePartition(computation, partition);
         partitionStatsList.add(partitionStats);
+
         // YH: if barriers are disabled, number of messages is LOCAL
         // number of messages; otherwise it is total (local + remote)
         // TODO-YH: Note that this can make metrics incorrect!!
         long partitionMsgs = workerClientRequestProcessor.resetMessageCount();
         partitionStats.addMessagesSentCount(partitionMsgs);
         messagesSentCounter.inc(partitionMsgs);
+
         // YH: if async is enabled, messages bytes is always for
         // REMOTE messages; otherwise it is total (local + remote)
         long partitionMsgBytes =
           workerClientRequestProcessor.resetMessageBytesCount();
         partitionStats.addMessageBytesSentCount(partitionMsgBytes);
         messageBytesSentCounter.inc(partitionMsgBytes);
+
+        // TODO-YH: why does recomputing here (or adding partition id
+        // back on to queue) cause termination issues?
+
         timedLogger.info("call: Completed " +
             partitionStatsList.size() + " partitions, " +
             partitionIdQueue.size() + " remaining " +
@@ -238,6 +245,9 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
     PartitionStats partitionStats =
         new PartitionStats(partition.getId(), 0, 0, 0, 0, 0);
     long verticesComputedProgress = 0;
+
+    AsyncConfiguration asyncConf = configuration.getAsyncConf();
+
     // Make sure this is thread-safe across runs
     synchronized (partition) {
       for (Vertex<I, V, E> vertex : partition) {
@@ -280,11 +290,10 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         // TODO-YH: deal with pending mutations by skipping message remove()
         // for vertices that don't yet exist
 
-        if (configuration.getAsyncConf().doRemoteRead() &&
-            configuration.getAsyncConf().isNewPhase()) {
+        if (asyncConf.doRemoteRead() && asyncConf.isNewPhase()) {
           // for needAllMsgs(), nothing needs to be done either
           messages = EmptyIterable.<M1>get();
-        } else if (configuration.getAsyncConf().needAllMsgs()) {
+        } else if (asyncConf.needAllMsgs()) {
           // no need to remove, as we always overwrite
           messages = ((MessageWithSourceStore) messageStore).
             getVertexMessagesWithoutSource(vertex.getId());
@@ -293,16 +302,14 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
           messages = messageStore.removeVertexMessages(vertex.getId());
         }
 
-        if (configuration.getAsyncConf().doLocalRead() &&
-            configuration.getAsyncConf().isNewPhase()) {
+        if (asyncConf.doLocalRead() && asyncConf.isNewPhase()) {
           // do nothing
           messages = messages;
         } else {
           // concat w/ local store if at least one async mode is enabled
           // (otherwise, messages is already reading BSP store)
-          if (configuration.getAsyncConf().doRemoteRead() ||
-              configuration.getAsyncConf().doLocalRead()) {
-            if (configuration.getAsyncConf().needAllMsgs()) {
+          if (asyncConf.doRemoteRead() || asyncConf.doLocalRead()) {
+            if (asyncConf.needAllMsgs()) {
               messages = Iterables.concat(messages,
                 ((MessageWithSourceStore) localMessageStore).
                 getVertexMessagesWithoutSource(vertex.getId()));
@@ -364,10 +371,10 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       //  stores, as BSP will rotate message stores)
       //
       // TODO-YH: can partitions disappear?...
-      if (!configuration.getAsyncConf().doRemoteRead()) {
+      if (!asyncConf.doRemoteRead()) {
         messageStore.clearPartition(partition.getId());
       } else {
-        if (!configuration.getAsyncConf().doLocalRead()) {
+        if (!asyncConf.doLocalRead()) {
           localMessageStore.clearPartition(partition.getId());
         }
       }
