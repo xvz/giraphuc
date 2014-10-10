@@ -75,6 +75,7 @@ public class ConnectedComponentsComputation extends
     // value of Long.MAX_VALUE, so reset it to its vertex id
     if (currentComponent == Long.MAX_VALUE) {
       currentComponent = vertex.getId().get();
+      changed = true;
     }
 
     for (LongWritable message : messages) {
