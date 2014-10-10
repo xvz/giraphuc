@@ -71,6 +71,12 @@ public class ConnectedComponentsComputation extends
       changed = true;
     }
 
+    // if this vertex was just added, its value will be sentinel
+    // value of Long.MAX_VALUE, so reset it to its vertex id
+    if (currentComponent == Long.MAX_VALUE) {
+      currentComponent = vertex.getId().get();
+    }
+
     for (LongWritable message : messages) {
       long candidateComponent = message.get();
       if (candidateComponent < currentComponent) {
@@ -92,7 +98,8 @@ public class ConnectedComponentsComputation extends
    *
    * NOTE: Without this, the results will be INCORRECT because missing
    * vertices are added with an initial value of 0 and so do not take
-   * on any component IDs larger than that.
+   * on any component IDs larger than that. Sentinel value of MAX_VALUE
+   * allows us to reset the value, in compute(), on first encounter.
    */
   public static class ConnectedComponentsVertexValueFactory
     extends DefaultVertexValueFactory<LongWritable> {
