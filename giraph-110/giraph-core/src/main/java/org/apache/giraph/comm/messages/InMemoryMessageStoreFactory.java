@@ -24,6 +24,7 @@ import org.apache.giraph.comm.messages.primitives.IntByteArrayMessageStore;
 import org.apache.giraph.comm.messages.primitives.IntFloatMessageStore;
 import org.apache.giraph.comm.messages.primitives.LongByteArrayMessageStore;
 import org.apache.giraph.comm.messages.primitives.LongDoubleMessageStore;
+import org.apache.giraph.comm.messages.primitives.LongLongMessageStore;
 import org.apache.giraph.comm.messages.with_source.ByteArrayMessagesPerSourceVertexStore;
 import org.apache.giraph.comm.messages.with_source.primitives.LongDoubleMessageWithSourceStore;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
@@ -85,6 +86,12 @@ public class InMemoryMessageStoreFactory<I extends WritableComparable,
           (CentralizedServiceWorker<LongWritable, Writable, Writable>) service,
           (MessageCombiner<LongWritable, DoubleWritable>)
               conf.<DoubleWritable>createMessageCombiner());
+      } else if (vertexIdClass.equals(LongWritable.class) &&
+                 messageClass.equals(LongWritable.class)) {
+        messageStore = new LongLongMessageStore(
+          (CentralizedServiceWorker<LongWritable, Writable, Writable>) service,
+          (MessageCombiner<LongWritable, LongWritable>)
+              conf.<LongWritable>createMessageCombiner());
       } else {
         messageStore = new OneMessagePerVertexStore<I, M>(messageValueFactory,
           service, conf.<M>createMessageCombiner(), conf);

@@ -53,6 +53,7 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop
     -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.SimpleShortestPathsComputation\$SimpleShortestPathsVertexValueFactory \
     -Dmapred.task.timeout=0 \
     org.apache.giraph.examples.SimpleShortestPathsComputation \
+    -c org.apache.giraph.combiner.MinimumDoubleMessageCombiner \
     -ca SimpleShortestPathsComputation.sourceId=${src} \
     -vif org.apache.giraph.examples.io.formats.SimpleShortestPathsInputFormat \
     -vip /user/${USER}/input/${inputgraph} \

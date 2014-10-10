@@ -51,6 +51,7 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop
     -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.ConnectedComponentsComputation\$ConnectedComponentsVertexValueFactory \
     -Dmapred.task.timeout=0 \
     org.apache.giraph.examples.ConnectedComponentsComputation \
+    -c org.apache.giraph.combiner.MinimumLongMessageCombiner \
     -vif org.apache.giraph.examples.io.formats.ConnectedComponentsInputFormat \
     -vip /user/${USER}/input/${inputgraph} \
     -vof org.apache.giraph.io.formats.IdWithValueTextOutputFormat \
