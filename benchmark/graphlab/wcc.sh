@@ -1,7 +1,10 @@
 #!/bin/bash -e
 
-if [ $# -ne 2 ]; then
-    echo "usage: $0 input-graph machines"
+if [ $# -ne 3 ]; then
+    echo "usage: $0 input-graph machines engine-mode"
+    echo ""
+    echo "engine-mode: 0 for synchronous engine"
+    echo "             1 for asynchronous engine"
     exit -1
 fi
 
@@ -17,9 +20,15 @@ hdfspath=$(grep hdfs "$HADOOP_DIR"/conf/core-site.xml | sed -e 's/.*<value>//' -
 
 machines=$2
 
+mode=$3
+case ${mode} in
+    0) modeflag="sync";;
+    1) modeflag="async";;
+    *) echo "Invalid engine-mode"; exit -1;;
+esac
+
 ## log names
-# WCC only supports synchronous mode
-logname=wcc_${inputgraph}_${machines}_0_"$(date +%Y%m%d-%H%M%S)"
+logname=wcc_${inputgraph}_${machines}_${mode}_"$(date +%Y%m%d-%H%M%S)"
 logfile=${logname}_time.txt
 
 
@@ -29,6 +38,7 @@ logfile=${logname}_time.txt
 ## start algorithm run
 mpiexec -f ./machines -n ${machines} \
     "$GRAPHLAB_DIR"/release/toolkits/graph_analytics/connected_component \
+    --engine ${modeflag} \
     --format adjgps \
     --graph_opts ingress=random \
     --graph "$hdfspath"/user/${USER}/input/${inputgraph} \

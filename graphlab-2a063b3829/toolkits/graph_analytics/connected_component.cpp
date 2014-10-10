@@ -34,7 +34,7 @@
 struct vdata {
   uint64_t labelid;
   vdata() :
-      labelid(0) {
+      labelid(std::numeric_limits<uint64_t>::max()) {
   }
 
   void save(graphlab::oarchive& oarc) const {
@@ -74,61 +74,61 @@ struct min_message {
   }
 };
 
-class label_propagation: public graphlab::ivertex_program<graph_type, size_t,
-    min_message>, public graphlab::IS_POD_TYPE {
+class connected_component:
+  public graphlab::ivertex_program<graph_type,
+                                   graphlab::empty,
+                                   min_message>,
+  public graphlab::IS_POD_TYPE {
 private:
-  size_t recieved_labelid;
-  bool perform_scatter;
+  uint64_t min_labelid;
+  bool do_scatter;
 public:
-  label_propagation() {
-    recieved_labelid = std::numeric_limits<size_t>::max();
-    perform_scatter = false;
-  }
-
-  //receive messages
+  // have to use message passing (i.e., no gather)
   void init(icontext_type& context, const vertex_type& vertex,
-      const message_type& msg) {
-    recieved_labelid = msg.value;
+            const message_type& msg) {
+    min_labelid = msg.value;
   }
 
-  //do not gather
+  // Do not gather
   edge_dir_type gather_edges(icontext_type& context,
-      const vertex_type& vertex) const {
+                             const vertex_type& vertex) const {
     return graphlab::NO_EDGES;
   }
-  size_t gather(icontext_type& context, const vertex_type& vertex,
-      edge_type& edge) const {
-    return 0;
-  }
 
-  //update label id. If updated, scatter messages
+  // Do not gather
+  //uint64_t gather(icontext_type& context, const vertex_type& vertex,
+  //    edge_type& edge) const {
+  //  return edge.source().data().labelid;
+  //}
+
+  // If labelid is updated, scatter/signal neighbours
   void apply(icontext_type& context, vertex_type& vertex,
-      const gather_type& total) {
-    if (recieved_labelid == std::numeric_limits<size_t>::max()) {
-      perform_scatter = true;
-    } else if (vertex.data().labelid > recieved_labelid) {
-      perform_scatter = true;
-      vertex.data().labelid = recieved_labelid;
+             const graphlab::empty& empty) {
+    do_scatter = false;
+
+    if (min_labelid == std::numeric_limits<uint64_t>::max()) {
+      do_scatter = true;   // no messages received yet, keep trying
+    } else if (vertex.data().labelid > min_labelid) {
+      vertex.data().labelid = min_labelid;
+      do_scatter = true;
     }
   }
 
+  // only scatter along out edges
   edge_dir_type scatter_edges(icontext_type& context,
-      const vertex_type& vertex) const {
-    if (perform_scatter)
-      return graphlab::ALL_EDGES;
-    else
+                              const vertex_type& vertex) const {
+    if (do_scatter) {
+      return graphlab::OUT_EDGES;
+    } else {
       return graphlab::NO_EDGES;
+    }
   }
 
-  //If a neighbor vertex has a bigger label id, send a massage
+  // Signal neighbour only when their component id is larger
+  // (otherwise we'll never terminate)
   void scatter(icontext_type& context, const vertex_type& vertex,
-      edge_type& edge) const {
-    if (edge.source().id() != vertex.id()
-        && edge.source().data().labelid > vertex.data().labelid) {
-      context.signal(edge.source(), min_message(vertex.data().labelid));
-    }
-    if (edge.target().id() != vertex.id()
-        && edge.target().data().labelid > vertex.data().labelid) {
+               edge_type& edge) const {
+    if (vertex.data().labelid < edge.target().data().labelid ) {
       context.signal(edge.target(), min_message(vertex.data().labelid));
     }
   }
@@ -164,10 +164,15 @@ int main(int argc, char** argv) {
   clopts.add_positional("graph");
   clopts.attach_option("format", format,
                        "The graph file format");
+
+  clopts.attach_option("engine", exec_type,
+                       "The engine type synchronous or asynchronous");
+
   clopts.attach_option("saveprefix", saveprefix,
                        "If set, will save the pairs of a vertex id and "
                        "a component id to a sequence of files with prefix "
                        "saveprefix");
+
   if (!clopts.parse(argc, argv)) {
     dc.cout() << "Error in parsing command line arguments." << std::endl;
     return EXIT_FAILURE;
@@ -189,7 +194,7 @@ int main(int argc, char** argv) {
 
   //running the engine
   //  time_t start, end;
-  graphlab::omni_engine<label_propagation> engine(dc, graph, exec_type, clopts);
+  graphlab::omni_engine<connected_component> engine(dc, graph, exec_type, clopts);
   engine.signal_all();
   //  time(&start);
   engine.start();
@@ -209,4 +214,3 @@ int main(int argc, char** argv) {
   dc.cout() << "TOTAL TIME (sec): " << total_timer.current_time() << std::endl;
   return EXIT_SUCCESS;
 }
-
