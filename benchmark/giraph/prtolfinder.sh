@@ -36,6 +36,7 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \
     -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.PageRankTolFinderComputation\$PageRankTolFinderVertexValueFactory \
+    -Dmapred.task.timeout=0 \
     org.apache.giraph.examples.PageRankTolFinderComputation \
     -mc org.apache.giraph.examples.PageRankTolFinderComputation\$PageRankTolFinderMasterCompute \
     -ca PageRankTolFinderComputation.maxSS=100 \

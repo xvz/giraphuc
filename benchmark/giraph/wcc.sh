@@ -49,6 +49,7 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \
     -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.ConnectedComponentsComputation\$ConnectedComponentsVertexValueFactory \
+    -Dmapred.task.timeout=0 \
     org.apache.giraph.examples.ConnectedComponentsComputation \
     -vif org.apache.giraph.examples.io.formats.ConnectedComponentsInputFormat \
     -vip /user/${USER}/input/${inputgraph} \

@@ -38,6 +38,7 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \
     -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.DeltaPageRankTolFinderComputation\$DeltaPageRankTolFinderVertexValueFactory \
+    -Dmapred.task.timeout=0 \
     org.apache.giraph.examples.DeltaPageRankTolFinderComputation \
     -c org.apache.giraph.combiner.DoubleSumMessageCombiner \
     -mc org.apache.giraph.examples.DeltaPageRankTolFinderComputation\$DeltaPageRankTolFinderMasterCompute \
