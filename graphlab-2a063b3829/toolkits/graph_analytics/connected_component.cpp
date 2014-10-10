@@ -148,7 +148,6 @@ public:
 
 int main(int argc, char** argv) {
   graphlab::timer total_timer; total_timer.start();
-  std::cout << "Connected Component\n\n";
 
   graphlab::mpi_tools::init(argc, argv);
   graphlab::distributed_control dc;
