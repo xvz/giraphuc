@@ -138,7 +138,7 @@ class graph_writer {
 public:
   std::string save_vertex(graph_type::vertex_type v) {
     std::stringstream strm;
-    strm << v.id() << "," << v.data().labelid << "\n";
+    strm << v.id() << "\t" << v.data().labelid << "\n";
     return strm.str();
   }
   std::string save_edge(graph_type::edge_type e) {

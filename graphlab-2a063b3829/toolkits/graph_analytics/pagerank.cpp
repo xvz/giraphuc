@@ -153,7 +153,7 @@ public:
 struct pagerank_writer {
   std::string save_vertex(graph_type::vertex_type v) {
     std::stringstream strm;
-    strm << v.id() << "\t" << std::setprecision(17) << v.data() << "\n";
+    strm << v.id() << "\t" << std::fixed << std::setprecision(17) << v.data() << "\n";
     return strm.str();
   }
   std::string save_edge(graph_type::edge_type e) { return ""; }

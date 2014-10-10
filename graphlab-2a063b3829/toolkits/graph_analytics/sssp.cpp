@@ -185,7 +185,7 @@ public:
 struct shortest_path_writer {
   std::string save_vertex(const graph_type::vertex_type& vtx) {
     std::stringstream strm;
-    strm << vtx.id() << "\t" << vtx.data().dist << "\n";
+    strm << vtx.id() << "\t" << std::fixed << std::setprecision(1) << vtx.data().dist << "\n";
     return strm.str();
   }
   std::string save_edge(graph_type::edge_type e) { return ""; }
