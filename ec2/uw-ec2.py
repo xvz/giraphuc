@@ -33,13 +33,13 @@ EXP_NAMES = ('cloud', 'cld', 'cw', 'cx', 'cy', 'cz')
 EXP_NUMS = (4, 8, 16, 32, 64, 128)
 
 # default master/slave AMI images (us-west-2)
-AMI_MASTER = 'ami-c7064af7'
-AMI_SLAVE = 'ami-c9064af9'
+AMI_MASTER = 'ami-a9460a99'
+AMI_SLAVE = 'ami-bf460a8f'
 
 # default key pair, security group, instance type
 DEFAULT_KEY = 'uwbench'
 DEFAULT_PEM = SCRIPT_DIR + DEFAULT_KEY + '.pem'
-DEFAULT_INSTANCE = 'm1.xlarge'
+DEFAULT_INSTANCE = 'm3.xlarge'
 DEFAULT_SG = 'uwbench'
 
 # default region & availability zone
