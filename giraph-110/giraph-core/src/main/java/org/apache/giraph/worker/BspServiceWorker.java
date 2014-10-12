@@ -944,38 +944,26 @@ public class BspServiceWorker<I extends WritableComparable,
       workerSentMessageBytes = asyncConf.getInFlightBytes();
     }
 
-    // YH: note that this resets needBarrier() to false on every
-    // pseudo (and non-pseudo) superstep if conditions below fail
-    boolean needBarrier = false;
+    // YH: assume barrier is needed
+    boolean needBarrier = true;
 
     MessageStore<I, Writable> remoteMessageStore =
       asyncConf.doRemoteRead() ?
       getServerData().getRemoteMessageStore() :
       getServerData().getCurrentMessageStore();
 
-    // YH: need barriers until after SS -1 (INPUT_SUPERSTEP)
-    if (!asyncConf.disableBarriers() ||
-        getLogicalSuperstep() <= INPUT_SUPERSTEP) {
-      needBarrier = true;
-
-    } else if (remoteMessageStore.hasMessages()) {
-      // if we received a remote message, spend another logical
-      // superstep to process it (i.e., don't do barrier yet)
-      needBarrier = false;
-
-    } else {
-      // else, check if (1) all vertices in all partitions are halted
-      // OR (2) there are still pending messages in stores
+    // YH: can only disable barriers AFTER SS -1 (INPUT_SUPERSTEP)
+    // (otherwise, e.g., message store will not be initialized)
+    if (asyncConf.disableBarriers() &&
+        getLogicalSuperstep() > INPUT_SUPERSTEP &&
+        (workerSentMessages > 0 || remoteMessageStore.hasMessages())) {
+      // if we have pending local messages or have received remote messages,
+      // spend another logical superstep to process them
       //
-      // (this IGNORES fact that there may still be in-flight messages
-      // coming from remote workers!!)
-      needBarrier = true;
-      for (PartitionStats ps : partitionStatsList) {
-        if (ps.getVertexCount() != ps.getFinishedVertexCount() ||
-            ps.getMessagesSentCount() > 0) {
-          needBarrier = false;
-        }
-      }
+      // NOTE: we do NOT need to check if all vertices are halted,
+      // b/c if we have no messages, the vertices will have nothing
+      // to work with---we're better off waiting in that case
+      needBarrier = false;
     }
     asyncConf.setNeedBarrier(needBarrier);
 
