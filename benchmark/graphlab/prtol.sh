@@ -52,7 +52,7 @@ mpiexec -f ./machines -n ${machines} \
 
 ## output l1-norm to time logfile
 prsln=${inputgraph}-300-0.txt
-proutput=${inputgraph}-${stop}-${execmode}.txt
+proutput=${inputgraph}-${stop}-${mode}.txt
 
 hadoop dfs -cat graphlab-output/* | sort -nk1 --parallel=$(nproc) -S $(grep 'MemTotal' /proc/meminfo | awk '{print $2}') > ${proutput}
 
