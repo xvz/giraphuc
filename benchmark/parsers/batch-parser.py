@@ -238,11 +238,11 @@ def l1norm_parser(log_prefix, alg):
     """
 
     if (alg != ALG_PR and alg != ALG_DELTAPR):
-        return "  N/A"
+        return "         N/A"
 
     log_files = glob.glob(log_prefix + '_time.txt')
     if len(log_files) != 1:
-        return "  N/A"
+        return "         N/A"
 
     log_file = log_files[0]
 
@@ -250,7 +250,7 @@ def l1norm_parser(log_prefix, alg):
         if "L1-NORM: " in line:
             return line.split()[1]
 
-    return "  N/A"
+    return "         N/A"
 
 
 def check_files(log_prefix, machines):
@@ -325,7 +325,7 @@ def single_iteration(log):
         eth_recv, eth_sent = net_parser(log_prefix, int(machines))
          
         stats = (time_run+time_io, time_io, time_run, mem_min, mem_avg, mem_max, eth_recv, eth_sent, l1norm)
-        separator = "------------+------------+------------+--------------------------------+---------------------------+-----------------------"
+        separator = "------------+------------+------------+--------------------------------+---------------------------+------------------------"
         return header + err_str + "\n" + separator + "\n  %8.2fs |  %8.2fs |  %8.2fs | %7.3f / %7.3f / %7.3f GB |  %8.3f / %8.3f GB   | %s \n" % stats + separator
     else:
         return header + err_str
@@ -336,16 +336,16 @@ def single_iteration(log):
 
 # output results serially
 print("")
-print("===========================================================================================================================")
-print(" Total time | Setup time | Comp. time |   Memory usage (min/avg/max)   | Total net I/O (recv/sent) |   l1-norm (PR)        ")
-print("============+============+============+================================+===========================+=======================")
+print("============================================================================================================================")
+print(" Total time | Setup time | Comp. time |   Memory usage (min/avg/max)   | Total net I/O (recv/sent) |      l1-norm (PR)      ")
+print("============+============+============+================================+===========================+========================")
 print("")
 for log in logs:
     print(single_iteration(log))
     print("")
 
 # another friendly reminder of what each thing is...
-print("============+============+============+================================+===========================+=======================")
-print(" Total time | Setup time | Comp. time |   Memory usage (min/avg/max)   | Total net I/O (recv/sent) |   l1-norm (PR)       ")
-print("===========================================================================================================================")
+print("============+============+============+================================+===========================+========================")
+print(" Total time | Setup time | Comp. time |   Memory usage (min/avg/max)   | Total net I/O (recv/sent) |      l1-norm (PR)      ")
+print("============================================================================================================================")
 print("")

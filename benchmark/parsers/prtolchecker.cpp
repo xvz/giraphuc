@@ -36,6 +36,7 @@ int main(int argc, char **argv) {
   ifs1.close();
   ifs2.close();
 
-  std::cout << std::setprecision(20) << l1norm << std::endl;
+  // 16 to account for "e-xx" exponents
+  std::cout << std::scientific << std::setprecision(16) << l1norm << std::endl;
   return 0;
 }
