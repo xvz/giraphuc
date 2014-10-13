@@ -253,16 +253,6 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       for (Vertex<I, V, E> vertex : partition) {
         Iterable<M1> messages;
 
-        // NOTE: This assumes messages are queued instantly, or in gaps
-        // of X vertices (cannot do it by size, b/c then # of old messages
-        // will vary).
-        //
-        // TODO-YH: this does not handle algs with multiple computation
-        // phases! We would need way of knowing phase transition BEFORE the
-        // superstep in which it occurs: b/c messages intended to be read
-        // in new phase will be immediately visible in local message store,
-        // and we should not read it.
-
         // Two types of algorithms:
         // 1. vertices need all messages (aka, stationary; e.g., PageRank)
         //    -> newer messages always as up-to-date as older messages
@@ -273,24 +263,24 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         //    -> this subsumes case where old messages are more valuable
         //       than newer messages, as they won't be repeated
         //
-        // Type 1 algs should clear old messages to make way for new,
+        // Type 1 algs should overwrite old msgs with new ones,
         // while type 2 algs should show them immediately.
         //
         // HOWEVER, algorithms typically only do initialization in first
         // superstep, so we instead persist them to be processed in
         // a subsequent superstep.
-        //
-        // NOTE: Correctly clearing for type 1 algs gives large performance
-        // benefits in terms of convergence (by at least 100x), but WILL
-        // cause correctness issues if algorithm is actually type 2 alg.
 
         // YH: messageStore and localMessageStore are set correctly by
         // GraphTaskManager to be remote-only/BSP and local-only/BSP
 
         // TODO-YH: deal with pending mutations by skipping message remove()
-        // for vertices that don't yet exist
+        // for vertices that don't yet exist???
 
-        if (asyncConf.doRemoteRead() && asyncConf.isNewPhase()) {
+        // YH: (logical) SS0 is special case because many algs send messages
+        // but do not have any logic to process them, so whatever messages
+        // we reveal in SS0 gets lost. Hence, keep them until after.
+        if (asyncConf.doRemoteRead() &&
+            serviceWorker.getLogicalSuperstep() == 0) {
           // for needAllMsgs(), nothing needs to be done either
           messages = EmptyIterable.<M1>get();
         } else if (asyncConf.needAllMsgs()) {
@@ -302,7 +292,8 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
           messages = messageStore.removeVertexMessages(vertex.getId());
         }
 
-        if (asyncConf.doLocalRead() && asyncConf.isNewPhase()) {
+        if (asyncConf.doLocalRead() &&
+            serviceWorker.getLogicalSuperstep() == 0) {
           // do nothing
           messages = messages;
         } else {

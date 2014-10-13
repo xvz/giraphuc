@@ -18,6 +18,7 @@
 
 package org.apache.giraph.conf;
 
+import org.apache.giraph.comm.messages.MessageWithPhase;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.log4j.Logger;
 
@@ -32,17 +33,19 @@ public class AsyncConfiguration {
   private boolean doLocalRead;
   /** Whether or not to read most recently available remote values */
   private boolean doRemoteRead;
-  /** Maximum number of messages before flushing cached messages */
-  private int maxNumMsgs;
   /**
    * Whether algorithm (or phase) needs every vertex to have all messages
    * from all its neighbours for every superstep (aka, "stationary")
    */
   private boolean needAllMsgs;
 
+  // TODO-YH: phases w/ PR-like execution are not completed yet
   /** Is the next superstep a new computation phase? */
-  // TODO-YH: phases are not completed yet
   private boolean isNewPhase;
+  /** Current computation phase */
+  private int currentPhase;
+  /** Does the computation have multiple phases? */
+  private boolean isMultiPhase;
 
   /** Whether or not to disable BSP barriers for async execution */
   private boolean disableBarriers;
@@ -62,30 +65,40 @@ public class AsyncConfiguration {
    *
    * @param conf GiraphConfiguration
    */
-  public AsyncConfiguration(GiraphConfiguration conf) {
-    disableBarriers = GiraphConfiguration.ASYNC_DISABLE_BARRIERS.get(conf);
+  public AsyncConfiguration(ImmutableClassesGiraphConfiguration conf) {
+    disableBarriers = GiraphConstants.ASYNC_DISABLE_BARRIERS.get(conf);
 
     if (disableBarriers) {
       doLocalRead = true;
       doRemoteRead = true;
     } else {
-      doLocalRead = GiraphConfiguration.ASYNC_LOCAL_READ.get(conf);
-      doRemoteRead = GiraphConfiguration.ASYNC_REMOTE_READ.get(conf);
+      doLocalRead = GiraphConstants.ASYNC_LOCAL_READ.get(conf);
+      doRemoteRead = GiraphConstants.ASYNC_REMOTE_READ.get(conf);
     }
 
-    maxNumMsgs = GiraphConfiguration.ASYNC_MAX_NUM_MSGS.get(conf);
-    needAllMsgs = GiraphConfiguration.ASYNC_NEED_ALL_MSGS.get(conf);
+    needAllMsgs = GiraphConstants.ASYNC_NEED_ALL_MSGS.get(conf);
+
 
     // special case: first superstep is always new "phase"
     isNewPhase = true;
+    // all computations have at least one phase
+    currentPhase = 0;
+
+    // if M implements MessageWithPhase, we have multiphase computation
+    // NOTE: we assume incoming and outgoing types are same
+    //
+    // (doing it here exactly once probably gives better performance;
+    // reflection can be expensive)
+    isMultiPhase = MessageWithPhase.class.
+      isAssignableFrom(conf.getIncomingMessageValueClass());
+
     // special case: first superstep always needs barrier after
     needBarrier = true;
-
     inFlightBytes = new AtomicLong();
   }
 
   /**
-   * Returns whether or not to read most recently available local values.
+   * Return whether or not to read most recently available local values.
    *
    * @return True if reading most recent local values
    */
@@ -94,7 +107,7 @@ public class AsyncConfiguration {
   }
 
   /**
-   * Returns whether or not to read most recently available remote values.
+   * Return whether or not to read most recently available remote values.
    *
    * @return True if reading most recent remote values
    */
@@ -103,7 +116,7 @@ public class AsyncConfiguration {
   }
 
   /**
-   * Returns whether or not BSP barriers should be disabled.
+   * Return whether or not BSP barriers should be disabled.
    *
    * @return True if BSP barriers should be disabled
    */
@@ -112,13 +125,8 @@ public class AsyncConfiguration {
   }
 
   /**
-   * @return Number of messages before flushing.
-   */
-  public int maxNumMsgs() {
-    return maxNumMsgs;
-  }
-
-  /**
+   * Return whether or not vertices need messages from all neigbours.
+   *
    * @return Whether every vertex needs messages from all its neighbours.
    */
   public boolean needAllMsgs() {
@@ -127,7 +135,7 @@ public class AsyncConfiguration {
 
 
   /**
-   * Returns whether or not the current superstep is a new
+   * Return whether or not the current superstep is a new
    * computation phase, relative to the previous superstep.
    *
    * @return True if this superstep is a new phase
@@ -137,19 +145,29 @@ public class AsyncConfiguration {
   }
 
   /**
-   * Sets whether current superstep is new phase.
+   * Set the computation phase for next global superstep.
+   * Also records whether this is a new phase (i.e., different from
+   * the phase of the previous global superstep).
    *
-   * NOTE: Set by GraphTaskManager.setup() and execute().
-   *
-   * @param isNewPhase True if this superstep is a new computation phase
+   * @param phase Computation phase for next global superstep
    */
-  public void setNewPhase(boolean isNewPhase) {
-    this.isNewPhase = isNewPhase;
+  public void setNextPhase(int phase) {
+    isNewPhase = currentPhase != phase;  // checkstyle doesn't like parentheses
+    currentPhase = phase;
+  }
+
+  /**
+   * Return whether or not the computation has multiple phases.
+   *
+   * @return True if computation has multiple phases
+   */
+  public boolean isMultiPhase() {
+    return isMultiPhase;
   }
 
 
   /**
-   * Returns whether or not a global barrier is needed between
+   * Return whether or not a global barrier is needed between
    * the current and the next supersteps.
    *
    * @return True if a global barrier is needed
@@ -159,7 +177,7 @@ public class AsyncConfiguration {
   }
 
   /**
-   * Sets whether or not a global barrier is needed between
+   * Set whether or not a global barrier is needed between
    * the current and the next supersteps.
    *
    * @param needBarrier True if a global barrier is needed
@@ -193,7 +211,7 @@ public class AsyncConfiguration {
    * Add the number of message bytes received. Only used when
    * running with asynchronous execution and barriers disabled.
    *
-   * This is cumulative over multiple logical/pseudo-supersteps,
+   * This is cumulative over multiple logical supersteps,
    * but for exactly a single global superstep.
    *
    * @param recvBytes Received message bytes
@@ -207,7 +225,7 @@ public class AsyncConfiguration {
    * Add the number of message bytes sent. Only used when
    * running with asynchronous execution and barriers disabled.
    *
-   * This is cumulative over multiple logical/pseudo-supersteps,
+   * This is cumulative over multiple logical supersteps,
    * but for exactly a single global superstep.
    *
    * @param sentBytes Sent message bytes

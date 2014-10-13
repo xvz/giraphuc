@@ -43,6 +43,12 @@ public class GlobalStats implements Writable {
   private boolean haltComputation = false;
 
   /**
+   * YH: Computation phase of next global superstep. All computations
+   * have a single phase by default (hence this default value).
+   */
+  private int nextPhase = 0;
+
+  /**
    * Add the stats of a partition to the global stats.
    *
    * @param partitionStats Partition stats to be added.
@@ -81,6 +87,14 @@ public class GlobalStats implements Writable {
     haltComputation = value;
   }
 
+  public int getNextPhase() {
+    return nextPhase;
+  }
+
+  public void setNextPhase(int phase) {
+    nextPhase = phase;
+  }
+
   /**
    * Add messages to the global stats.
    *
@@ -107,6 +121,7 @@ public class GlobalStats implements Writable {
     messageCount = input.readLong();
     messageBytesCount = input.readLong();
     haltComputation = input.readBoolean();
+    nextPhase = input.readInt();
   }
 
   @Override
@@ -117,6 +132,7 @@ public class GlobalStats implements Writable {
     output.writeLong(messageCount);
     output.writeLong(messageBytesCount);
     output.writeBoolean(haltComputation);
+    output.writeInt(nextPhase);
   }
 
   @Override
@@ -124,6 +140,7 @@ public class GlobalStats implements Writable {
     return "(vtx=" + vertexCount + ",finVtx=" +
         finishedVertexCount + ",edges=" + edgeCount + ",msgCount=" +
         messageCount + ",msgBytesCount=" +
-          messageBytesCount + ",haltComputation=" + haltComputation + ")";
+        messageBytesCount + ",haltComputation=" + haltComputation +
+        ",nextPhase=" + nextPhase + ")";
   }
 }

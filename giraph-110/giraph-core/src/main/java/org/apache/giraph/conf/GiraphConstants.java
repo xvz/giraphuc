@@ -1127,12 +1127,5 @@ public interface GiraphConstants {
           "Whether algorithm needs every vertex to have all messages from" +
           "all its neighbours for every superstep; " +
           "improves correctness and convergence if set correctly");
-
-  // NOTE: this replaces MAX_MSG_REQUEST_SIZE
-  // (assuming 8 bytes per message, 512K ~= 64K messages)
-  /** YH: Maximum number of messages per peer before flush */
-  IntConfOption ASYNC_MAX_NUM_MSGS =
-      new IntConfOption("giraph.asyncMaxNumMsgs", 65536,
-          "Maximum number of messages per peer before flush");
 }
 // CHECKSTYLE: resume InterfaceIsTypeCheck

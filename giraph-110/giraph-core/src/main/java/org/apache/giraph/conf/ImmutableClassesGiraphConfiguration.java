@@ -107,6 +107,9 @@ public class ImmutableClassesGiraphConfiguration<I extends WritableComparable,
   /** Whether values (IVEMM) need Jython wrappers */
   private final PerGraphTypeBoolean valueNeedsWrappers;
 
+  /** YH: Configuration for async */
+  private final AsyncConfiguration asyncConf;
+
   /**
    * Use unsafe serialization? Cached for fast access to instantiate the
    * extended data input/output classes
@@ -135,6 +138,9 @@ public class ImmutableClassesGiraphConfiguration<I extends WritableComparable,
         GiraphConstants.GRAPH_TYPES_NEEDS_WRAPPERS, conf);
     valueFactories = new ValueFactories<I, V, E>(conf);
     valueFactories.initializeIVE(this);
+
+    // YH: initialize and configure asyncConf
+    asyncConf = new AsyncConfiguration(this);
   }
 
   /**
@@ -1219,5 +1225,13 @@ public class ImmutableClassesGiraphConfiguration<I extends WritableComparable,
       classes.setOutgoingMessageValueClass(outgoingMsgValueClass);
     }
     classes.setMessageCombiner(superstepClasses.getMessageCombinerClass());
+  }
+
+
+  /**
+   * @return Configuration for async mode.
+   */
+  public AsyncConfiguration getAsyncConf() {
+    return asyncConf;
   }
 }

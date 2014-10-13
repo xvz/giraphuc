@@ -65,9 +65,6 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
   /** NettyWorkerClientRequestProcessor for message sending */
   protected final NettyWorkerClientRequestProcessor<I, ?, ?> clientProcessor;
 
-  ///** YH: Number of messages queued so far */
-  //private int numCachedMsgs = 0;
-
   /**
    * Constructor
    *
@@ -174,7 +171,7 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
         ") to " + destVertexId + " on worker " + workerInfo);
     }
 
-    // YH: this is used for termination at BspServiceMaster:1626.
+    // YH: this is used for termination in BspServiceMaster.
     // Namely, if number of messages is 0 and all vertices are halted,
     // then entire computation terminates. So don't mess with this.
     //
@@ -185,7 +182,7 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
     // YH: short-circuit local messages directly to message store.
     // This should cut down GC and memory overheads substantially, as byte
     // array caches are not allocated. Additionally, this gives better
-    // async performance (smaller batch sizes => more recent data).
+    // async performance (direct sends => more recent data).
     //
     // Note: taskId is same for all partitions local to same worker
     // b/c it relies on mapred.task.partition (= attempt_...._m_..._0)
@@ -231,26 +228,10 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
     int workerMessageSize = addMessage(
       workerInfo, partitionId, destVertexId, message);
 
+    // TODO-YH: SendMessageToAllCache isn't modified
+
     // Send a request if the cache of outgoing message to
     // the remote worker 'workerInfo' is full enough to be flushed
-    //
-    // YH: if local worker is same as destination vertex's worker,
-    // send message immediately (skip cache). Ensures that local message
-    // store is updated as early as possible.
-    // (Note that we still cache, but immediately remove.. this may be
-    //  highly inefficient...)
-    //
-    // TODO-YH: trade-off is to flush after a vertex completes computation
-    // instead of flushing things immediately on every send call
-    // (i.e., we can add flushLocal() that flushes only local messages)
-    // TODO-YH: SendMessageToAllCache isn't modified
-    // || getServiceWorker().getWorkerInfo().equals(workerInfo)
-
-    // YH: alternative method of queuing by # of messages
-    //numCachedMsgs++;
-    //if (numCachedMsgs >= getConf().getAsyncConf().maxNumMsgs()) {
-    //  numCachedMsgs = 0;
-
     if (workerMessageSize >= maxMessagesSizePerWorker) {
       PairList<Integer, VertexIdMessages<I, M>>
         workerMessages = removeWorkerMessages(workerInfo);

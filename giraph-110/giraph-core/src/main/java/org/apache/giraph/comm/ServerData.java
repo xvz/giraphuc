@@ -208,11 +208,14 @@ public class ServerData<I extends WritableComparable,
       currentMessageStore =
         incomingMessageStore != null ? incomingMessageStore :
         messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
+      // this uses "Outgoing" for case where message types sent by a vertex
+      // differ from message types processed (received) by a vertex
       incomingMessageStore =
         messageStoreFactory.newStore(conf.getOutgoingMessageValueFactory());
     }
 
     // if doing immediate remote reads, use remote message store
+    // NOTE: we assume incoming/outgoing types are the same
     if (conf.getAsyncConf().doRemoteRead()) {
       if (remoteMessageStore == null) {
         remoteMessageStore =

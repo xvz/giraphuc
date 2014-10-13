@@ -294,15 +294,6 @@ public abstract class AbstractComputation<I extends WritableComparable,
   }
 
   /**
-   * YH: Notify that next superstep will have a different computation
-   * phase from the current superstep.
-   */
-  @Override
-  public void phaseChange() {
-    graphTaskManager.notifyPhaseChange();
-  }
-
-  /**
    * Get the mapper context
    *
    * @return Mapper context

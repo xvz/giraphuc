@@ -55,6 +55,12 @@ public abstract class MasterCompute
   private SuperstepClasses superstepClasses;
 
   /**
+   * YH: Computation phase of next global superstep. All computations
+   * have a single phase by default (hence this default value).
+   */
+  private int nextPhase = 0;
+
+  /**
    * Must be defined by user to specify what the master has to do.
    */
   public abstract void compute();
@@ -65,6 +71,29 @@ public abstract class MasterCompute
    */
   public abstract void initialize() throws InstantiationException,
     IllegalAccessException;
+
+  /**
+   * YH: Notify that the next global superstep (to come after master.compute())
+   * will have a different computation phase from the previous superstep.
+   *
+   * @param phase Computation phase (>= 0) of the next superstep
+   */
+  public final void setNextPhase(int phase) {
+    if (phase < 0) {
+      throw new RuntimeException("Computation phases cannot be negative!");
+    }
+    nextPhase = phase;
+  }
+
+  /**
+   * YH: Get the computation phase of the next global superstep
+   * (i.e., the global superstep following master.compute()).
+   *
+   * @return Computation phase of next superstep
+   */
+  public final int getNextPhase() {
+    return nextPhase;
+  }
 
   /**
    * Retrieves the current superstep.

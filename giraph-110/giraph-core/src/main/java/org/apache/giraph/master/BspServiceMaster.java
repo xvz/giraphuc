@@ -1519,7 +1519,8 @@ public class BspServiceMaster<I extends WritableComparable,
    * @return Superstep classes set by masterCompute
    */
   private SuperstepClasses prepareMasterCompute(long superstep) {
-    // TODO-YH: master has no notion of logical superstep
+    // YH: logical and global superstep are always same for master,
+    // b/c it only ever runs before global superstep
     GraphState graphState = new GraphState(superstep,
         superstep,
         GiraphStats.getInstance().getVertices().getValue(),
@@ -1689,6 +1690,12 @@ public class BspServiceMaster<I extends WritableComparable,
       }
       globalStats.setHaltComputation(true);
     }
+
+    // YH: set computation phase for workers to see
+    //
+    // Note that doMasterCompute() above is executed for getSuperstep()+1,
+    // so this really is for the "next" global superstep.
+    globalStats.setNextPhase(masterCompute.getNextPhase());
 
     // Superstep 0 doesn't need to have matching types (Message types may not
     // match) and if the computation is halted, no need to check any of

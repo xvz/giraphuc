@@ -955,15 +955,26 @@ public class BspServiceWorker<I extends WritableComparable,
     // YH: can only disable barriers AFTER SS -1 (INPUT_SUPERSTEP)
     // (otherwise, e.g., message store will not be initialized)
     if (asyncConf.disableBarriers() &&
-        getLogicalSuperstep() > INPUT_SUPERSTEP &&
-        (workerSentMessages > 0 || remoteMessageStore.hasMessages())) {
+        getLogicalSuperstep() > INPUT_SUPERSTEP) {
       // if we have pending local messages or have received remote messages,
       // spend another logical superstep to process them
       //
       // NOTE: we do NOT need to check if all vertices are halted,
       // b/c if we have no messages, the vertices will have nothing
       // to work with---we're better off waiting in that case
-      needBarrier = false;
+      if (workerSentMessages > 0 || remoteMessageStore.hasMessages()) {
+        needBarrier = false;
+      }
+
+      // ...BUT, if doing multiphase computation and this was a new phase,
+      // initiate global barrier to ensure that next superstep is not
+      // also a new phase. This is because a very common pattern is
+      // sending messages in one phase and receiving them in the next:
+      // doing multiple logical supersteps in the former will just
+      // cause dropped messages, so it is safer to do global barrier.
+      if (asyncConf.isMultiPhase() && asyncConf.isNewPhase()) {
+        needBarrier = true;
+      }
     }
     asyncConf.setNeedBarrier(needBarrier);
 
@@ -1051,6 +1062,9 @@ public class BspServiceWorker<I extends WritableComparable,
       incrCachedSuperstep();
       getConfiguration().updateSuperstepClasses(superstepClasses);
 
+      // YH: set next computation phase
+      asyncConf.setNextPhase(globalStats.getNextPhase());
+
       return new FinishedSuperstepStats(
           localVertices,
           globalStats.getHaltComputation(),
@@ -1059,7 +1073,7 @@ public class BspServiceWorker<I extends WritableComparable,
           false);
 
     } else {
-      // YH: if in pseudosuperstep, increment only "logicalSuperstep".
+      // YH: if in logical superstep only, increment only "logicalSuperstep".
       // This enables "superstep" to be used for coordination (master
       // and ZK will just see it as a very long superstep), with minimal
       // code modifications.
