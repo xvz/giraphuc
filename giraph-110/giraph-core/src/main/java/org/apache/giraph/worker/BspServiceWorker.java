@@ -996,10 +996,11 @@ public class BspServiceWorker<I extends WritableComparable,
     // TODO-YH: post-superstep callbacks may not be safe??
     postSuperstepCallbacks();
 
-    // YH: aggregators are unsupported between pseudosupersteps,
-    // as Giraph aggregators are all blocking (=> need global barrier)
+    // YH: process aggregators globally or locally
     if (asyncConf.needBarrier()) {
       aggregatorHandler.finishSuperstep(workerAggregatorRequestProcessor);
+    } else {
+      aggregatorHandler.finishLogicalSuperstep();
     }
 
     if (LOG.isInfoEnabled()) {
@@ -2065,7 +2066,10 @@ else[HADOOP_NON_SECURE]*/
 
   @Override
   public void prepareSuperstep() {
-    if (getSuperstep() != INPUT_SUPERSTEP) {
+    // YH: global processing for aggregators only occurs for global supersteps
+    // (nothing needs to be done for local processing)
+    if (getSuperstep() != INPUT_SUPERSTEP &&
+        getConfiguration().getAsyncConf().needBarrier()) {
       aggregatorHandler.prepareSuperstep(workerAggregatorRequestProcessor);
     }
   }

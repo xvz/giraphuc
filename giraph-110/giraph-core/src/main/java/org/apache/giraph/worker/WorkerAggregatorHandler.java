@@ -151,6 +151,29 @@ public class WorkerAggregatorHandler implements WorkerThreadAggregatorUsage {
   }
 
   /**
+   * YH: Record (partial) aggregators for current logical superstep.
+   *
+   * Note: this does not communicate with other workers.
+   */
+  public void finishLogicalSuperstep() {
+    // TODO-YH: force master to send persistent/non-persistent status
+    // for each aggregator to workers
+    //
+    // YH: this is just a hack for now---aggregator is persistent
+    // if its name contains PERSIST
+    for (Map.Entry<String, Aggregator<Writable>> entry :
+           currentAggregatorMap.entrySet()) {
+      previousAggregatedValueMap.put(entry.getKey(),
+                                     entry.getValue().getAggregatedValue());
+
+      if (!entry.getKey().contains("PERSIST")) {
+        entry.getValue().reset();
+      }
+    }
+  }
+
+
+  /**
    * Send aggregators to their owners and in the end to the master
    *
    * @param requestProcessor Request processor for aggregators

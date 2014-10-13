@@ -496,12 +496,7 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
     // YH: This is startSuperstep() analog to first few lines
     // in BSPServiceWorker's finishSuperstep()
 
-    // YH: aggregators are unsupported between pseudosupersteps,
-    // as Giraph aggregators are all blocking (=> need global barrier)
-    if (conf.getAsyncConf().needBarrier()) {
-      serviceWorker.prepareSuperstep();
-    }
-
+    serviceWorker.prepareSuperstep();
     serviceWorker.getWorkerContext().setGraphState(graphState);
 
     // TODO-YH: pre-superstep callback may not be safe??
