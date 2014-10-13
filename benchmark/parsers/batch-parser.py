@@ -16,6 +16,8 @@ KB_PER_GB = 1024*1024.0
 
 MS_PER_SEC = 1000.0
 
+ALG_PR = 'pagerank'
+ALG_DELTAPR = 'deltapr'
 ALG_PREMIZAN = 'premizan'
 
 SYSTEMS = ('giraph', 'gps', 'mizan', 'graphlab')
@@ -224,6 +226,33 @@ def net_parser(log_prefix, machines):
     return (sum(eth[0]), sum(eth[1]))
 
 
+def l1norm_parser(log_prefix, alg):
+    """Parses l1-norm for a single PageRank run, if applicable.
+
+    Arguments:
+    log_prefix -- the prefix of one experiment run's log files (str)
+    alg -- the algorithm tested (str)
+
+    Returns:
+    The l1-norm as a string, or 'N/A' on error or if not applicable.
+    """
+
+    if (alg != ALG_PR and alg != ALG_DELTAPR):
+        return "  N/A"
+
+    log_files = glob.glob(log_prefix + '_time.txt')
+    if len(log_files) != 1:
+        return "  N/A"
+
+    log_file = log_files[0]
+
+    for line in open(log_file):
+        if "L1-NORM: " in line:
+            return line.split()[1]
+
+    return "  N/A"
+
+
 def check_files(log_prefix, machines):
     """Ensures all log files are present.
 
@@ -287,14 +316,17 @@ def single_iteration(log):
 
     is_ok, err_str = check_files(log_prefix, int(machines))
 
+    # get l1-norms for PR, if applicable
+    l1norm = l1norm_parser(log_prefix, alg)
+
     if is_ok:
         time_run, time_io = time_parser(log_prefix, system, alg)
         mem_min, mem_avg, mem_max = mem_parser(log_prefix, int(machines))
         eth_recv, eth_sent = net_parser(log_prefix, int(machines))
          
-        stats = (time_run+time_io, time_io, time_run, mem_min, mem_avg, mem_max, eth_recv, eth_sent)
-        separator = "------------+------------+------------+--------------------------------+---------------------------"
-        return header + err_str + "\n" + separator + "\n  %8.2fs |  %8.2fs |  %8.2fs | %7.3f / %7.3f / %7.3f GB |  %8.3f / %8.3f GB \n" % stats + separator
+        stats = (time_run+time_io, time_io, time_run, mem_min, mem_avg, mem_max, eth_recv, eth_sent, l1norm)
+        separator = "------------+------------+------------+--------------------------------+---------------------------+-----------------------"
+        return header + err_str + "\n" + separator + "\n  %8.2fs |  %8.2fs |  %8.2fs | %7.3f / %7.3f / %7.3f GB |  %8.3f / %8.3f GB   | %s \n" % stats + separator
     else:
         return header + err_str
 
@@ -304,16 +336,16 @@ def single_iteration(log):
 
 # output results serially
 print("")
-print("==================================================================================================")
-print(" Total time | Setup time | Comp. time |   Memory usage (min/avg/max)  | Total net I/O (recv/sent) ")
-print("============+============+============+===============================+===========================")
+print("===========================================================================================================================")
+print(" Total time | Setup time | Comp. time |   Memory usage (min/avg/max)   | Total net I/O (recv/sent) |   l1-norm (PR)        ")
+print("============+============+============+================================+===========================+=======================")
 print("")
 for log in logs:
     print(single_iteration(log))
     print("")
 
 # another friendly reminder of what each thing is...
-print("============+============+============+================================+===========================")
-print(" Total time | Setup time | Comp. time |    Memory usage (min/avg/max)  | Total net I/O (recv/sent) ")
-print("===================================================================================================")
+print("============+============+============+================================+===========================+=======================")
+print(" Total time | Setup time | Comp. time |   Memory usage (min/avg/max)   | Total net I/O (recv/sent) |   l1-norm (PR)       ")
+print("===========================================================================================================================")
 print("")

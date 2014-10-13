@@ -36,6 +36,6 @@ int main(int argc, char **argv) {
   ifs1.close();
   ifs2.close();
 
-  std::cout << std::fixed << std::setprecision(20) << l1norm << std::endl;
+  std::cout << std::setprecision(20) << l1norm << std::endl;
   return 0;
 }
