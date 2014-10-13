@@ -18,11 +18,13 @@
 
 package org.apache.giraph.examples;
 
-import org.apache.giraph.conf.IntConfOption;
+import org.apache.giraph.conf.FloatConfOption;
+import org.apache.giraph.aggregators.LongSumAggregator;
 import org.apache.giraph.factories.DefaultVertexValueFactory;
 import org.apache.giraph.graph.BasicComputation;
 import org.apache.giraph.graph.Vertex;
 import org.apache.giraph.io.formats.TextVertexOutputFormat;
+import org.apache.giraph.master.DefaultMasterCompute;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.LongWritable;
@@ -33,24 +35,25 @@ import org.apache.log4j.Logger;
 import java.io.IOException;
 
 /**
- * Demonstrates the delta PageRank implementation.
+ * Demonstrates the delta PageRank implementation with
+ * error tolerance termination.
  */
 @Algorithm(
-    name = "Delta PageRank"
+    name = "Delta PageRank (error tolerance termination)"
 )
-public class DeltaPageRankComputation extends BasicComputation<LongWritable,
+public class DeltaTolPageRankComputation extends BasicComputation<LongWritable,
     DoubleWritable, NullWritable, DoubleWritable> {
-  /** Number of supersteps for this test */
-  public static final int MAX_SUPERSTEPS = 30;
+  /** Minimum error tolerance; for async only */
+  public static final float MIN_TOLERANCE = 1.0f;
 
-  /** Configurable max number of supersteps */
-  public static final IntConfOption MAX_SS =
-    new IntConfOption("DeltaPageRankComputation.maxSS", MAX_SUPERSTEPS,
-                      "The maximum number of supersteps");
+  /** Configurable min error tolerance; for async only */
+  public static final FloatConfOption MIN_TOL =
+    new FloatConfOption("DeltaTolPageRankComputation.minTol", MIN_TOLERANCE,
+                        "The delta/error tolerance to halt at");
 
   /** Logger */
   private static final Logger LOG =
-      Logger.getLogger(DeltaPageRankComputation.class);
+      Logger.getLogger(DeltaTolPageRankComputation.class);
 
   /** Number of active vertices (for error tolerance) */
   private static String NUM_ACTIVE_AGG = "num_active";
@@ -70,14 +73,26 @@ public class DeltaPageRankComputation extends BasicComputation<LongWritable,
       delta = 0.15;
     }
 
+    // must wait at least 1SS b/c MIN_TOLs >1.0 will cause
+    // immediate termination
+    if (getLogicalSuperstep() > 1 &&
+        ((LongWritable) getAggregatedValue(NUM_ACTIVE_AGG)).get() == 0) {
+      vertex.voteToHalt();
+      return;
+    }
+
     for (DoubleWritable message : messages) {
       delta += message.get();
     }
 
-    if (getLogicalSuperstep() < MAX_SS.get(getConf()) && delta > 0) {
+    if (delta > 0) {
       vertex.setValue(new DoubleWritable(vertex.getValue().get() + delta));
       sendMessageToAllEdges(vertex,
           new DoubleWritable(0.85 * delta / vertex.getNumEdges()));
+    }
+
+    if (delta > MIN_TOL.get(getConf())) {
+      aggregate(NUM_ACTIVE_AGG, new LongWritable(1));
     }
 
     // always vote to halt
@@ -85,12 +100,12 @@ public class DeltaPageRankComputation extends BasicComputation<LongWritable,
   }
 
   /**
-   * Value factory context used with {@link DeltaPageRankComputation}.
+   * Value factory context used with {@link DeltaTolPageRankComputation}.
    *
    * NOTE: Without this, the results will be INCORRECT because missing
    * vertices are added with an initial value of 0 rather than 0.15.
    */
-  public static class DeltaPageRankVertexValueFactory
+  public static class DeltaTolPageRankVertexValueFactory
     extends DefaultVertexValueFactory<DoubleWritable> {
     @Override
     public DoubleWritable newInstance() {
@@ -99,20 +114,33 @@ public class DeltaPageRankComputation extends BasicComputation<LongWritable,
   }
 
   /**
-   * Simple VertexOutputFormat that supports {@link DeltaPageRankComputation}
+   * Master compute associated with {@link DeltaTolPageRankComputation}.
+   * It registers required aggregators.
    */
-  public static class DeltaPageRankVertexOutputFormat extends
+  public static class DeltaTolPageRankMasterCompute extends
+      DefaultMasterCompute {
+    @Override
+    public void initialize() throws InstantiationException,
+        IllegalAccessException {
+      registerAggregator(NUM_ACTIVE_AGG, LongSumAggregator.class);
+    }
+  }
+
+  /**
+   * Simple VertexOutputFormat that supports {@link DeltaTolPageRankComputation}
+   */
+  public static class DeltaTolPageRankVertexOutputFormat extends
       TextVertexOutputFormat<LongWritable, DoubleWritable, NullWritable> {
     @Override
     public TextVertexWriter createVertexWriter(TaskAttemptContext context)
       throws IOException, InterruptedException {
-      return new DeltaPageRankVertexWriter();
+      return new DeltaTolPageRankVertexWriter();
     }
 
     /**
-     * Simple VertexWriter that supports {@link DeltaPageRankComputation}
+     * Simple VertexWriter that supports {@link DeltaTolPageRankComputation}
      */
-    public class DeltaPageRankVertexWriter extends TextVertexWriter {
+    public class DeltaTolPageRankVertexWriter extends TextVertexWriter {
       @Override
       public void writeVertex(
           Vertex<LongWritable, DoubleWritable, NullWritable> vertex)

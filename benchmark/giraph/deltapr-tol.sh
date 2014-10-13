@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
 if [ $# -ne 4 ]; then
-    echo "usage: $0 input-graph machines exec-mode supersteps"
+    echo "usage: $0 input-graph machines exec-mode tolerance"
     echo ""
     echo "exec-mode: 0 for synchronous BSP"
     echo "           1 for asynchronous"
@@ -34,10 +34,10 @@ case ${execmode} in
     *) echo "Invalid exec-mode"; exit -1;;
 esac
 
-supersteps=$4
+tol=$4
 
 ## log names
-logname=pagerank_${inputgraph}_${machines}_${execmode}_${supersteps}_"$(date +%Y%m%d-%H%M%S)"
+logname=deltapr_${inputgraph}_${machines}_${execmode}_${tol}_"$(date +%Y%m%d-%H%M%S)"
 logfile=${logname}_time.txt       # running time
 
 
@@ -50,29 +50,24 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop
     -Dgiraph.numComputeThreads=${GIRAPH_THREADS} \
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \
-    -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.SimplePageRankComputation\$SimplePageRankVertexValueFactory \
+    -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.DeltaTolPageRankComputation\$DeltaTolPageRankVertexValueFactory \
     -Dmapred.task.timeout=0 \
-    org.apache.giraph.examples.SimplePageRankComputation \
-    -ca SimplePageRankComputation.maxSS=${supersteps} \
+    org.apache.giraph.examples.DeltaTolPageRankComputation \
+    -c org.apache.giraph.combiner.DoubleSumMessageCombiner \
+    -ca DeltaTolPageRankComputation.minTol=${tol} \
+    -mc org.apache.giraph.examples.DeltaTolPageRankComputation\$DeltaTolPageRankMasterCompute \
     -vif org.apache.giraph.examples.io.formats.SimplePageRankInputFormat \
     -vip /user/${USER}/input/${inputgraph} \
-    -vof org.apache.giraph.examples.SimplePageRankComputation\$SimplePageRankVertexOutputFormat \
+    -vof org.apache.giraph.examples.DeltaTolPageRankComputation\$DeltaTolPageRankVertexOutputFormat \
     -op "$outputdir" \
     -w ${machines} 2>&1 | tee -a ./logs/${logfile}
-
-#    -ca SimplePageRankComputation.minTol=2.3 \
-#    -mc org.apache.giraph.examples.SimplePageRankComputation\$SimplePageRankMasterCompute \
-#    -c org.apache.giraph.combiner.DoubleSumMessageCombiner \
-
-# mc only needed when aggregators needed (which is for error tols)
-# alternative output format: -vof org.apache.giraph.io.formats.IdWithValueTextOutputFormat
 
 ## finish logging memory + network usage
 ../common/bench-finish.sh ${logname}
 
 ## output l1-norm to time logfile
 prsln=${inputgraph}-300-0.txt
-proutput=${inputgraph}-${supersteps}-${execmode}.txt
+proutput=${inputgraph}-${tol}-${execmode}.txt
 
 hadoop dfs -cat giraph-output/part-* | sort -nk1 --parallel=$(nproc) -S $(grep 'MemTotal' /proc/meminfo | awk '{print $2}') > ${proutput}
 

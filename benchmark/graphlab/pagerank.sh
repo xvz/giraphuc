@@ -49,3 +49,15 @@ mpiexec -f ./machines -n ${machines} \
 
 ## finish logging memory + network usage
 ../common/bench-finish.sh ${logname}
+
+## output l1-norm to time logfile
+prsln=${inputgraph}-300-0.txt
+proutput=${inputgraph}-${stop}-${execmode}.txt
+
+hadoop dfs -cat graphlab-output/* | sort -nk1 --parallel=$(nproc) -S $(grep 'MemTotal' /proc/meminfo | awk '{print $2}') > ${proutput}
+
+if [[ -f ${prsln} && ${proutput} != ${prsln} ]]; then
+    l1norm=$(../parsers/prtolchecker ${prsln} ${proutput})
+    echo "L1-NORM: ${l1norm}" >> ./logs/${logfile}
+    rm -f ${proutput}
+fi

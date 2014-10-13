@@ -61,16 +61,20 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop
     -op "$outputdir" \
     -w ${machines} 2>&1 | tee -a ./logs/${logfile}
 
-#    -ca DeltaPageRankComputation.minTol=2.3 \
-#    -Dgiraph.inputOutEdgesClass=org.apache.giraph.edge.HashMapEdges \
-#    -Dgiraph.outEdgesClass=org.apache.giraph.edge.HashMapEdges
-
-#    -mc org.apache.giraph.examples.DeltaPageRankComputation\$DeltaPageRankMasterCompute \
-# mc only needed when aggregators needed (which is for error tols)
-# alternative output format: -vof org.apache.giraph.io.formats.IdWithValueTextOutputFormat
-
 ## finish logging memory + network usage
 ../common/bench-finish.sh ${logname}
 
-## clean up step needed for Giraph
+## output l1-norm to time logfile
+prsln=${inputgraph}-300-0.txt
+proutput=${inputgraph}-${supersteps}-${execmode}.txt
+
+hadoop dfs -cat giraph-output/part-* | sort -nk1 --parallel=$(nproc) -S $(grep 'MemTotal' /proc/meminfo | awk '{print $2}') > ${proutput}
+
+if [[ -f ${prsln} && ${proutput} != ${prsln} ]]; then
+    l1norm=$(../parsers/prtolchecker ${prsln} ${proutput})
+    echo "L1-NORM: ${l1norm}" >> ./logs/${logfile}
+    rm -f ${proutput}
+fi
+
+## clean up step needed for Giraph 1.0 (not really needed for 1.1)
 ./kill-java-job.sh
