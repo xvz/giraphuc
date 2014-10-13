@@ -98,11 +98,12 @@ public class DeltaPageRankComputation extends BasicComputation<LongWritable,
           new DoubleWritable(0.85 * delta / vertex.getNumEdges()));
     }
 
-    // YH: must always send to neighbours, even when we have converged,
-    // as otherwise the old value of this vertex is cached. Note that
-    // this can potentially wake up many vertices...
-    //sendMessageToAllEdges(vertex,
-    //    new DoubleWritable(0.85 * delta / vertex.getNumEdges()));
+    // for error tolerance
+    //if (delta > 0) {
+    //  vertex.setValue(new DoubleWritable(vertex.getValue().get() + delta));
+    //  sendMessageToAllEdges(vertex,
+    //      new DoubleWritable(0.85 * delta / vertex.getNumEdges()));
+    //}
     //
     //if (delta > MIN_TOL.get(getConf())) {
     //  aggregate(NUM_ACTIVE_AGG, new LongWritable(1));
