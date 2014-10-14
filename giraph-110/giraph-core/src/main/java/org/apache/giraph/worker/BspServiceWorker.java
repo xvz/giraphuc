@@ -790,12 +790,12 @@ public class BspServiceWorker<I extends WritableComparable,
 
     AsyncConfiguration asyncConf = getConfiguration().getAsyncConf();
 
-    LOG.info("[[MST-internal]] ##START##: ss=" + getSuperstep() +
-             ", lss=" + getLogicalSuperstep() +
-             ", nb=" + asyncConf.needBarrier() +
-             ", multi-phase=" + asyncConf.isMultiPhase() +
-             ", currPhase=" + asyncConf.getCurrentPhase() +
-             ", isNewPhase=" + asyncConf.isNewPhase());
+    //LOG.info("[[MST-internal]] ##START##: ss=" + getSuperstep() +
+    //         ", lss=" + getLogicalSuperstep() +
+    //         ", nb=" + asyncConf.needBarrier() +
+    //         ", multi-phase=" + asyncConf.isMultiPhase() +
+    //         ", currPhase=" + asyncConf.getCurrentPhase() +
+    //         ", isNewPhase=" + asyncConf.isNewPhase());
 
     // YH: reset counter on new global superstep
     if (asyncConf.needBarrier()) {
@@ -981,12 +981,12 @@ public class BspServiceWorker<I extends WritableComparable,
     }
     asyncConf.setNeedBarrier(needBarrier);
 
-    LOG.info("[[MST-internal]] ##FINISH##: ss=" + getSuperstep() +
-             ", lss=" + getLogicalSuperstep() +
-             ", nb=" + asyncConf.needBarrier() +
-             ", multi-phase=" + asyncConf.isMultiPhase() +
-             ", currPhase=" + asyncConf.getCurrentPhase() +
-             ", isNewPhase=" + asyncConf.isNewPhase());
+    //LOG.info("[[MST-internal]] ##FINISH##: ss=" + getSuperstep() +
+    //         ", lss=" + getLogicalSuperstep() +
+    //         ", nb=" + asyncConf.needBarrier() +
+    //         ", multi-phase=" + asyncConf.isMultiPhase() +
+    //         ", currPhase=" + asyncConf.getCurrentPhase() +
+    //         ", isNewPhase=" + asyncConf.isNewPhase());
 
     if (asyncConf.needBarrier()) {
       waitForRequestsToFinish();
