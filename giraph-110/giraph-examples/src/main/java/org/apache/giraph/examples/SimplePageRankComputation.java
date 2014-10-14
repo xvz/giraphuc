@@ -90,7 +90,9 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
     // NOTE: We follow GraphLab's alternative way of computing PageRank,
     // which is to not divide by |V|. To get the probability value at
     // each vertex, take its PageRank value and divide by |V|.
-    double oldVal = vertex.getValue().get();
+
+    // for when using error tolerance
+    //double oldVal = vertex.getValue().get();
 
     if (getLogicalSuperstep() == 0) {
       // FIX: initial value is 1/|V| (or 1), not 0.15/|V| (or 0.15)
