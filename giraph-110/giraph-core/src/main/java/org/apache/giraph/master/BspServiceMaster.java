@@ -27,6 +27,7 @@ import org.apache.giraph.comm.MasterClient;
 import org.apache.giraph.comm.MasterServer;
 import org.apache.giraph.comm.netty.NettyMasterClient;
 import org.apache.giraph.comm.netty.NettyMasterServer;
+import org.apache.giraph.conf.AsyncConfiguration;
 import org.apache.giraph.conf.GiraphConstants;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.counters.GiraphStats;
@@ -1620,8 +1621,11 @@ public class BspServiceMaster<I extends WritableComparable,
       }
     }
 
-    if (getConfiguration().getAsyncConf().disableBarriers() &&
-        getSuperstep() > INPUT_SUPERSTEP) {
+    AsyncConfiguration asyncConf = getConfiguration().getAsyncConf();
+
+    // Do not do this extra barrier in cases where workers skip this barrier.
+    if (asyncConf.disableBarriers() && getSuperstep() > INPUT_SUPERSTEP &&
+        !(asyncConf.isMultiPhase() && asyncConf.isNewPhase())) {
       // YH: these paths are also cleaned up when master removes old SS dirs
       String readyToFinishWorkerPath =
         getWorkerReadyToFinishPath(getApplicationAttempt(), getSuperstep());
@@ -1669,7 +1673,7 @@ public class BspServiceMaster<I extends WritableComparable,
         (globalStats.getFinishedVertexCount() ==
          globalStats.getVertexCount() &&
          globalStats.getMessageCount() == 0 &&
-         (!getConfiguration().getAsyncConf().disableBarriers() ||
+         (!asyncConf.disableBarriers() ||
           globalStats.getMessageBytesCount() == 0))) {
       globalStats.setHaltComputation(true);
     } else if (getZkExt().exists(haltComputationPath, false) != null) {
@@ -1696,6 +1700,8 @@ public class BspServiceMaster<I extends WritableComparable,
     // Note that doMasterCompute() above is executed for getSuperstep()+1,
     // so this really is for the "next" global superstep.
     globalStats.setNextPhase(masterCompute.getNextPhase());
+    // also update master's asyncConf
+    asyncConf.setNextPhase(masterCompute.getNextPhase());
 
     // Superstep 0 doesn't need to have matching types (Message types may not
     // match) and if the computation is halted, no need to check any of

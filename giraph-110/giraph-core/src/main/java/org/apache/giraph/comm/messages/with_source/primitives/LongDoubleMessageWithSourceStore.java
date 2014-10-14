@@ -147,13 +147,6 @@ public class LongDoubleMessageWithSourceStore
       int partitionId, VertexIdMessages<LongWritable,
       MessageWithSource<LongWritable, DoubleWritable>> messages)
     throws IOException {
-    LongWritable reusableVertexId = new LongWritable();
-    MessageWithSource<LongWritable, DoubleWritable> reusableMessage =
-      new MessageWithSource(new LongWritable(), new DoubleWritable());
-
-    Long2ObjectOpenHashMap<Long2DoubleOpenHashMap> partitionMap =
-      map.get(partitionId);
-
     VertexIdMessageWithSourceIterator<LongWritable, DoubleWritable> itr =
       ((VertexIdMessagesWithSource<LongWritable, DoubleWritable>) messages).
       getVertexIdMessageWithSourceIterator();
@@ -193,8 +186,13 @@ public class LongDoubleMessageWithSourceStore
   @Override
   public boolean hasMessagesForPartition(int partitionId) {
     Long2ObjectOpenHashMap<?> partitionMap = map.get(partitionId);
+
+    if (partitionMap == null) {
+      return false;
+    }
+
     synchronized (partitionMap) {
-      return partitionMap != null && !partitionMap.isEmpty();
+      return !partitionMap.isEmpty();
     }
   }
 

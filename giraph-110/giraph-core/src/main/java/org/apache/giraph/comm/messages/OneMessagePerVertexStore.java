@@ -28,6 +28,7 @@ import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.combiner.MessageCombiner;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.factories.MessageValueFactory;
+import org.apache.giraph.utils.EmptyIterable;
 import org.apache.giraph.utils.VertexIdMessageIterator;
 import org.apache.giraph.utils.VertexIdMessages;
 import org.apache.hadoop.io.Writable;
@@ -115,7 +116,27 @@ public class OneMessagePerVertexStore<I extends WritableComparable,
   }
 
   @Override
-  protected Iterable<M> getMessagesAsIterable(M message) {
+  protected Iterable<M> getMessagesAsIterable(I vertexId, M message,
+                                              boolean isRemove) {
+    // YH: see MessagesWithPhaseIterable for logic reasoning
+    if (config.getAsyncConf().isMultiPhase() && isRemove) {
+      MessageWithPhase msg = (MessageWithPhase) message;
+      int currentPhase = config.getAsyncConf().getCurrentPhase();
+
+      if (msg.getPhase() != currentPhase && msg.processInSamePhase()) {
+        return EmptyIterable.<M>get();  // drop message
+      } else if (msg.getPhase() == currentPhase && !msg.processInSamePhase()) {
+        // put message back on to message store, return nothing
+        try {
+          addPartitionMessage(getPartitionId(vertexId), vertexId, message);
+        } catch (IOException e) {
+          throw new RuntimeException(
+              "getMessagesAsIterable: Got IOException ", e);
+        }
+        return EmptyIterable.<M>get();
+      }
+      // else, return the message below
+    }
     return Collections.singleton(message);
   }
 

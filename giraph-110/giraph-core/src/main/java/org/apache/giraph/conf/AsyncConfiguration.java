@@ -79,10 +79,12 @@ public class AsyncConfiguration {
     needAllMsgs = GiraphConstants.ASYNC_NEED_ALL_MSGS.get(conf);
 
 
-    // special case: first superstep is always new "phase"
+    // This only sets isNewPhase for SS -1 (INPUT_SUPERSTEP).
     isNewPhase = true;
-    // all computations have at least one phase
-    currentPhase = 0;
+    // All computations have at least one phase. This initial value
+    // is to ensure that SS0 is properly treated as new phase.
+    // (Otherwise, isNewPhase becomes false at SS0, which is incorrect)
+    currentPhase = -1;
 
     // if M implements MessageWithPhase, we have multiphase computation
     // NOTE: we assume incoming and outgoing types are same
@@ -142,6 +144,15 @@ public class AsyncConfiguration {
    */
   public boolean isNewPhase() {
     return isNewPhase;
+  }
+
+  /**
+   * Get the computation phase for the current global superstep.
+   *
+   * @return Current computation phase
+   */
+  public int getCurrentPhase() {
+    return currentPhase;
   }
 
   /**

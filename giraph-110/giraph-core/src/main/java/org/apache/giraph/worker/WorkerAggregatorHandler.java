@@ -30,6 +30,7 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.util.Progressable;
 import org.apache.log4j.Logger;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
@@ -63,6 +64,12 @@ public class WorkerAggregatorHandler implements WorkerThreadAggregatorUsage {
   /** Map of aggregators for current superstep */
   private Map<String, Aggregator<Writable>> currentAggregatorMap =
       Maps.newHashMap();
+
+  /** YH: Copy of map of values from previous global superstep */
+  private ImmutableMap<String, Writable> previousGlobalValueMap = null;
+  /** YH: True if previous global results need to be copied */
+  private boolean doCopyGlobalResults;
+
   /** Service worker */
   private final CentralizedServiceWorker<?, ?, ?> serviceWorker;
   /** Progressable for reporting progress */
@@ -156,18 +163,55 @@ public class WorkerAggregatorHandler implements WorkerThreadAggregatorUsage {
    * Note: this does not communicate with other workers.
    */
   public void finishLogicalSuperstep() {
+    if (doCopyGlobalResults && !previousAggregatedValueMap.isEmpty()) {
+      previousGlobalValueMap = ImmutableMap.copyOf(previousAggregatedValueMap);
+      doCopyGlobalResults = false;
+    }
+
     // TODO-YH: force master to send persistent/non-persistent status
     // for each aggregator to workers
     //
-    // YH: this is just a hack for now---aggregator is persistent
-    // if its name contains PERSIST
+    // YH: "PERSIST" is a temporary hack---aggregator is persistent
+    // if its STRING name (NOT variable name!!) contains "PERSIST"
     for (Map.Entry<String, Aggregator<Writable>> entry :
            currentAggregatorMap.entrySet()) {
-      previousAggregatedValueMap.put(entry.getKey(),
-                                     entry.getValue().getAggregatedValue());
 
-      if (!entry.getKey().contains("PERSIST")) {
-        entry.getValue().reset();
+      Aggregator<Writable> agg = entry.getValue();
+
+      if (entry.getKey().contains("PERSIST")) {
+        // buffer cumulative partial result
+        // (cumulative b/c this is over multiple logical SS)
+        Writable currVal = agg.getAggregatedValue();
+
+        // if this is persistent aggregator, we need to aggregate
+        // our partial result with PREVIOUS complete global result
+        // (this is b/c aggregates are always "reset" locally, after
+        // a global superstep)
+        Writable prevVal = previousGlobalValueMap.get(entry.getKey());
+        agg.reset();   // new Writable
+        // NOTE: order matters---do previous last, so that this works
+        // correctly with overwrite aggregators
+        //
+        // TODO-YH: this assumes overwrite aggregators are exclusively
+        // used by master, and not by any special designated vertex!!
+        agg.aggregate(currVal);
+        agg.aggregate(prevVal);
+
+        // overwrite previous value
+        previousAggregatedValueMap.put(entry.getKey(),
+                                       agg.getAggregatedValue());
+
+        // restore original cumulative partial result
+        agg.setAggregatedValue(currVal);
+
+      } else {
+        // overwrite previous value (ignore previous, since this
+        // is not persistent)
+        previousAggregatedValueMap.put(entry.getKey(),
+                                       agg.getAggregatedValue());
+
+        // this is safe since it creates a new object
+        agg.reset();
       }
     }
   }
@@ -245,6 +289,10 @@ public class WorkerAggregatorHandler implements WorkerThreadAggregatorUsage {
     }
     // Wait for master to receive aggregated values before proceeding
     serviceWorker.getWorkerClient().waitAllRequests();
+
+    // YH: got new global result, so next non-global superstep
+    // will need to copy it
+    doCopyGlobalResults = true;
 
     ownerAggregatorData.reset();
     if (LOG.isDebugEnabled()) {

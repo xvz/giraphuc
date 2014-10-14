@@ -167,8 +167,13 @@ public class IntFloatMessageStore
   @Override
   public boolean hasMessagesForPartition(int partitionId) {
     Int2FloatOpenHashMap partitionMap = map.get(partitionId);
+
+    if (partitionMap == null) {
+      return false;
+    }
+
     synchronized (partitionMap) {
-      return partitionMap != null && !partitionMap.isEmpty();
+      return !partitionMap.isEmpty();
     }
   }
 

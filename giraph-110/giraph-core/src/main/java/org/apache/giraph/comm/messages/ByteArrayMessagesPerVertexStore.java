@@ -176,8 +176,15 @@ public class ByteArrayMessagesPerVertexStore<I extends WritableComparable,
 
   @Override
   protected Iterable<M> getMessagesAsIterable(
-      DataInputOutput dataInputOutput) {
-    return new MessagesIterable<M>(dataInputOutput, messageValueFactory);
+      I vertexId, DataInputOutput dataInputOutput, boolean isRemove) {
+    if (config.getAsyncConf().isMultiPhase() && isRemove) {
+      return new MessagesWithPhaseIterable<I, M>(
+          this, vertexId, getPartitionId(vertexId),
+          config.getAsyncConf().getCurrentPhase(),
+          dataInputOutput, messageValueFactory);
+    } else {
+      return new MessagesIterable<M>(dataInputOutput, messageValueFactory);
+    }
   }
 
   @Override

@@ -292,11 +292,8 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
           messages = messageStore.removeVertexMessages(vertex.getId());
         }
 
-        if (asyncConf.doLocalRead() &&
-            serviceWorker.getLogicalSuperstep() == 0) {
-          // do nothing
-          messages = messages;
-        } else {
+        if (!(asyncConf.doLocalRead() &&
+              serviceWorker.getLogicalSuperstep() == 0)) {
           // concat w/ local store if at least one async mode is enabled
           // (otherwise, messages is already reading BSP store)
           if (asyncConf.doRemoteRead() || asyncConf.doLocalRead()) {
@@ -323,6 +320,21 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
           computation.setCurrentSourceId(vertex.getId());
           computation.compute(vertex, messages);
           computation.setCurrentSourceId(null);
+
+          // YH: when we're doing async with multi-phase computations,
+          // some supersteps may not process messages at all. To ensure
+          // correctness, we need to iterate through untouched msgs.
+          if (asyncConf.isMultiPhase()) {
+            // TODO-YH: this isn't very efficient.. should we have
+            // something like messages.restore() that puts everything
+            // back on to message store?
+
+            // CHECKSTYLE: stop EmptyStatement
+            for (M1 msg : messages) {
+              ;  // dummy statement
+            }
+            // CHECKSTYLE: resume EmptyStatement
+          }
 
           // Need to unwrap the mutated edges (possibly)
           vertex.unwrapMutableEdges();

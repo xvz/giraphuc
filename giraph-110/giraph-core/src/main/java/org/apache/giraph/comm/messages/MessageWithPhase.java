@@ -29,34 +29,45 @@ import org.apache.hadoop.io.Writable;
  * messages for different phases.
  */
 public abstract class MessageWithPhase implements Writable  {
-  /** Computation phase of this message. */
+  /** Mask to get boolean encoded in int */
+  private static final int BOOL_MASK = 1 << 31;
+  /**
+   * Computation phase of this message.
+   * Most significant bit indicates whether or not this message
+   * should be processed in the same phase as it was sent.
+   */
   private int phase;
 
   /**
    * Constructor that sets the computation phase of this message.
    *
-   * @param phase Computation phase of this messag.
+   * @param phase Computation phase this message was sent in.
+   * @param forCurrPhase True if message should be processed in this phase.
    */
-  public MessageWithPhase(int phase) {
+  public MessageWithPhase(int phase, boolean forCurrPhase) {
     this.phase = phase;
+    if (forCurrPhase) {
+      this.phase |= BOOL_MASK;
+    }
   }
 
-  ///**
-  // * Sets the computation phase of this message.
-  // *
-  // * @param phase Computation phase of this message.
-  // */
-  //public final void setPhase(int phase) {
-  //  this.phase = phase;
-  //}
-
   /**
-   * Returns the computation phase of this message.
+   * Return the computation phase of this message.
    *
    * @return Computation phase of this message.
    */
   public final int getPhase() {
-    return phase;
+    return phase & ~BOOL_MASK;
+  }
+
+  /**
+   * Return whether this message is to be processed
+   * in the same phase it was sent.
+   *
+   * @return Whether to process message in the phase it was sent
+   */
+  public final boolean processInSamePhase() {
+    return (phase & BOOL_MASK) >>> 31 == 1;
   }
 
   /**
@@ -89,6 +100,7 @@ public abstract class MessageWithPhase implements Writable  {
 
   @Override
   public String toString() {
-    return "phase=" + phase;
+    return "phase=" + getPhase() + ", processInSamePhase=" +
+      processInSamePhase();
   }
 }

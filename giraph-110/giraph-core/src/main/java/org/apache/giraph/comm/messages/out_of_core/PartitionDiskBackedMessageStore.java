@@ -149,6 +149,7 @@ public class PartitionDiskBackedMessageStore<I extends WritableComparable,
     if (dataInputOutput == null) {
       dataInputOutput = config.createMessagesInputOutput();
     }
+    // TODO-YH: MessagesWithPhaseIterable not supported yet
     Iterable<M> combinedIterable = new MessagesIterable<M>(
         dataInputOutput, messageValueFactory);
 
@@ -170,6 +171,7 @@ public class PartitionDiskBackedMessageStore<I extends WritableComparable,
     if (dataInputOutput == null) {
       dataInputOutput = config.createMessagesInputOutput();
     }
+    // TODO-YH: MessagesWithPhaseIterable not supported yet
     Iterable<M> combinedIterable = new MessagesIterable<M>(
         dataInputOutput, messageValueFactory);
 

@@ -164,8 +164,13 @@ public class LongDoubleMessageStore
   @Override
   public boolean hasMessagesForPartition(int partitionId) {
     Long2DoubleOpenHashMap partitionMap = map.get(partitionId);
+
+    if (partitionMap == null) {
+      return false;
+    }
+
     synchronized (partitionMap) {
-      return partitionMap != null && !partitionMap.isEmpty();
+      return !partitionMap.isEmpty();
     }
   }
 

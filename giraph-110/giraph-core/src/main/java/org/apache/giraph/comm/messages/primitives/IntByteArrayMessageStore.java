@@ -21,6 +21,7 @@ package org.apache.giraph.comm.messages.primitives;
 import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.comm.messages.MessageStore;
 import org.apache.giraph.comm.messages.MessagesIterable;
+import org.apache.giraph.comm.messages.MessagesWithPhaseIterable;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.factories.MessageValueFactory;
 import org.apache.giraph.partition.Partition;
@@ -192,8 +193,13 @@ public class IntByteArrayMessageStore<M extends Writable>
   @Override
   public boolean hasMessagesForPartition(int partitionId) {
     Int2ObjectOpenHashMap<?> partitionMap = map.get(partitionId);
+
+    if (partitionMap == null) {
+      return false;
+    }
+
     synchronized (partitionMap) {
-      return partitionMap != null && !partitionMap.isEmpty();
+      return !partitionMap.isEmpty();
     }
   }
 
@@ -221,6 +227,7 @@ public class IntByteArrayMessageStore<M extends Writable>
       if (dataInputOutput == null) {
         return EmptyIterable.get();
       } else {
+        // YH: when we're not removing, don't return MessagesWithPhaseIterable
         return new MessagesIterable<M>(dataInputOutput, messageValueFactory);
       }
     }
@@ -237,6 +244,11 @@ public class IntByteArrayMessageStore<M extends Writable>
       DataInputOutput dataInputOutput = partitionMap.remove(vertexId.get());
       if (dataInputOutput == null) {
         return EmptyIterable.get();
+      } else if (config.getAsyncConf().isMultiPhase()) {
+        return new MessagesWithPhaseIterable<IntWritable, M>(
+            this, vertexId, service.getPartitionId(vertexId),
+            config.getAsyncConf().getCurrentPhase(),
+            dataInputOutput, messageValueFactory);
       } else {
         return new MessagesIterable<M>(dataInputOutput, messageValueFactory);
       }

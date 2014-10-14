@@ -788,13 +788,18 @@ public class BspServiceWorker<I extends WritableComparable,
     // 3. Wait until the partition assignment is complete and get it
     // 4. Get the aggregator values from the previous superstep
 
-    //LOG.info("[[PR-internal]] ##START##: ss=" + getSuperstep() +
-    //         ", lss=" + getLogicalSuperstep() +
-    //         ", nb=" + getConfiguration().getAsyncConf().needBarrier());
+    AsyncConfiguration asyncConf = getConfiguration().getAsyncConf();
+
+    LOG.info("[[MST-internal]] ##START##: ss=" + getSuperstep() +
+             ", lss=" + getLogicalSuperstep() +
+             ", nb=" + asyncConf.needBarrier() +
+             ", multi-phase=" + asyncConf.isMultiPhase() +
+             ", currPhase=" + asyncConf.getCurrentPhase() +
+             ", isNewPhase=" + asyncConf.isNewPhase());
 
     // YH: reset counter on new global superstep
-    if (getConfiguration().getAsyncConf().needBarrier()) {
-      getConfiguration().getAsyncConf().resetInFlightBytes();
+    if (asyncConf.needBarrier()) {
+      asyncConf.resetInFlightBytes();
     }
 
     if (getSuperstep() != INPUT_SUPERSTEP) {
@@ -810,7 +815,7 @@ public class BspServiceWorker<I extends WritableComparable,
     // if barrier was deemed necessary in previous pseudo or non-pseudo
     // superstep, then it will be executed now. needBarrier() is also
     // "reset" in finishSuperstep() as needed.
-    if (getConfiguration().getAsyncConf().needBarrier()) {
+    if (asyncConf.needBarrier()) {
       registerHealth(getSuperstep());
 
       String addressesAndPartitionsPath =
@@ -954,8 +959,16 @@ public class BspServiceWorker<I extends WritableComparable,
 
     // YH: can only disable barriers AFTER SS -1 (INPUT_SUPERSTEP)
     // (otherwise, e.g., message store will not be initialized)
+    //
+    // Additionally, should NOT disable barriers if doing multi-phase
+    // computation and this is a new phase. This is b/c a very common
+    // pattern is to have phases that last exactly one superstep (e.g.,
+    // to pull some values or to send some values). Executing such
+    // supersteps multiple times will cause correctness issues. By
+    // doing a barrier first, we can check if we are in such a phase.
     if (asyncConf.disableBarriers() &&
-        getLogicalSuperstep() > INPUT_SUPERSTEP) {
+        getLogicalSuperstep() > INPUT_SUPERSTEP &&
+        !(asyncConf.isMultiPhase() && asyncConf.isNewPhase())) {
       // if we have pending local messages or have received remote messages,
       // spend another logical superstep to process them
       //
@@ -965,28 +978,23 @@ public class BspServiceWorker<I extends WritableComparable,
       if (workerSentMessages > 0 || remoteMessageStore.hasMessages()) {
         needBarrier = false;
       }
-
-      // ...BUT, if doing multiphase computation and this was a new phase,
-      // initiate global barrier to ensure that next superstep is not
-      // also a new phase. This is because a very common pattern is
-      // sending messages in one phase and receiving them in the next:
-      // doing multiple logical supersteps in the former will just
-      // cause dropped messages, so it is safer to do global barrier.
-      if (asyncConf.isMultiPhase() && asyncConf.isNewPhase()) {
-        needBarrier = true;
-      }
     }
     asyncConf.setNeedBarrier(needBarrier);
 
-    //LOG.info("[[PR-internal]] ##FINISH##: ss=" + getSuperstep() +
-    //         ", lss=" + getLogicalSuperstep() +
-    //         ", nb=" + asyncConf.needBarrier());
+    LOG.info("[[MST-internal]] ##FINISH##: ss=" + getSuperstep() +
+             ", lss=" + getLogicalSuperstep() +
+             ", nb=" + asyncConf.needBarrier() +
+             ", multi-phase=" + asyncConf.isMultiPhase() +
+             ", currPhase=" + asyncConf.getCurrentPhase() +
+             ", isNewPhase=" + asyncConf.isNewPhase());
 
     if (asyncConf.needBarrier()) {
       waitForRequestsToFinish();
 
       // YH: if barriers are disabled and we are going to wait for
       // global superstep, approach "ready to sync" barrier first.
+      // BUT, if this is a new phase in multi-phase computation, we
+      // skip this barrier b/c we MUST have a global barrier.
       //
       // Must place this here b/c:
       // (1) barrier must be AFTER all requests are ACKed by their destinations
@@ -995,7 +1003,8 @@ public class BspServiceWorker<I extends WritableComparable,
       //     at global barrier without leaving (here, workers can leave)
       //     => this must be before post-superstep/aggregator finish, etc.
       if (asyncConf.disableBarriers() &&
-          getLogicalSuperstep() > INPUT_SUPERSTEP) {
+          getLogicalSuperstep() > INPUT_SUPERSTEP &&
+          !(asyncConf.isMultiPhase() && asyncConf.isNewPhase())) {
         if (!waitForWorkersOrMessages()) {
           asyncConf.setNeedBarrier(false);
         }
@@ -1079,9 +1088,10 @@ public class BspServiceWorker<I extends WritableComparable,
       // code modifications.
       incrLogicalSuperstep();
 
+      // "new phase" must only be reset after *global* superstep
+
       // Return junk---GraphTaskManager ignores it.
-      // Note that we CANNOT fake "halt" (2nd param) as that
-      // is a GLOBAL condition.
+      // Note that we CANNOT fake "halt" as that is a GLOBAL condition.
       return null;
     }
   }
