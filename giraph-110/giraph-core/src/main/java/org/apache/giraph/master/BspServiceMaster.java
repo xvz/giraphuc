@@ -1623,7 +1623,7 @@ public class BspServiceMaster<I extends WritableComparable,
 
     AsyncConfiguration asyncConf = getConfiguration().getAsyncConf();
 
-    // Do not do this extra barrier in cases where workers skip this barrier.
+    // Skip this extra barrier in cases where workers MUST have global barrier.
     if (asyncConf.disableBarriers() && getSuperstep() > INPUT_SUPERSTEP &&
         !(asyncConf.isMultiPhase() && asyncConf.isNewPhase())) {
       // YH: these paths are also cleaned up when master removes old SS dirs

@@ -895,10 +895,12 @@ public class BspServiceWorker<I extends WritableComparable,
     }
   }
 
+  // CHECKSTYLE: stop MethodLengthCheck
   @Override
   public FinishedSuperstepStats finishSuperstep(
       List<PartitionStats> partitionStatsList,
       GiraphTimerContext superstepTimerContext) {
+
     // This barrier blocks until success (or the master signals it to
     // restart).
     //
@@ -915,10 +917,12 @@ public class BspServiceWorker<I extends WritableComparable,
     long workerSentMessages = 0;
     long workerSentMessageBytes = 0;
     long localVertices = 0;
+    long doneVertices = 0;
     for (PartitionStats partitionStats : partitionStatsList) {
       workerSentMessages += partitionStats.getMessagesSentCount();
       workerSentMessageBytes += partitionStats.getMessageBytesSentCount();
       localVertices += partitionStats.getVertexCount();
+      doneVertices += partitionStats.getFinishedVertexCount();
     }
 
     AsyncConfiguration asyncConf = getConfiguration().getAsyncConf();
@@ -957,26 +961,43 @@ public class BspServiceWorker<I extends WritableComparable,
       getServerData().getRemoteMessageStore() :
       getServerData().getCurrentMessageStore();
 
-    // YH: can only disable barriers AFTER SS -1 (INPUT_SUPERSTEP)
-    // (otherwise, e.g., message store will not be initialized)
+    // YH: Cannot disable global barrier in few cases:
     //
-    // Additionally, should NOT disable barriers if doing multi-phase
-    // computation and this is a new phase. This is b/c a very common
-    // pattern is to have phases that last exactly one superstep (e.g.,
-    // to pull some values or to send some values). Executing such
-    // supersteps multiple times will cause correctness issues. By
-    // doing a barrier first, we can check if we are in such a phase.
+    // 1. SS <= INPUT_SUPERSTEP is when message store is still uninitialized.
+    //
+    // 2. Supersteps that are a new phase in multi-phase computation always
+    // need global barrier upon superstep finish. This is b/c a very common
+    // pattern is to have phases that last exactly one superstep (to pull
+    // some vales or to send some values). Executing such supersteps more than
+    // once will cause correctness issues. By doing barrier, we can check if
+    // we are in such a phase.
     if (asyncConf.disableBarriers() &&
         getLogicalSuperstep() > INPUT_SUPERSTEP &&
         !(asyncConf.isMultiPhase() && asyncConf.isNewPhase())) {
-      // if we have pending local messages or have received remote messages,
-      // spend another logical superstep to process them
-      //
-      // NOTE: we do NOT need to check if all vertices are halted,
-      // b/c if we have no messages, the vertices will have nothing
-      // to work with---we're better off waiting in that case
-      if (workerSentMessages > 0 || remoteMessageStore.hasMessages()) {
-        needBarrier = false;
+
+      if (asyncConf.needAllMsgs()) {
+        // If alg always sends messages, remoteMessageStore.hasMessages()
+        // will always return true (even if it has no actual new messages).
+        // Instead, we do another logical superstep if there are still
+        // local messages OR not all vertices are halted.
+        //
+        // If condition below is false and there are still messages in remote
+        // store, we will catch it on next global superstep or when more
+        // messages arrive while waiting at extra barrier. (This is much easier
+        // than trying to track arrival of "new" messages in remote store.)
+        if (workerSentMessages > 0 || localVertices != doneVertices) {
+          needBarrier = false;
+        }
+      } else {
+        // if we have pending local messages or have received remote messages,
+        // spend another logical superstep to process them
+        //
+        // NOTE: we do NOT need to check if all vertices are halted,
+        // b/c if we have no messages, the vertices will have nothing
+        // to work with---we're better off waiting in that case
+        if (workerSentMessages > 0 || remoteMessageStore.hasMessages()) {
+          needBarrier = false;
+        }
       }
     }
     asyncConf.setNeedBarrier(needBarrier);
@@ -993,8 +1014,7 @@ public class BspServiceWorker<I extends WritableComparable,
 
       // YH: if barriers are disabled and we are going to wait for
       // global superstep, approach "ready to sync" barrier first.
-      // BUT, if this is a new phase in multi-phase computation, we
-      // skip this barrier b/c we MUST have a global barrier.
+      // Skip this barrier if worker MUST have global barrier.
       //
       // Must place this here b/c:
       // (1) barrier must be AFTER all requests are ACKed by their destinations
@@ -1005,7 +1025,7 @@ public class BspServiceWorker<I extends WritableComparable,
       if (asyncConf.disableBarriers() &&
           getLogicalSuperstep() > INPUT_SUPERSTEP &&
           !(asyncConf.isMultiPhase() && asyncConf.isNewPhase())) {
-        if (!waitForWorkersOrMessages()) {
+        if (!waitForWorkersOrMessages(workerSentMessageBytes)) {
           asyncConf.setNeedBarrier(false);
         }
       }
@@ -1095,6 +1115,7 @@ public class BspServiceWorker<I extends WritableComparable,
       return null;
     }
   }
+  // CHECKSTYLE: resume MethodLengthCheck
 
   /**
    * Handle post-superstep callbacks
@@ -1130,9 +1151,11 @@ public class BspServiceWorker<I extends WritableComparable,
    * YH: Create required ZK path and wait for all other workers to finish, but
    * exit wait state (and delete ZK path) if a remote message arrives.
    *
+   * @param prevInFlightBytes Number of in-flight bytes before entering
+   *                          this barrier.
    * @return True on successful wait. False if interrupted by message arrival.
    */
-  private boolean waitForWorkersOrMessages() {
+  private boolean waitForWorkersOrMessages(long prevInFlightBytes) {
     MessageStore<I, Writable> remoteMessageStore =
       getConfiguration().getAsyncConf().doRemoteRead() ?
       getServerData().getRemoteMessageStore() :
@@ -1180,8 +1203,11 @@ public class BspServiceWorker<I extends WritableComparable,
         // signalled in BspService#process OR upon message arrival
         getSuperstepReadyToFinishEvent().waitForever();
 
-        // check if signal was due to message arrival
-        if (remoteMessageStore.hasMessages()) {
+        // check if signal was due to message arrival, by checking if
+        // in-flight bytes has decreased
+        // (it will never increase, b/c we're not sending any messages)
+        if (getConfiguration().
+            getAsyncConf().getInFlightBytes() < prevInFlightBytes) {
           try {
             // YH: "true" for recursive not really needed but false
             // won't make it any faster, so leave it to be safe

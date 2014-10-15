@@ -1123,9 +1123,8 @@ public interface GiraphConstants {
    * all its neighbours for every superstep (for async only)
    */
   BooleanConfOption ASYNC_NEED_ALL_MSGS =
-      new BooleanConfOption("giraph.asyncPageRankLike", false,
+      new BooleanConfOption("giraph.asyncNeedAllMessages", false,
           "Whether algorithm needs every vertex to have all messages from" +
-          "all its neighbours for every superstep; " +
-          "improves correctness and convergence if set correctly");
+          "all its neighbours for every superstep (to achieve correctness");
 }
 // CHECKSTYLE: resume InterfaceIsTypeCheck
