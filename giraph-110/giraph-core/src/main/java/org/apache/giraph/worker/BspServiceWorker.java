@@ -1156,11 +1156,6 @@ public class BspServiceWorker<I extends WritableComparable,
    * @return True on successful wait. False if interrupted by message arrival.
    */
   private boolean waitForWorkersOrMessages(long prevInFlightBytes) {
-    MessageStore<I, Writable> remoteMessageStore =
-      getConfiguration().getAsyncConf().doRemoteRead() ?
-      getServerData().getRemoteMessageStore() :
-      getServerData().getCurrentMessageStore();
-
     // ZK path to wait on (created by master)
     String superstepReadyToFinishNode =
       getSuperstepReadyToFinishPath(getApplicationAttempt(), getSuperstep());

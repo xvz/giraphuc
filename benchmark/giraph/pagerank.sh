@@ -25,13 +25,16 @@ machines=$2
 
 execmode=$3
 case ${execmode} in
-    0) execopt="";;     # sync BSP are used by default
+    0) execopt="";      # sync BSP are used by default
+       combiner="-c org.apache.giraph.combiner.DoubleSumMessageCombiner";;
     1) execopt="-Dgiraph.asyncLocalRead=true \
-                -Dgiraph.asyncRemoteRead=true";;
+                -Dgiraph.asyncRemoteRead=true";
+       combiner="";;    # no combiner
     2) execopt="-Dgiraph.asyncLocalRead=true \
                 -Dgiraph.asyncRemoteRead=true \
                 -Dgiraph.asyncDisableBarriers=true \
                 -Dgiraph.asyncNeedAllMessages=true";;
+       combiner="";;    # no combiner
     *) echo "Invalid exec-mode"; exit -1;;
 esac
 
@@ -54,6 +57,7 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop
     -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.SimplePageRankComputation\$SimplePageRankVertexValueFactory \
     -Dmapred.task.timeout=0 \
     org.apache.giraph.examples.SimplePageRankComputation \
+    ${combiner} \
     -ca SimplePageRankComputation.maxSS=${supersteps} \
     -vif org.apache.giraph.examples.io.formats.SimplePageRankInputFormat \
     -vip /user/${USER}/input/${inputgraph} \
@@ -61,11 +65,10 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop
     -op "$outputdir" \
     -w ${machines} 2>&1 | tee -a ./logs/${logfile}
 
+# flags for terminating by error tolerance (mc used for aggregators)
 #    -ca SimplePageRankComputation.minTol=2.3 \
 #    -mc org.apache.giraph.examples.SimplePageRankComputation\$SimplePageRankMasterCompute \
-#    -c org.apache.giraph.combiner.DoubleSumMessageCombiner \
-
-# mc only needed when aggregators needed (which is for error tols)
+#
 # alternative output format: -vof org.apache.giraph.io.formats.IdWithValueTextOutputFormat
 
 ## finish logging memory + network usage
