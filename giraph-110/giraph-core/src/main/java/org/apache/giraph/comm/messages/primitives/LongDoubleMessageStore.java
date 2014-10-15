@@ -220,8 +220,11 @@ public class LongDoubleMessageStore
 
   @Override
   public void clearVertexMessages(LongWritable vertexId) throws IOException {
-    // YH: not used in async, so no need to synchronize
-    getPartitionMap(vertexId).remove(vertexId.get());
+    // YH: not used in async, but synchronize anyway
+    Long2DoubleOpenHashMap partitionMap = getPartitionMap(vertexId);
+    synchronized (partitionMap) {
+      partitionMap.remove(vertexId.get());
+    }
   }
 
   @Override
@@ -233,7 +236,7 @@ public class LongDoubleMessageStore
   public Iterable<LongWritable> getPartitionDestinationVertices(
       int partitionId) {
     Long2DoubleOpenHashMap partitionMap = map.get(partitionId);
-    // YH: used with single thread
+    // YH: used by single thread
     List<LongWritable> vertices =
         Lists.newArrayListWithCapacity(partitionMap.size());
     LongIterator iterator = partitionMap.keySet().iterator();
@@ -247,7 +250,7 @@ public class LongDoubleMessageStore
   public void writePartition(DataOutput out,
       int partitionId) throws IOException {
     Long2DoubleOpenHashMap partitionMap = map.get(partitionId);
-    // YH: used with single thread
+    // YH: used by single thread
     out.writeInt(partitionMap.size());
     ObjectIterator<Long2DoubleMap.Entry> iterator =
         partitionMap.long2DoubleEntrySet().fastIterator();
@@ -263,6 +266,7 @@ public class LongDoubleMessageStore
       int partitionId) throws IOException {
     int size = in.readInt();
     Long2DoubleOpenHashMap partitionMap = new Long2DoubleOpenHashMap(size);
+    // YH: used by single thread
     while (size-- > 0) {
       long vertexId = in.readLong();
       double message = in.readDouble();

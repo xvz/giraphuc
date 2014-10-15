@@ -223,8 +223,11 @@ public class IntFloatMessageStore
 
   @Override
   public void clearVertexMessages(IntWritable vertexId) throws IOException {
-    // YH: not used in async, so no need to synchronize
-    getPartitionMap(vertexId).remove(vertexId.get());
+    // YH: not used in async, but synchronize anyway
+    Int2FloatOpenHashMap partitionMap = getPartitionMap(vertexId);
+    synchronized (partitionMap) {
+      partitionMap.remove(vertexId.get());
+    }
   }
 
   @Override
@@ -236,7 +239,7 @@ public class IntFloatMessageStore
   public Iterable<IntWritable> getPartitionDestinationVertices(
       int partitionId) {
     Int2FloatOpenHashMap partitionMap = map.get(partitionId);
-    // YH: used with single thread
+    // YH: used by single thread
     List<IntWritable> vertices =
         Lists.newArrayListWithCapacity(partitionMap.size());
     IntIterator iterator = partitionMap.keySet().iterator();
@@ -250,7 +253,7 @@ public class IntFloatMessageStore
   public void writePartition(DataOutput out,
       int partitionId) throws IOException {
     Int2FloatOpenHashMap partitionMap = map.get(partitionId);
-    // YH: used with single thread
+    // YH: used by single thread
     out.writeInt(partitionMap.size());
     ObjectIterator<Int2FloatMap.Entry> iterator =
         partitionMap.int2FloatEntrySet().fastIterator();
@@ -266,6 +269,7 @@ public class IntFloatMessageStore
       int partitionId) throws IOException {
     int size = in.readInt();
     Int2FloatOpenHashMap partitionMap = new Int2FloatOpenHashMap(size);
+    // YH: used by single thread
     while (size-- > 0) {
       int vertexId = in.readInt();
       float message = in.readFloat();
