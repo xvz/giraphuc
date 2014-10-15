@@ -178,8 +178,11 @@ public class IntByteArrayMessageStore<M extends Writable>
 
   @Override
   public void clearPartition(int partitionId) throws IOException {
-    // YH: not used in async, so no need to synchronize
-    map.get(partitionId).clear();
+    // YH: not used in async, but synchronize anyway
+    Int2ObjectOpenHashMap<?> partitionMap = map.get(partitionId);
+    synchronized (partitionMap) {
+      partitionMap.clear();
+    }
   }
 
   @Override

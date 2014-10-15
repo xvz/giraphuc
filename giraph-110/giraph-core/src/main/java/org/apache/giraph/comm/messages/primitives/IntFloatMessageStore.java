@@ -152,8 +152,11 @@ public class IntFloatMessageStore
 
   @Override
   public void clearPartition(int partitionId) throws IOException {
-    // YH: not used in async, so no need to synchronize
-    map.get(partitionId).clear();
+    // YH: not used in async, but synchronize anyway
+    Int2FloatOpenHashMap partitionMap = map.get(partitionId);
+    synchronized (partitionMap) {
+      partitionMap.clear();
+    }
   }
 
   @Override
