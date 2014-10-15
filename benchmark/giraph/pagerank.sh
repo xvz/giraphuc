@@ -33,7 +33,7 @@ case ${execmode} in
     2) execopt="-Dgiraph.asyncLocalRead=true \
                 -Dgiraph.asyncRemoteRead=true \
                 -Dgiraph.asyncDisableBarriers=true \
-                -Dgiraph.asyncNeedAllMessages=true";;
+                -Dgiraph.asyncNeedAllMessages=true";
        combiner="";;    # no combiner
     *) echo "Invalid exec-mode"; exit -1;;
 esac
