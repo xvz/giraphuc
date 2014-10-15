@@ -133,10 +133,14 @@ public class LongDoubleMessageWithSourceStore
       MessageWithSource<LongWritable, DoubleWritable> message)
     throws IOException {
 
-    Long2DoubleOpenHashMap srcMap =
-      getOrCreateSourceMap(map.get(partitionId), destVertexId);
+    Long2ObjectOpenHashMap<Long2DoubleOpenHashMap> partitionMap =
+      map.get(partitionId);
 
-    synchronized (srcMap) {
+    Long2DoubleOpenHashMap srcMap =
+      getOrCreateSourceMap(partitionMap, destVertexId);
+
+    // must synchronize on partition map, NOT src map
+    synchronized (partitionMap) {
       // always overwrite existing message
       srcMap.put(message.getSource().get(), message.getMessage().get());
     }
@@ -147,22 +151,25 @@ public class LongDoubleMessageWithSourceStore
       int partitionId, VertexIdMessages<LongWritable,
       MessageWithSource<LongWritable, DoubleWritable>> messages)
     throws IOException {
-    VertexIdMessageWithSourceIterator<LongWritable, DoubleWritable> itr =
-      ((VertexIdMessagesWithSource<LongWritable, DoubleWritable>) messages).
-      getVertexIdMessageWithSourceIterator();
 
-    while (itr.hasNext()) {
-      itr.next();
-      long srcId = ((SourceVertexIdIterator<LongWritable>) itr).
-        getCurrentSourceVertexId().get();
-      double msg = itr.getCurrentMessage().get();
+    Long2ObjectOpenHashMap<Long2DoubleOpenHashMap> partitionMap =
+      map.get(partitionId);
 
-      // no need to release (all primitives)
-      Long2DoubleOpenHashMap srcMap =
-        getOrCreateSourceMap(map.get(partitionId),
-                             itr.getCurrentVertexId());
+    synchronized (partitionMap) {
+      VertexIdMessageWithSourceIterator<LongWritable, DoubleWritable> itr =
+        ((VertexIdMessagesWithSource<LongWritable, DoubleWritable>) messages).
+        getVertexIdMessageWithSourceIterator();
 
-      synchronized (srcMap) {
+      while (itr.hasNext()) {
+        itr.next();
+        long srcId = ((SourceVertexIdIterator<LongWritable>) itr).
+          getCurrentSourceVertexId().get();
+        double msg = itr.getCurrentMessage().get();
+
+        // no need to release (all primitives)
+        Long2DoubleOpenHashMap srcMap =
+          getOrCreateSourceMap(partitionMap, itr.getCurrentVertexId());
+
         // always overwrite existing message
         srcMap.put(srcId, msg);
       }
@@ -171,8 +178,11 @@ public class LongDoubleMessageWithSourceStore
 
   @Override
   public void clearPartition(int partitionId) throws IOException {
-    // YH: not used in async, so no need to synchronize
-    map.get(partitionId).clear();
+    // YH: not used in async, but synchronize anyway
+    Long2ObjectOpenHashMap<?> partitionMap = map.get(partitionId);
+    synchronized (partitionMap) {
+      partitionMap.clear();
+    }
   }
 
   @Override
@@ -254,7 +264,8 @@ public class LongDoubleMessageWithSourceStore
     throw new UnsupportedOperationException(
       "Unsupported, use removeVertexMessagesWithoutSource instead.");
 
-    //Long2DoubleOpenHashMap partitionMap = getPartitionMap(vertexId);
+    //Long2ObjectOpenHashMap<Long2DoubleOpenHashMap> partitionMap =
+    //  getPartitionMap(vertexId);
     //
     //// YH: must synchronize, as writes are concurrent w/ reads in async
     //synchronized (partitionMap) {
@@ -302,8 +313,11 @@ public class LongDoubleMessageWithSourceStore
 
   @Override
   public void clearVertexMessages(LongWritable vertexId) throws IOException {
-    // YH: not used in async, so no need to synchronize
-    getPartitionMap(vertexId).remove(vertexId.get());
+    // YH: not used in async, but synchronize anyway
+    Long2ObjectOpenHashMap<?> partitionMap = getPartitionMap(vertexId);
+    synchronized (partitionMap) {
+      partitionMap.remove(vertexId.get());
+    }
   }
 
   @Override
@@ -316,7 +330,7 @@ public class LongDoubleMessageWithSourceStore
       int partitionId) {
     Long2ObjectOpenHashMap<Long2DoubleOpenHashMap> partitionMap =
       map.get(partitionId);
-    // YH: used with single thread
+    // YH: used by single thread
     List<LongWritable> vertices =
         Lists.newArrayListWithCapacity(partitionMap.size());
     LongIterator iterator = partitionMap.keySet().iterator();
@@ -331,7 +345,7 @@ public class LongDoubleMessageWithSourceStore
       int partitionId) throws IOException {
     Long2ObjectOpenHashMap<Long2DoubleOpenHashMap> partitionMap =
       map.get(partitionId);
-    // YH: used with single thread
+    // YH: used by single thread
     out.writeInt(partitionMap.size());
 
     ObjectIterator<Long2ObjectMap.Entry<Long2DoubleOpenHashMap>> itr =
@@ -364,6 +378,7 @@ public class LongDoubleMessageWithSourceStore
     Long2ObjectOpenHashMap<Long2DoubleOpenHashMap> partitionMap =
       new Long2ObjectOpenHashMap<Long2DoubleOpenHashMap>(size);
 
+    // YH: used by single thread
     while (size-- > 0) {
       long dstId = in.readLong();
       int srcMapSize = in.readInt();

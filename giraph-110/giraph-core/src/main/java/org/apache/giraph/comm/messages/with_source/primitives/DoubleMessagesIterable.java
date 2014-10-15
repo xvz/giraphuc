@@ -24,14 +24,11 @@ import it.unimi.dsi.fastutil.doubles.DoubleIterator;
 import it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap;
 
 import java.util.Iterator;
-import java.util.Map;
 
 /**
  * YH: Special iterable that recycles a DoubleWritable message.
  */
 public class DoubleMessagesIterable implements Iterable<DoubleWritable> {
-  /** Source map from message store */
-  private final Map<?, Double> srcMap;
   /** Iterator over message store's messages */
   private final DoubleIterator itr;
 
@@ -41,8 +38,10 @@ public class DoubleMessagesIterable implements Iterable<DoubleWritable> {
    * @param srcMap Source map from message store
    */
   public DoubleMessagesIterable(Long2DoubleOpenHashMap srcMap) {
-    this.srcMap = srcMap;
-    this.itr = srcMap.values().iterator();
+    // MUST clone this, else we will run into synchronization issues
+    // (synchronizing on srcMap or partitionMap does not work---it
+    // will still result in race and failure)
+    this.itr = srcMap.clone().values().iterator();
   }
 
   @Override
@@ -54,16 +53,12 @@ public class DoubleMessagesIterable implements Iterable<DoubleWritable> {
 
       @Override
       public boolean hasNext() {
-        synchronized (srcMap) {
-          return itr.hasNext();
-        }
+        return itr.hasNext();
       }
 
       @Override
       public DoubleWritable next() {
-        synchronized (srcMap) {
-          representativeWritable.set(itr.nextDouble());
-        }
+        representativeWritable.set(itr.nextDouble());
         return representativeWritable;
       }
 
