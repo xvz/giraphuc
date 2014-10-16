@@ -20,6 +20,7 @@ package org.apache.giraph.graph;
 import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.comm.WorkerClientRequestProcessor;
 import org.apache.giraph.comm.messages.MessageStore;
+import org.apache.giraph.comm.messages.MessagesWithPhaseIterable;
 import org.apache.giraph.comm.messages.with_source.MessageWithSourceStore;
 import org.apache.giraph.comm.netty.NettyWorkerClientRequestProcessor;
 import org.apache.giraph.conf.AsyncConfiguration;
@@ -273,40 +274,42 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         // YH: messageStore and localMessageStore are set correctly by
         // GraphTaskManager to be remote-only/BSP and local-only/BSP
 
-        // TODO-YH: deal with pending mutations by skipping message remove()
-        // for vertices that don't yet exist???
+        // YH: (logical) SS0 is special case for async, because many algs send
+        // messages but do not have any logic to process them, so messages
+        // revealed in SS0 gets lost. Hence, keep them until after.
 
-        // YH: (logical) SS0 is special case because many algs send messages
-        // but do not have any logic to process them, so whatever messages
-        // we reveal in SS0 gets lost. Hence, keep them until after.
-        if (asyncConf.doRemoteRead() &&
-            serviceWorker.getLogicalSuperstep() == 0) {
-          // for needAllMsgs(), nothing needs to be done either
-          messages = EmptyIterable.<M1>get();
-        } else if (asyncConf.needAllMsgs()) {
-          // no need to remove, as we always overwrite
-          messages = ((MessageWithSourceStore) messageStore).
-            getVertexMessagesWithoutSource(vertex.getId());
-        } else {
-          // always remove messages immediately (rather than get and clear)
-          messages = messageStore.removeVertexMessages(vertex.getId());
+        // this can also be for all messages, if async is disabled
+        Iterable<M1> remoteMsgs = EmptyIterable.<M1>get();
+        if (!asyncConf.doRemoteRead() ||
+            serviceWorker.getLogicalSuperstep() > 0) {
+          if (asyncConf.needAllMsgs()) {
+            // no need to remove, as we always overwrite
+            remoteMsgs = ((MessageWithSourceStore) messageStore).
+              getVertexMessagesWithoutSource(vertex.getId());
+          } else {
+            // always remove messages immediately (rather than get and clear)
+            remoteMsgs = messageStore.removeVertexMessages(vertex.getId());
+          }
         }
 
-        if (!(asyncConf.doLocalRead() &&
-              serviceWorker.getLogicalSuperstep() == 0)) {
-          // concat w/ local store if at least one async mode is enabled
-          // (otherwise, messages is already reading BSP store)
+        Iterable<M1> localMsgs = EmptyIterable.<M1>get();
+        if (!asyncConf.doLocalRead() ||
+            serviceWorker.getLogicalSuperstep() > 0) {
+          // tack on local store if at least one async mode is enabled;
+          // else, remoteMsgs already iterates over BSP store
+          // ("local store" can be local or BSP, see GraphTaskManager)
           if (asyncConf.doRemoteRead() || asyncConf.doLocalRead()) {
             if (asyncConf.needAllMsgs()) {
-              messages = Iterables.concat(messages,
-                ((MessageWithSourceStore) localMessageStore).
-                getVertexMessagesWithoutSource(vertex.getId()));
+              localMsgs = ((MessageWithSourceStore) localMessageStore).
+                getVertexMessagesWithoutSource(vertex.getId());
             } else {
-              messages = Iterables.concat(messages,
-                localMessageStore.removeVertexMessages(vertex.getId()));
+              localMsgs = localMessageStore.
+                removeVertexMessages(vertex.getId());
             }
           }
         }
+        messages = localMsgs == EmptyIterable.<M1>get() ?
+          remoteMsgs : Iterables.concat(remoteMsgs, localMsgs);
 
         if (vertex.isHalted() && !Iterables.isEmpty(messages)) {
           vertex.wakeUp();
@@ -322,18 +325,17 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
           computation.setCurrentSourceId(null);
 
           // YH: when we're doing async with multi-phase computations,
-          // some supersteps may not process messages at all. To ensure
-          // correctness, we need to iterate through untouched msgs.
+          // some messages may need to be placed back on to message store
+          // (This is also needed b/c some supersteps don't process messages
+          // at all, so this will go through them)
           if (asyncConf.isMultiPhase()) {
-            // TODO-YH: this isn't very efficient.. should we have
-            // something like messages.restore() that puts everything
-            // back on to message store?
-
-            // CHECKSTYLE: stop EmptyStatement
-            for (M1 msg : messages) {
-              ;  // dummy statement
+            if (remoteMsgs instanceof MessagesWithPhaseIterable) {
+              ((MessagesWithPhaseIterable) remoteMsgs).restore();
             }
-            // CHECKSTYLE: resume EmptyStatement
+
+            if (localMsgs instanceof MessagesWithPhaseIterable) {
+              ((MessagesWithPhaseIterable) localMsgs).restore();
+            }
           }
 
           // Need to unwrap the mutated edges (possibly)

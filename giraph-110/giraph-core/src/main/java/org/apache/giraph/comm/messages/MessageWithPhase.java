@@ -39,7 +39,7 @@ public abstract class MessageWithPhase implements Writable  {
   private int phase;
 
   /**
-   * Constructor that sets the computation phase of this message.
+   * Constructor that sets message's "compute in this phase?".
    * NOTE: setPhase() must be called to correctly set this msg's phase.
    *
    * @param forCurrPhase True if message should be processed in this phase.

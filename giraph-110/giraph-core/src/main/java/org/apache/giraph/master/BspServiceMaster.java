@@ -1534,6 +1534,7 @@ public class BspServiceMaster<I extends WritableComparable,
     return superstepClasses;
   }
 
+  // CHECKSTYLE: stop MethodLengthCheck
   @Override
   public SuperstepState coordinateSuperstep() throws
   KeeperException, InterruptedException {
@@ -1653,6 +1654,9 @@ public class BspServiceMaster<I extends WritableComparable,
       return SuperstepState.WORKER_FAILURE;
     }
 
+    // YH: before doing master.compute(), reset asyncConf's isNewPhase
+    asyncConf.setNewPhase(false);
+
     // Collect aggregator values, then run the master.compute() and
     // finally save the aggregator values
     aggregatorHandler.prepareSuperstep(masterClient);
@@ -1695,11 +1699,13 @@ public class BspServiceMaster<I extends WritableComparable,
       globalStats.setHaltComputation(true);
     }
 
-    // YH: set computation phase for workers to see
+    // YH: set isNewPhase for all workers to see. SS0 is always a new phase.
     //
     // Note that doMasterCompute() above is executed for getSuperstep()+1,
-    // so asyncConf will contain phase for *next* global superstep
-    globalStats.setNextPhase(asyncConf.getCurrentPhase());
+    // so asyncConf will indeed contain info for *next* global superstep
+    if (getSuperstep() == 0 || asyncConf.isNewPhase()) {
+      globalStats.setNewPhase(true);
+    }
 
     // Superstep 0 doesn't need to have matching types (Message types may not
     // match) and if the computation is halted, no need to check any of
@@ -1734,6 +1740,7 @@ public class BspServiceMaster<I extends WritableComparable,
 
     return superstepState;
   }
+  // CHECKSTYLE: resume MethodLengthCheck
 
   /**
    * This doMasterCompute is only called

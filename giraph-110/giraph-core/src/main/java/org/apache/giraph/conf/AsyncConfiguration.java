@@ -39,10 +39,10 @@ public class AsyncConfiguration {
    */
   private boolean needAllMsgs;
 
-  // TODO-YH: phases w/ PR-like execution are not completed yet
+  // TODO-YH: phases w/ PR-like execution are not fully completed yet
   /** Is the next superstep a new computation phase? */
   private boolean isNewPhase;
-  /** Current computation phase */
+  /** Counter for current phase; wraps around under overflow */
   private int currentPhase;
   /** Does the computation have multiple phases? */
   private boolean isMultiPhase;
@@ -76,15 +76,16 @@ public class AsyncConfiguration {
       doRemoteRead = GiraphConstants.ASYNC_REMOTE_READ.get(conf);
     }
 
-    needAllMsgs = GiraphConstants.ASYNC_NEED_ALL_MSGS.get(conf);
-
+    if (doLocalRead || doRemoteRead) {
+      needAllMsgs = GiraphConstants.ASYNC_NEED_ALL_MSGS.get(conf);
+    } else {
+      needAllMsgs = false;
+    }
 
     // This only sets isNewPhase for SS -1 (INPUT_SUPERSTEP).
     isNewPhase = true;
-    // All computations have at least one phase. This initial value
-    // is to ensure that SS0 is properly treated as new phase.
-    // (Otherwise, isNewPhase becomes false at SS0, which is incorrect)
-    currentPhase = -1;
+    // All computations have at least one phase.
+    currentPhase = 0;
 
     // if M implements MessageWithPhase, we have multiphase computation
     // NOTE: we assume incoming and outgoing types are same
@@ -147,24 +148,32 @@ public class AsyncConfiguration {
   }
 
   /**
-   * Get the computation phase for the current global superstep.
+   * Set whether or not the next global superstep is a new phase.
    *
-   * @return Current computation phase
+   * @param isNewPhase True if next global superstep is a new phase.
    */
-  public int getCurrentPhase() {
-    return currentPhase;
+  public void setNewPhase(boolean isNewPhase) {
+    this.isNewPhase = isNewPhase;
+    if (isNewPhase) {
+      // in case of overflow, just wrap around (also, shut up checkstyle)
+      // CHECKSTYLE: stop UnnecessaryParenthesesCheck
+      currentPhase = (currentPhase + 1 == Integer.MIN_VALUE ?
+                      0 : currentPhase + 1);
+      // CHECKSTYLE: resume UnnecessaryParenthesesCheck
+    }
   }
 
   /**
-   * Set the computation phase for next global superstep.
-   * Also records whether this is a new phase (i.e., different from
-   * the phase of the previous global superstep).
+   * Get the phase counter for the current global superstep.
+   * This phase counter increases monotonically, but wraps under overflow.
    *
-   * @param phase Computation phase for next global superstep
+   * Note that this does NOT relate at all to the actual computation phase
+   * used by the algorithm's logic---this is only a system counter.
+   *
+   * @return Current phase
    */
-  public void setNextPhase(int phase) {
-    isNewPhase = currentPhase != phase;  // checkstyle doesn't like parentheses
-    currentPhase = phase;
+  public int getCurrentPhase() {
+    return currentPhase;
   }
 
   /**

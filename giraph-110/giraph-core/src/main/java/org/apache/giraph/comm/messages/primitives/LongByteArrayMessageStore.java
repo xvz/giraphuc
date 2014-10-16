@@ -168,7 +168,7 @@ public class LongByteArrayMessageStore<M extends Writable>
             iterator = messages.getVertexIdMessageIterator();
         while (iterator.hasNext()) {
           iterator.next();
-          DataInputOutput dataInputOutput =  getDataInputOutput(partitionMap,
+          DataInputOutput dataInputOutput = getDataInputOutput(partitionMap,
               iterator.getCurrentVertexId().get());
           VerboseByteStructMessageWrite.verboseWriteCurrentMessage(iterator,
               dataInputOutput.getDataOutput());

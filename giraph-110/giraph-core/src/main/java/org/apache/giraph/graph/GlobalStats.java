@@ -43,10 +43,10 @@ public class GlobalStats implements Writable {
   private boolean haltComputation = false;
 
   /**
-   * YH: Computation phase of next global superstep. All computations
-   * have a single phase by default (hence this default value).
+   * YH: True if the next global superstep will have a different
+   * computational phase from the previous superstep.
    */
-  private int nextPhase = 0;
+  private boolean isNewPhase = false;
 
   /**
    * Add the stats of a partition to the global stats.
@@ -87,12 +87,12 @@ public class GlobalStats implements Writable {
     haltComputation = value;
   }
 
-  public int getNextPhase() {
-    return nextPhase;
+  public boolean isNewPhase() {
+    return isNewPhase;
   }
 
-  public void setNextPhase(int phase) {
-    nextPhase = phase;
+  public void setNewPhase(boolean isNewPhase) {
+    this.isNewPhase = isNewPhase;
   }
 
   /**
@@ -121,7 +121,7 @@ public class GlobalStats implements Writable {
     messageCount = input.readLong();
     messageBytesCount = input.readLong();
     haltComputation = input.readBoolean();
-    nextPhase = input.readInt();
+    isNewPhase = input.readBoolean();
   }
 
   @Override
@@ -132,7 +132,7 @@ public class GlobalStats implements Writable {
     output.writeLong(messageCount);
     output.writeLong(messageBytesCount);
     output.writeBoolean(haltComputation);
-    output.writeInt(nextPhase);
+    output.writeBoolean(isNewPhase);
   }
 
   @Override
@@ -141,6 +141,6 @@ public class GlobalStats implements Writable {
         finishedVertexCount + ",edges=" + edgeCount + ",msgCount=" +
         messageCount + ",msgBytesCount=" +
         messageBytesCount + ",haltComputation=" + haltComputation +
-        ",nextPhase=" + nextPhase + ")";
+        ",isNewPhase=" + isNewPhase + ")";
   }
 }

@@ -645,7 +645,7 @@ public class MSTAsyncComputation extends BasicComputation<
     public void compute() {
       // special case for first superstep
       if (getSuperstep() == 0) {
-        setNextPhase(MSTPhase.PHASE_1.get());
+        notifyNewPhase();
         setAggregatedValue(PHASE_AGG, new IntWritable(MSTPhase.PHASE_1.get()));
         return;
       }
@@ -702,7 +702,9 @@ public class MSTAsyncComputation extends BasicComputation<
         LOG.error("Invalid computation phase.");
       }
 
-      setNextPhase(newphase.get());
+      if (newphase.get() != phase.get()) {
+        notifyNewPhase();
+      }
       setAggregatedValue(PHASE_AGG, new IntWritable(newphase.get()));
     }
   }

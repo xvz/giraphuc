@@ -69,17 +69,11 @@ public abstract class MasterCompute
   /**
    * YH: Notify that the next global superstep (to come after master.compute())
    * will have a different computation phase from the previous superstep.
-   *
-   * @param phase Computation phase (>= 0) of the next superstep
    */
-  public final void setNextPhase(int phase) {
-    if (phase < 0) {
-      throw new RuntimeException("Computation phases cannot be negative!");
-    }
-
-    // this will be set correctly, b/c "this" is an instance of
+  public final void notifyNewPhase() {
+    // this works correctly, b/c "this" is an instance of
     // ImmutableClassesGiraphConfigurable (see configureIfPossible)
-    getConf().getAsyncConf().setNextPhase(phase);
+    getConf().getAsyncConf().setNewPhase(true);
   }
 
   /**

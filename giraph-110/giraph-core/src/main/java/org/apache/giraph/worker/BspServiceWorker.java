@@ -1091,8 +1091,8 @@ public class BspServiceWorker<I extends WritableComparable,
       incrCachedSuperstep();
       getConfiguration().updateSuperstepClasses(superstepClasses);
 
-      // YH: set next computation phase
-      asyncConf.setNextPhase(globalStats.getNextPhase());
+      // YH: set isNewPhase based on global stats from the master
+      asyncConf.setNewPhase(globalStats.isNewPhase());
 
       return new FinishedSuperstepStats(
           localVertices,
@@ -1108,7 +1108,7 @@ public class BspServiceWorker<I extends WritableComparable,
       // code modifications.
       incrLogicalSuperstep();
 
-      // "new phase" must only be reset after *global* superstep
+      // isNewPhase can only be reset after *global* superstep
 
       // Return junk---GraphTaskManager ignores it.
       // Note that we CANNOT fake "halt" as that is a GLOBAL condition.
