@@ -55,12 +55,6 @@ public abstract class MasterCompute
   private SuperstepClasses superstepClasses;
 
   /**
-   * YH: Computation phase of next global superstep. All computations
-   * have a single phase by default (hence this default value).
-   */
-  private int nextPhase = 0;
-
-  /**
    * Must be defined by user to specify what the master has to do.
    */
   public abstract void compute();
@@ -82,17 +76,10 @@ public abstract class MasterCompute
     if (phase < 0) {
       throw new RuntimeException("Computation phases cannot be negative!");
     }
-    nextPhase = phase;
-  }
 
-  /**
-   * YH: Get the computation phase of the next global superstep
-   * (i.e., the global superstep following master.compute()).
-   *
-   * @return Computation phase of next superstep
-   */
-  public final int getNextPhase() {
-    return nextPhase;
+    // this will be set correctly, b/c "this" is an instance of
+    // ImmutableClassesGiraphConfigurable (see configureIfPossible)
+    getConf().getAsyncConf().setNextPhase(phase);
   }
 
   /**

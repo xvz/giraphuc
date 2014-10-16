@@ -1698,10 +1698,8 @@ public class BspServiceMaster<I extends WritableComparable,
     // YH: set computation phase for workers to see
     //
     // Note that doMasterCompute() above is executed for getSuperstep()+1,
-    // so this really is for the "next" global superstep.
-    globalStats.setNextPhase(masterCompute.getNextPhase());
-    // also update master's asyncConf
-    asyncConf.setNextPhase(masterCompute.getNextPhase());
+    // so asyncConf will contain phase for *next* global superstep
+    globalStats.setNextPhase(asyncConf.getCurrentPhase());
 
     // Superstep 0 doesn't need to have matching types (Message types may not
     // match) and if the computation is halted, no need to check any of

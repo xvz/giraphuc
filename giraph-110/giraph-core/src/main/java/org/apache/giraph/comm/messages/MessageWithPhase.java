@@ -32,7 +32,7 @@ public abstract class MessageWithPhase implements Writable  {
   /** Mask to get boolean encoded in int */
   private static final int BOOL_MASK = 1 << 31;
   /**
-   * Computation phase of this message.
+   * Computation phase that this message was sent in.
    * Most significant bit indicates whether or not this message
    * should be processed in the same phase as it was sent.
    */
@@ -40,21 +40,32 @@ public abstract class MessageWithPhase implements Writable  {
 
   /**
    * Constructor that sets the computation phase of this message.
+   * NOTE: setPhase() must be called to correctly set this msg's phase.
    *
-   * @param phase Computation phase this message was sent in.
    * @param forCurrPhase True if message should be processed in this phase.
    */
-  public MessageWithPhase(int phase, boolean forCurrPhase) {
-    this.phase = phase;
+  public MessageWithPhase(boolean forCurrPhase) {
+    phase = 0;      // dummy value, must be set via setPhase()
     if (forCurrPhase) {
       this.phase |= BOOL_MASK;
     }
   }
 
   /**
-   * Return the computation phase of this message.
+   * Set computation phase that this message was sent in.
    *
-   * @return Computation phase of this message.
+   * @param phase Computation phase for this message
+   */
+  public final void setPhase(int phase) {
+    if (phase < 0) {
+      throw new RuntimeException("Computation phases cannot be negative!");
+    }
+    this.phase &= BOOL_MASK;   // clear out previous phase
+    this.phase |= phase;       // set to new phase
+  }
+
+  /**
+   * @return Computation phase that this message was sent in.
    */
   public final int getPhase() {
     return phase & ~BOOL_MASK;

@@ -110,17 +110,17 @@ public class MSTAsyncComputation extends BasicComputation<
 
     case PHASE_2A:
       //LOG.info(vertex.getId() + ": phase 2A");
-      phase2A(vertex, phase);
+      phase2A(vertex);
       break;
 
     case PHASE_2B:
       //LOG.info(vertex.getId() + ": phase 2B");
-      phase2B(vertex, messages, phase);
+      phase2B(vertex, messages);
       break;
 
     case PHASE_3A:
       //LOG.info(vertex.getId() + ": phase 3A");
-      phase3A(vertex, phase);
+      phase3A(vertex);
       break;
 
     case PHASE_3B:
@@ -130,7 +130,7 @@ public class MSTAsyncComputation extends BasicComputation<
 
     case PHASE_4A:
       //LOG.info(vertex.getId() + ": phase 4A");
-      phase4A(vertex, phase);
+      phase4A(vertex);
       break;
 
     case PHASE_4B:
@@ -204,18 +204,16 @@ public class MSTAsyncComputation extends BasicComputation<
    * This is a special case of Phase 2B (only questions, no answers).
    *
    * @param vertex Vertex
-   * @param phase Current computation phase
    */
   private void phase2A(
-       Vertex<LongWritable, MSTVertexValue, MSTEdgeValue> vertex,
-       MSTPhase phase) {
+       Vertex<LongWritable, MSTVertexValue, MSTEdgeValue> vertex) {
 
     vertex.getValue().setType(MSTVertexType.TYPE_UNKNOWN);
 
     MSTMessage msg = new MSTMessage(
         new MSTMsgType(MSTMsgType.MSG_QUESTION),
         new MSTMsgContentLong(vertex.getId().get()),
-        phase, false);
+        false);
 
     // send query to pointer (potential supervertex)
     //LOG.info(vertex.getId() + ": sending question to " +
@@ -231,12 +229,10 @@ public class MSTAsyncComputation extends BasicComputation<
    *
    * @param vertex Vertex
    * @param messages Incoming messages
-   * @param phase Current computation phase
    */
   private void phase2B(
        Vertex<LongWritable, MSTVertexValue, MSTEdgeValue> vertex,
-       Iterable<MSTMessage> messages,
-       MSTPhase phase) {
+       Iterable<MSTMessage> messages) {
 
     ArrayList<Long> sources = new ArrayList<Long>();
     boolean isPointerSupervertex = false;
@@ -338,7 +334,7 @@ public class MSTAsyncComputation extends BasicComputation<
           MSTMessage msg = new MSTMessage(
                              new MSTMsgType(MSTMsgType.MSG_QUESTION),
                              new MSTMsgContentLong(myId),
-                             phase, true);
+                             true);
 
           //LOG.info(vertex.getId() + ": resending question to " + pointer);
           sendMessage(new LongWritable(pointer), msg);
@@ -360,7 +356,7 @@ public class MSTAsyncComputation extends BasicComputation<
 
       MSTMessage msg = new MSTMessage(new MSTMsgType(MSTMsgType.MSG_ANSWER),
                                       new MSTMsgContentLong(pointer, bool),
-                                      phase, true);
+                                      true);
 
       //LOG.info(vertex.getId() + ": sent " + pointer + ", " +
       //         isPointerSupervertex);
@@ -381,11 +377,9 @@ public class MSTAsyncComputation extends BasicComputation<
    * Phase 3A: notify neighbours of supervertex ID
    *
    * @param vertex Vertex
-   * @param phase Current computation phase
    */
   private void phase3A(
-       Vertex<LongWritable, MSTVertexValue, MSTEdgeValue> vertex,
-       MSTPhase phase) {
+       Vertex<LongWritable, MSTVertexValue, MSTEdgeValue> vertex) {
 
     // This is dumb... there's probably a better way.
     aggregate(COUNTER_AGG, new LongWritable(-1));
@@ -395,7 +389,7 @@ public class MSTAsyncComputation extends BasicComputation<
     MSTMessage msg = new MSTMessage(new MSTMsgType(MSTMsgType.MSG_CLEAN),
                          new MSTMsgContentLong(vertex.getId().get(),
                                                vertex.getValue().getPointer()),
-                         phase, false);
+                         false);
 
     //LOG.info(vertex.getId() + ": sending MSG_CLEAN, my supervertex is " +
     //         vertex.getValue().getPointer());
@@ -506,11 +500,9 @@ public class MSTAsyncComputation extends BasicComputation<
    * Phase 4A: send adjacency list to supervertex
    *
    * @param vertex Vertex
-   * @param phase Current computation phase
    */
   private void phase4A(
-       Vertex<LongWritable, MSTVertexValue, MSTEdgeValue> vertex,
-       MSTPhase phase) {
+       Vertex<LongWritable, MSTVertexValue, MSTEdgeValue> vertex) {
 
     MSTVertexType type = vertex.getValue().getType();
     long pointer = vertex.getValue().getPointer();
@@ -526,7 +518,7 @@ public class MSTAsyncComputation extends BasicComputation<
         while (itr.hasNext()) {
           msg = new MSTMessage(new MSTMsgType(MSTMsgType.MSG_EDGE),
                                new MSTMsgContentEdge(itr.next()),
-                               phase, false);
+                               false);
           sendMessage(new LongWritable(pointer), msg);
 
           // delete edge---this can help w/ memory (not so much running time)
@@ -1037,7 +1029,7 @@ public class MSTAsyncComputation extends BasicComputation<
      * Default constructor.
      */
     public MSTMessage() {
-      super(0, false);
+      super(false);
       this.type = new MSTMsgType(MSTMsgType.MSG_INVALID);
       // TODO: ??? or should we use MSTMsgContentLong??
       this.value = new MSTMsgContentLong();
@@ -1048,12 +1040,11 @@ public class MSTAsyncComputation extends BasicComputation<
      *
      * @param type Message type.
      * @param value Message value.
-     * @param phase Current computation phase
      * @param forCurrPhase True if message should be processed in this phase.
      */
     public MSTMessage(MSTMsgType type, MSTMsgContent value,
-                      MSTPhase phase, boolean forCurrPhase) {
-      super(phase.get(), forCurrPhase);
+                      boolean forCurrPhase) {
+      super(forCurrPhase);
       this.type = type;
       this.value = value;
     }
