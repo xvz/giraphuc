@@ -30,9 +30,7 @@ case ${execmode} in
     1) execopt="-Dgiraph.asyncLocalRead=true \
                 -Dgiraph.asyncRemoteRead=true";
        combiner="";;    # no combiner
-    2) execopt="-Dgiraph.asyncLocalRead=true \
-                -Dgiraph.asyncRemoteRead=true \
-                -Dgiraph.asyncDisableBarriers=true \
+    2) execopt="-Dgiraph.asyncDisableBarriers=true \
                 -Dgiraph.asyncNeedAllMessages=true";
        combiner="";;    # no combiner
     *) echo "Invalid exec-mode"; exit -1;;
