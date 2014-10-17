@@ -22,6 +22,7 @@ import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.edge.Edge;
 import org.apache.giraph.edge.OutEdges;
 import org.apache.giraph.graph.Vertex;
+import org.apache.giraph.utils.io.DataInputOutput;
 import org.apache.giraph.zk.ZooKeeperExt;
 import org.apache.giraph.zk.ZooKeeperExt.PathStat;
 import org.apache.hadoop.conf.Configuration;
@@ -362,6 +363,21 @@ public class WritableUtils {
     out.writeInt(extendedDataOutput.getPos());
     out.write(
         extendedDataOutput.getByteArray(), 0, extendedDataOutput.getPos());
+  }
+
+  /**
+   * YH: Write DataInputOutput to an existing DataOutput.
+   * This will write ALL of its contents, without the size.
+   *
+   * @param dataInputOutput DataInputOutput to write
+   * @param out DataOutput to write to
+   */
+  public static void writeDataInputOutput(
+      DataInputOutput dataInputOutput, DataOutput out)
+    throws IOException {
+    ExtendedDataOutput data =
+      (ExtendedDataOutput) dataInputOutput.getDataOutput();
+    out.write(data.getByteArray(), 0, data.getPos());
   }
 
   /**

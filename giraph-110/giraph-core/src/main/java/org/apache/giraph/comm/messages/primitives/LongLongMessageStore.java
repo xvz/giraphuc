@@ -147,6 +147,13 @@ public class LongLongMessageStore
   }
 
   @Override
+  public void restore(int partitionId, LongWritable vertexId,
+                      Writable messages) throws IOException {
+    // this function should never be called
+    throw new UnsupportedOperationException("restore: Not supported");
+  }
+
+  @Override
   public void clearPartition(int partitionId) throws IOException {
     // YH: not used in async, but synchronize anyway
     Long2LongOpenHashMap partitionMap = map.get(partitionId);

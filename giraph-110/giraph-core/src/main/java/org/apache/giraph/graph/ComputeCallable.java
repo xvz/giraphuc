@@ -311,8 +311,20 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         messages = localMsgs == EmptyIterable.<M1>get() ?
           remoteMsgs : Iterables.concat(remoteMsgs, localMsgs);
 
-        if (vertex.isHalted() && !Iterables.isEmpty(messages)) {
-          vertex.wakeUp();
+        if (vertex.isHalted()) {
+          // YH: for multi-phase computation, messages will always require
+          // custom classes, hence will always rely on XByteArrayStore
+          // and so MessagesWithPhaseIterable
+          //
+          // have to do this to avoid Iterables.isEmpty() call, which
+          // uses hasNext() to check
+          if (asyncConf.isMultiPhase() &&
+              (remoteMsgs instanceof MessagesWithPhaseIterable ||
+               localMsgs instanceof MessagesWithPhaseIterable)) {
+            vertex.wakeUp();
+          } else if (!Iterables.isEmpty(messages)) {
+            vertex.wakeUp();
+          }
         }
         if (!vertex.isHalted()) {
           context.progress();

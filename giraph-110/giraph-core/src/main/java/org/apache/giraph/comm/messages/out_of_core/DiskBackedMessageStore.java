@@ -117,6 +117,13 @@ public class DiskBackedMessageStore<I extends WritableComparable,
   }
 
   @Override
+  public void restore(int partitionId, I vertexId, Writable messages)
+    throws IOException {
+    // TODO-YH: implement?
+    throw new UnsupportedOperationException("restore: Not supported");
+  }
+
+  @Override
   public Iterable<M> getVertexMessages(I vertexId) throws IOException {
     // TODO-YH: proper synchronization for async not implemented..
     // everything is missing sync; some may need to be implemented in

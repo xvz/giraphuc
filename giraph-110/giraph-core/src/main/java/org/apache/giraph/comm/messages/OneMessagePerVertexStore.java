@@ -116,6 +116,14 @@ public class OneMessagePerVertexStore<I extends WritableComparable,
   }
 
   @Override
+  public void restore(int partitionId, I vertexId, Writable messages)
+    throws IOException {
+    // this function should never be called
+    throw new UnsupportedOperationException(
+        "restore: Not supported nor needed!");
+  }
+
+  @Override
   protected Iterable<M> getMessagesAsIterable(I vertexId, M message,
                                               boolean isRemove) {
     // YH: see MessagesWithPhaseIterable for logic reasoning

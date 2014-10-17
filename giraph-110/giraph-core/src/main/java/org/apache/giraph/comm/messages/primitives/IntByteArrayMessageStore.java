@@ -30,6 +30,7 @@ import org.apache.giraph.utils.VertexIdMessageIterator;
 import org.apache.giraph.utils.VertexIdMessages;
 import org.apache.giraph.utils.EmptyIterable;
 import org.apache.giraph.utils.VerboseByteStructMessageWrite;
+import org.apache.giraph.utils.WritableUtils;
 import org.apache.giraph.utils.io.DataInputOutput;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Writable;
@@ -173,6 +174,24 @@ public class IntByteArrayMessageStore<M extends Writable>
               dataInputOutput.getDataOutput());
         }
       }
+    }
+  }
+
+  @Override
+  public void restore(int partitionId, IntWritable vertexId,
+                      Writable messages) throws IOException {
+    if (!(messages instanceof DataInputOutput)) {
+      throw new IOException("restore: Invalid data format");
+    }
+
+    Int2ObjectOpenHashMap<DataInputOutput> partitionMap =
+      map.get(partitionId);
+    synchronized (partitionMap) {
+      DataInputOutput dataInputOutput =
+        getDataInputOutput(partitionMap, vertexId.get());
+
+      WritableUtils.writeDataInputOutput((DataInputOutput) messages,
+                                         dataInputOutput.getDataOutput());
     }
   }
 

@@ -151,6 +151,13 @@ public class IntFloatMessageStore
   }
 
   @Override
+  public void restore(int partitionId, IntWritable vertexId,
+                      Writable messages) throws IOException {
+    // this function should never be called
+    throw new UnsupportedOperationException("restore: Not supported");
+  }
+
+  @Override
   public void clearPartition(int partitionId) throws IOException {
     // YH: not used in async, but synchronize anyway
     Int2FloatOpenHashMap partitionMap = map.get(partitionId);

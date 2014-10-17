@@ -177,6 +177,13 @@ public class LongDoubleMessageWithSourceStore
   }
 
   @Override
+  public void restore(int partitionId, LongWritable vertexId,
+                      Writable messages) throws IOException {
+    // TODO-YH: implement
+    throw new UnsupportedOperationException("restore: Not supported");
+  }
+
+  @Override
   public void clearPartition(int partitionId) throws IOException {
     // YH: not used in async, but synchronize anyway
     Long2ObjectOpenHashMap<?> partitionMap = map.get(partitionId);
