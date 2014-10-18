@@ -73,6 +73,11 @@ public class DeltaTolPageRankComputation extends BasicComputation<LongWritable,
       delta = 0.15;
     }
 
+    for (DoubleWritable message : messages) {
+      delta += message.get();
+    }
+    vertex.setValue(new DoubleWritable(vertex.getValue().get() + delta));
+
     // must wait at least 1SS b/c MIN_TOLs >1.0 will cause
     // immediate termination
     if (getLogicalSuperstep() > 1 &&
@@ -81,12 +86,7 @@ public class DeltaTolPageRankComputation extends BasicComputation<LongWritable,
       return;
     }
 
-    for (DoubleWritable message : messages) {
-      delta += message.get();
-    }
-
     if (delta > 0) {
-      vertex.setValue(new DoubleWritable(vertex.getValue().get() + delta));
       sendMessageToAllEdges(vertex,
           new DoubleWritable(0.85 * delta / vertex.getNumEdges()));
     }

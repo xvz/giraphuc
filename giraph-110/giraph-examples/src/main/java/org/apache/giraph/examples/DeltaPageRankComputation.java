@@ -73,9 +73,9 @@ public class DeltaPageRankComputation extends BasicComputation<LongWritable,
     for (DoubleWritable message : messages) {
       delta += message.get();
     }
+    vertex.setValue(new DoubleWritable(vertex.getValue().get() + delta));
 
     if (getLogicalSuperstep() < MAX_SS.get(getConf()) && delta > 0) {
-      vertex.setValue(new DoubleWritable(vertex.getValue().get() + delta));
       sendMessageToAllEdges(vertex,
           new DoubleWritable(0.85 * delta / vertex.getNumEdges()));
     }
