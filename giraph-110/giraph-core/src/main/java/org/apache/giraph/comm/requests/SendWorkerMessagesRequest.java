@@ -95,10 +95,9 @@ public class SendWorkerMessagesRequest<I extends WritableComparable,
    * @param isLocal Whether request is local or not
    */
   private void doRequest(ServerData serverData, boolean isLocal) {
-    // YH: local messages should always be short-circuited directly
-    // to message store---they should NOT have to come through here.
-    // See SendMessageCache.
-    if (isLocal) {
+    // YH: for async, local messages should always be short-circuited
+    // directly to message store. For BSP, they still come thru here.
+    if (getConf().getAsyncConf().isAsync() && isLocal) {
       throw new IllegalStateException("doLocalRequest: " +
                                       "Destination is the local worker.");
     }
