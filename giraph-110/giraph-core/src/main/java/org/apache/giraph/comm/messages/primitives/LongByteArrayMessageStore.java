@@ -21,7 +21,7 @@ package org.apache.giraph.comm.messages.primitives;
 import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.comm.messages.MessageStore;
 import org.apache.giraph.comm.messages.MessagesIterable;
-import org.apache.giraph.comm.messages.MessagesWithPhaseIterable;
+//import org.apache.giraph.comm.messages.MessagesWithPhaseIterable;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.factories.MessageValueFactory;
 import org.apache.giraph.partition.Partition;
@@ -267,11 +267,13 @@ public class LongByteArrayMessageStore<M extends Writable>
       DataInputOutput dataInputOutput = partitionMap.remove(vertexId.get());
       if (dataInputOutput == null) {
         return EmptyIterable.get();
+        /**
       } else if (config.getAsyncConf().isMultiPhase()) {
         return new MessagesWithPhaseIterable<LongWritable, M>(
             this, vertexId, service.getPartitionId(vertexId),
             config.getAsyncConf().getCurrentPhase(),
             dataInputOutput, messageValueFactory);
+        **/
       } else {
         return new MessagesIterable<M>(dataInputOutput, messageValueFactory);
       }

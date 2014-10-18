@@ -28,7 +28,6 @@ import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.combiner.MessageCombiner;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.factories.MessageValueFactory;
-import org.apache.giraph.utils.EmptyIterable;
 import org.apache.giraph.utils.VertexIdMessageIterator;
 import org.apache.giraph.utils.VertexIdMessages;
 import org.apache.hadoop.io.Writable;
@@ -126,6 +125,7 @@ public class OneMessagePerVertexStore<I extends WritableComparable,
   @Override
   protected Iterable<M> getMessagesAsIterable(I vertexId, M message,
                                               boolean isRemove) {
+    /**
     // YH: see MessagesWithPhaseIterable for logic reasoning
     if (config.getAsyncConf().isMultiPhase() && isRemove) {
       MessageWithPhase msg = (MessageWithPhase) message;
@@ -145,6 +145,7 @@ public class OneMessagePerVertexStore<I extends WritableComparable,
       }
       // else, return the message below
     }
+    **/
     return Collections.singleton(message);
   }
 

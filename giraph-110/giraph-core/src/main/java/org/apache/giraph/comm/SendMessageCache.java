@@ -21,6 +21,7 @@ package org.apache.giraph.comm;
 import java.util.Iterator;
 
 import org.apache.giraph.bsp.CentralizedServiceWorker;
+import org.apache.giraph.comm.messages.MessageWithPhase;
 import org.apache.giraph.comm.netty.NettyWorkerClientRequestProcessor;
 import org.apache.giraph.comm.requests.SendWorkerMessagesRequest;
 import org.apache.giraph.comm.requests.WritableRequest;
@@ -166,6 +167,11 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
     WorkerInfo workerInfo = owner.getWorkerInfo();
     final int partitionId = owner.getPartitionId();
 
+    boolean forNextPhase = false;
+    if (getConf().getAsyncConf().isMultiPhase()) {
+      forNextPhase = ((MessageWithPhase) message).forNextPhase();
+    }
+
     if (LOG.isTraceEnabled()) {
       LOG.trace("sendMessageRequest: Send bytes (" + message.toString() +
         ") to " + destVertexId + " on worker " + workerInfo);
@@ -197,13 +203,18 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
       try {
         ++totalLocalMsgsSentInSuperstep;
 
-        // YH: Dest vertex id needs to be cloned, since we never serialize it.
-        // This is handled within message store implementations.
-        // (Code path for remote messages need not clone, as dst ids there
-        // are serialized to byte array when caching.)
-        getServiceWorker().getServerData().getLocalMessageStore().
-          addPartitionMessage(partitionId, destVertexId, message);
-
+        if (!forNextPhase) {
+          // YH: Dest vertex id needs to be cloned, since we never serialize it.
+          // This is handled within message store implementations.
+          // (Code path for remote messages need not clone, as dst ids there
+          // are serialized to byte array when caching.)
+          getServiceWorker().getServerData().getLocalMessageStore().
+            addPartitionMessage(partitionId, destVertexId, message);
+        } else {
+          // YH: if for next phase, put it on the next phase message store
+          getServiceWorker().getServerData().getNextPhaseLocalMessageStore().
+            addPartitionMessage(partitionId, destVertexId, message);
+        }
       } catch (NegativeArraySizeException e) {
         throw new RuntimeException("The numbers of bytes sent to vertex " +
             destVertexId + " exceeded the max capacity of " +
@@ -224,9 +235,15 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
       return;
     }
 
+    // YH: If a message is for the next phase, use the leftmost bit as a flag.
+    // This will naturally separate the different types of messages AND enable
+    // the receiver to distinguish between the two cases.
+    final int partitionIdWithPhase =
+      MessageWithPhase.encode(partitionId, forNextPhase);
+
     // Add the message to the cache
     int workerMessageSize = addMessage(
-      workerInfo, partitionId, destVertexId, message);
+      workerInfo, partitionIdWithPhase, destVertexId, message);
 
     // TODO-YH: SendMessageToAllCache isn't modified
 

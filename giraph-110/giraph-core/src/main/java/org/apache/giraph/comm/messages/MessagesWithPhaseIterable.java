@@ -136,6 +136,8 @@ public class MessagesWithPhaseIterable<I extends WritableComparable,
 
     @Override
     public boolean hasNext() {
+      return super.hasNext();
+      /**
       // this ensures continuous calls to hasNext() are idempotent
       if (alreadyFound) {
         return true;
@@ -199,13 +201,17 @@ public class MessagesWithPhaseIterable<I extends WritableComparable,
       // (see ComputeCallable for how we ensure only compute() calls hasNext())
       MessagesWithPhaseIterable.this.doneAllMsgs = true;
       return false;
+      **/
     }
 
     @Override
     public M next() {
+      return null;
+      /**
       // result is set from hasNext()'s search
       alreadyFound = false;
       return representativeWritable;
+      **/
     }
 
     @Override

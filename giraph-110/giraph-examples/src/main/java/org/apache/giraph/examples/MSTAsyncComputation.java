@@ -213,7 +213,7 @@ public class MSTAsyncComputation extends BasicComputation<
     MSTMessage msg = new MSTMessage(
         new MSTMsgType(MSTMsgType.MSG_QUESTION),
         new MSTMsgContentLong(vertex.getId().get()),
-        false);
+        true);
 
     // send query to pointer (potential supervertex)
     //LOG.info(vertex.getId() + ": sending question to " +
@@ -334,7 +334,7 @@ public class MSTAsyncComputation extends BasicComputation<
           MSTMessage msg = new MSTMessage(
                              new MSTMsgType(MSTMsgType.MSG_QUESTION),
                              new MSTMsgContentLong(myId),
-                             true);
+                             false);
 
           //LOG.info(vertex.getId() + ": resending question to " + pointer);
           sendMessage(new LongWritable(pointer), msg);
@@ -356,7 +356,7 @@ public class MSTAsyncComputation extends BasicComputation<
 
       MSTMessage msg = new MSTMessage(new MSTMsgType(MSTMsgType.MSG_ANSWER),
                                       new MSTMsgContentLong(pointer, bool),
-                                      true);
+                                      false);
 
       //LOG.info(vertex.getId() + ": sent " + pointer + ", " +
       //         isPointerSupervertex);
@@ -389,7 +389,7 @@ public class MSTAsyncComputation extends BasicComputation<
     MSTMessage msg = new MSTMessage(new MSTMsgType(MSTMsgType.MSG_CLEAN),
                          new MSTMsgContentLong(vertex.getId().get(),
                                                vertex.getValue().getPointer()),
-                         false);
+                         true);
 
     //LOG.info(vertex.getId() + ": sending MSG_CLEAN, my supervertex is " +
     //         vertex.getValue().getPointer());
@@ -518,7 +518,7 @@ public class MSTAsyncComputation extends BasicComputation<
         while (itr.hasNext()) {
           msg = new MSTMessage(new MSTMsgType(MSTMsgType.MSG_EDGE),
                                new MSTMsgContentEdge(itr.next()),
-                               false);
+                               true);
           sendMessage(new LongWritable(pointer), msg);
 
           // delete edge---this can help w/ memory (not so much running time)
@@ -1042,11 +1042,11 @@ public class MSTAsyncComputation extends BasicComputation<
      *
      * @param type Message type.
      * @param value Message value.
-     * @param forCurrPhase True if message should be processed in this phase.
+     * @param forNextPhase True if message should be processed in next phase.
      */
     public MSTMessage(MSTMsgType type, MSTMsgContent value,
-                      boolean forCurrPhase) {
-      super(forCurrPhase);
+                      boolean forNextPhase) {
+      super(forNextPhase);
       this.type = type;
       this.value = value;
     }
@@ -1060,7 +1060,7 @@ public class MSTAsyncComputation extends BasicComputation<
     }
 
     @Override
-    public void readFieldsMsg(DataInput in) throws IOException {
+    public void readFields(DataInput in) throws IOException {
       type.readFields(in);
 
       switch(type.get()) {
@@ -1075,7 +1075,7 @@ public class MSTAsyncComputation extends BasicComputation<
     }
 
     @Override
-    public void writeMsg(DataOutput out) throws IOException {
+    public void write(DataOutput out) throws IOException {
       type.write(out);
       value.write(out);
     }

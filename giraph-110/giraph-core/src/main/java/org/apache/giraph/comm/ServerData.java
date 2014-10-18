@@ -71,17 +71,28 @@ public class ServerData<I extends WritableComparable,
 
   /**
    * YH: Message store for messages received from remote neighbours.
-   * Messages are received in the current OR previous superstep, and are
-   * consumed in the current OR next superstep.
+   * Messages are received in the current OR previous global superstep,
+   * and are consumed in the current OR next global superstep.
+   * Behaviour varies depending on async or barrierless async.
    */
   private volatile MessageStore<I, Writable> remoteMessageStore;
-
   /**
    * YH: Message store for local messages (messages which we received in
-   * the current OR previous superstep and is consumed in the current OR
-   * next superstep).
+   * the current OR previous global superstep and is consumed in the
+   * current OR next global superstep). Behaviour varies depending on
+   * async or barrierless async.
    */
   private volatile MessageStore<I, Writable> localMessageStore;
+
+  /**
+   * YH: remote message store holding messages for the next computation phase
+   */
+  private volatile MessageStore<I, Writable> nextPhaseRemoteMessageStore;
+  /**
+   * YH: remote message store holding messages for the next computation phase
+   */
+  private volatile MessageStore<I, Writable> nextPhaseLocalMessageStore;
+
 
   /**
    * Map of partition ids to incoming vertex mutations from other workers.
@@ -191,12 +202,33 @@ public class ServerData<I extends WritableComparable,
     return (MessageStore<I, M>) localMessageStore;
   }
 
+
+  /**
+   * @param <M> Message data
+   * @return Remote message store for next phase
+   */
+  public <M extends Writable> MessageStore<I, M>
+  getNextPhaseRemoteMessageStore() {
+    return (MessageStore<I, M>) nextPhaseRemoteMessageStore;
+  }
+
+  /**
+   * @param <M> Message data
+   * @return Local message store for next phase
+   */
+  public <M extends Writable> MessageStore<I, M>
+  getNextPhaseLocalMessageStore() {
+    return (MessageStore<I, M>) nextPhaseLocalMessageStore;
+  }
+
+
   /** Prepare for next super step */
   public void prepareSuperstep() {
     // YH: if one of immediate local or remote reads is not used,
     // we must use regular BSP message stores for the disabled case
     if (!conf.getAsyncConf().doLocalRead() ||
         !conf.getAsyncConf().doRemoteRead()) {
+      // regular BSP stores get swapped out every superstep
       if (currentMessageStore != null) {
         try {
           currentMessageStore.clearAll();
@@ -214,22 +246,50 @@ public class ServerData<I extends WritableComparable,
         messageStoreFactory.newStore(conf.getOutgoingMessageValueFactory());
     }
 
-    // if doing immediate remote reads, use remote message store
-    // NOTE: we assume incoming/outgoing types are the same
-    if (conf.getAsyncConf().doRemoteRead()) {
-      if (remoteMessageStore == null) {
-        remoteMessageStore =
+    if (conf.getAsyncConf().isMultiPhase() &&
+        conf.getAsyncConf().isNewPhase()) {
+      // first, clean remote/local stores from previous phase
+      if (remoteMessageStore != null) {
+        try {
+          remoteMessageStore.clearAll();
+        } catch (IOException e) {
+          throw new IllegalStateException("Failed to clear previous msg store");
+        }
+      }
+      if (localMessageStore != null) {
+        try {
+          localMessageStore.clearAll();
+        } catch (IOException e) {
+          throw new IllegalStateException("Failed to clear previous msg store");
+        }
+      }
+
+      // if next phase stores are null (i.e., SS0), local/remote stores
+      // will be properly created down below
+      remoteMessageStore = nextPhaseRemoteMessageStore;
+      localMessageStore = nextPhaseLocalMessageStore;
+
+      if (conf.getAsyncConf().doRemoteRead()) {
+        nextPhaseRemoteMessageStore =
+          messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
+      }
+      if (conf.getAsyncConf().doLocalRead()) {
+        nextPhaseLocalMessageStore =
           messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
       }
     }
 
-    // create localMessageStore if needed; this persists across supersteps
+    // create remote/local stores as needed; these persist across multiple
+    // supersteps, but only a single phase
+    //
     // NOTE: we assume incoming/outgoing types are the same
-    if (conf.getAsyncConf().doLocalRead()) {
-      if (localMessageStore == null) {
-        localMessageStore =
-          messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
-      }
+    if (conf.getAsyncConf().doRemoteRead() && remoteMessageStore == null) {
+      remoteMessageStore =
+        messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
+    }
+    if (conf.getAsyncConf().doLocalRead() && localMessageStore == null) {
+      localMessageStore =
+        messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
     }
   }
 

@@ -33,7 +33,6 @@ import org.apache.giraph.comm.ServerData;
 import org.apache.giraph.comm.WorkerClient;
 import org.apache.giraph.comm.WorkerClientRequestProcessor;
 import org.apache.giraph.comm.messages.MessageStore;
-import org.apache.giraph.comm.messages.MessageWithPhase;
 import org.apache.giraph.comm.messages.with_source.MessageWithSource;
 import org.apache.giraph.comm.requests.SendPartitionCurrentMessagesRequest;
 import org.apache.giraph.comm.requests.SendPartitionMutationsRequest;
@@ -177,12 +176,6 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
 
   @Override
   public void sendMessageRequest(I srcId, I destVertexId, Writable message) {
-    // YH: tag message with correct phase if necessary
-    if (configuration.getAsyncConf().isMultiPhase()) {
-      ((MessageWithPhase) message).setPhase(
-          configuration.getAsyncConf().getCurrentPhase());
-    }
-
     if (configuration.getAsyncConf().needAllMsgs()) {
       // YH: source id need not be cloned, as it is the id object held by
       // the actual vertex (=> user cannot modify this)
@@ -196,11 +189,6 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
   @Override
   public void sendMessageToAllRequest(
     I srcId, Vertex<I, V, E> vertex, Writable message) {
-    if (configuration.getAsyncConf().isMultiPhase()) {
-      ((MessageWithPhase) message).setPhase(
-          configuration.getAsyncConf().getCurrentPhase());
-    }
-
     if (configuration.getAsyncConf().needAllMsgs()) {
       this.sendMessageCache.sendMessageToAllRequest(
           vertex, new MessageWithSource<I, Writable>(srcId, message));
@@ -212,11 +200,6 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
   @Override
   public void sendMessageToAllRequest(
     I srcId, Iterator<I> vertexIdIterator, Writable message) {
-    if (configuration.getAsyncConf().isMultiPhase()) {
-      ((MessageWithPhase) message).setPhase(
-          configuration.getAsyncConf().getCurrentPhase());
-    }
-
     if (configuration.getAsyncConf().needAllMsgs()) {
       this.sendMessageCache.sendMessageToAllRequest(
           vertexIdIterator, new MessageWithSource<I, Writable>(srcId, message));

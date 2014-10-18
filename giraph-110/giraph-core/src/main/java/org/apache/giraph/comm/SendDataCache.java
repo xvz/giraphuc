@@ -21,6 +21,7 @@ package org.apache.giraph.comm;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.apache.giraph.bsp.CentralizedServiceWorker;
+import org.apache.giraph.comm.messages.MessageWithPhase;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.partition.PartitionOwner;
 import org.apache.giraph.utils.PairList;
@@ -85,7 +86,13 @@ public abstract class SendDataCache<D> {
       workerPartitionIds.add(partitionOwner.getPartitionId());
       maxPartition = Math.max(partitionOwner.getPartitionId(), maxPartition);
     }
-    dataCache = (D[]) new Object[maxPartition + 1];
+
+    if (conf.getAsyncConf().isMultiPhase()) {
+      // YH: double size of data cache to hold stuff for next phase
+      dataCache = (D[]) new Object[2 * (maxPartition + 1)];
+    } else {
+      dataCache = (D[]) new Object[maxPartition + 1];
+    }
 
     int maxWorker = 0;
     for (WorkerInfo workerInfo : serviceWorker.getWorkerInfoList()) {
@@ -104,6 +111,18 @@ public abstract class SendDataCache<D> {
   }
 
   /**
+   * Get correct index into data cache.
+   *
+   * @param index Index to correct
+   * @return Fixed index
+   */
+  private int getIndex(int index) {
+    // condition will only be true if we're in multiphase computation
+    return MessageWithPhase.forNextPhase(index) ?
+      MessageWithPhase.decode(index) + (dataCache.length / 2) : index;
+  }
+
+  /**
    * Gets the data for a worker and removes it from the cache.
    *
    * @param workerInfo the address of the worker who owns the data
@@ -115,11 +134,29 @@ public abstract class SendDataCache<D> {
   removeWorkerData(WorkerInfo workerInfo) {
     PairList<Integer, D> workerData = new PairList<Integer, D>();
     List<Integer> partitions = workerPartitions.get(workerInfo);
-    workerData.initialize(partitions.size());
+
+    if (conf.getAsyncConf().isMultiPhase()) {
+      // YH: twice the size b/c dataCache is twice as large too
+      workerData.initialize(2 * partitions.size());
+    } else {
+      workerData.initialize(partitions.size());
+    }
+
     for (Integer partitionId : partitions) {
       if (dataCache[partitionId] != null) {
         workerData.add(partitionId, (D) dataCache[partitionId]);
         dataCache[partitionId] = null;
+      }
+
+      if (conf.getAsyncConf().isMultiPhase()) {
+        // also remove data that's to be consumed in the next phase
+        int partitionIdWithPhase = MessageWithPhase.encode(partitionId, true);
+        int index = partitionId + (dataCache.length / 2);
+
+        if (dataCache[index] != null) {
+          workerData.add(partitionIdWithPhase, (D) dataCache[index]);
+          dataCache[index] = null;
+        }
       }
     }
     dataSizes[workerInfo.getTaskId()] = 0;
@@ -152,7 +189,7 @@ public abstract class SendDataCache<D> {
    * @return Data cache for a partition
    */
   public D getData(int partitionId) {
-    return dataCache[partitionId];
+    return dataCache[getIndex(partitionId)];
   }
 
   /**
@@ -162,29 +199,33 @@ public abstract class SendDataCache<D> {
    * @param data Data to be set for a partition id
    */
   public void setData(int partitionId, D data) {
-    dataCache[partitionId] = data;
+    dataCache[getIndex(partitionId)] = data;
   }
 
   /**
    * Get initial buffer size of a partition.
    *
-   * @param partitionId Partition id
+   * @param taskId Task id of a worker
    * @return Initial buffer size of a partition
    */
-  public int getInitialBufferSize(int partitionId) {
-    return initialBufferSizes[partitionId];
+  public int getInitialBufferSize(int taskId) {
+    // YH: var name bug fix---this is task id, not partition id
+    // TODO-YH: should we return HALF of this when
+    // doing computations with multiple phases?
+    return initialBufferSizes[taskId];
   }
 
   /**
    * Increment the data size
    *
-   * @param partitionId Partition id
+   * @param taskId Task id of a worker
    * @param size Size to increment by
    * @return new data size
    */
-  public int incrDataSize(int partitionId, int size) {
-    dataSizes[partitionId] += size;
-    return dataSizes[partitionId];
+  public int incrDataSize(int taskId, int size) {
+    // YH: var name bug fix---this is task id, not partition id
+    dataSizes[taskId] += size;
+    return dataSizes[taskId];
   }
 
   public ImmutableClassesGiraphConfiguration getConf() {

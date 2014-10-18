@@ -18,100 +18,82 @@
 
 package org.apache.giraph.comm.messages;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import org.apache.hadoop.io.Writable;
 
 /**
- * Abstract class for messages, which tracks computation phases.
- * Can be overridden by users for algorithms that have different
+ * Abstract class for messages, which tracks whether or not
+ * a message should be processed in the same phase it was sent.
+ * Must be overridden by users for algorithms sending different
  * messages for different phases.
  */
-public abstract class MessageWithPhase implements Writable  {
-  /** Mask to get boolean encoded in int */
-  private static final int BOOL_MASK = 1 << 31;
-  /**
-   * Computation phase that this message was sent in.
-   * Most significant bit indicates whether or not this message
-   * should be processed in the same phase as it was sent.
-   */
-  private int phase;
+public abstract class MessageWithPhase implements Writable {
+  /** Mask to encode boolean "for next phase = true" into an int */
+  private static final int NEXT_PHASE_MASK = 1 << 31;
 
   /**
-   * Constructor that sets message's "compute in this phase?".
-   * NOTE: setPhase() must be called to correctly set this msg's phase.
-   *
-   * @param forCurrPhase True if message should be processed in this phase.
+   * True if message is to be processed in the next phase.
    */
-  public MessageWithPhase(boolean forCurrPhase) {
-    phase = 0;      // dummy value, must be set via setPhase()
-    if (forCurrPhase) {
-      this.phase |= BOOL_MASK;
+  private boolean forNextPhase;
+
+  /**
+   * Constructor that sets whether this message is for the next phase.
+   *
+   * @param forNextPhase True if message is to be processed in next phase.
+   */
+  public MessageWithPhase(boolean forNextPhase) {
+    this.forNextPhase = forNextPhase;
+  }
+
+  /**
+   * Encode a positive integer with a boolean.
+   *
+   * @param val A positive integer
+   * @param forNextPhase True if message is to be processed in next phase
+   * @return Encoded int
+   */
+  public static int encode(int val, boolean forNextPhase) {
+    if (val < 0) {
+      throw new RuntimeException("encode: value cannot be negative!");
     }
-  }
 
-  /**
-   * Set computation phase that this message was sent in.
-   *
-   * @param phase Computation phase for this message
-   */
-  public final void setPhase(int phase) {
-    if (phase < 0) {
-      throw new RuntimeException("Computation phases cannot be negative!");
+    if (forNextPhase) {
+      return val | NEXT_PHASE_MASK;
     }
-    this.phase &= BOOL_MASK;   // clear out previous phase
-    this.phase |= phase;       // set to new phase
+    return val;
   }
 
   /**
-   * @return Computation phase that this message was sent in.
-   */
-  public final int getPhase() {
-    return phase & ~BOOL_MASK;
-  }
-
-  /**
-   * Return whether this message is to be processed
-   * in the same phase it was sent.
+   * Decode an integer containing a boolean.
    *
-   * @return Whether to process message in the phase it was sent
+   * @param val An integer encoded with a boolean
+   * @return Boolean encoded in the int
    */
-  public final boolean processInSamePhase() {
-    return (phase & BOOL_MASK) >>> 31 == 1;
+  public static boolean forNextPhase(int val) {
+    // works b/c we assume all values are original positive
+    return val < 0;
   }
 
   /**
-   * Deserialize the fields of this message from in.
+   * Remove any encoded boolean from an integer.
    *
-   * @param in DataInput to deserialize this message from.
+   * @param val An integer encoded with a boolean
+   * @return Clean unencoded int
    */
-  protected abstract void readFieldsMsg(DataInput in) throws IOException;
+  public static int decode(int val) {
+    return val < 0 ? val & ~NEXT_PHASE_MASK : val;
+  }
 
   /**
-   * Serialize the fields of this message to out.
+   * Return whether or not this message is to be processed in the
+   * phase following the one in which it was sent.
    *
-   * @param out DataOutput to serialize this message to.
+   * @return True if the message is to be processed in the next phase
    */
-  protected abstract void writeMsg(DataOutput out) throws IOException;
-
-
-  // YH: we do this to ensure phase is always read/written
-  @Override
-  public final void readFields(DataInput in) throws IOException {
-    phase = in.readInt();
-    readFieldsMsg(in);
+  public final boolean forNextPhase() {
+    return forNextPhase;
   }
 
-  @Override
-  public final void write(DataOutput out) throws IOException {
-    out.writeInt(phase);
-    writeMsg(out);
-  }
-
-  @Override
-  public String toString() {
-    return "phase=" + getPhase() + ", processInSamePhase=" +
-      processInSamePhase();
-  }
+  // YH: we don't need to send this boolean---it's used internally
+  // by the system to place the message on the correct store.
+  // Hence, user's message class must implement readFields() and write().
 }
