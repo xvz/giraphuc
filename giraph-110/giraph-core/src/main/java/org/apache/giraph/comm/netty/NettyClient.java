@@ -688,7 +688,9 @@ public class NettyClient {
     newRequestInfo.setWriteFuture(writeFuture);
 
     // YH: disable request limit on new phase (b/c it's followed by global SS)
-    if (!conf.getAsyncConf().isNewPhase() && limitNumberOfOpenRequests &&
+    if (!(conf.getAsyncConf().isMultiPhase &&
+          conf.getAsyncConf().isNewPhase()) &&
+        limitNumberOfOpenRequests &&
         clientRequestIdRequestInfoMap.size() > maxNumberOfOpenRequests) {
       waitSomeRequests(maxNumberOfOpenRequests);
     }

@@ -1699,11 +1699,12 @@ public class BspServiceMaster<I extends WritableComparable,
       globalStats.setHaltComputation(true);
     }
 
-    // YH: set isNewPhase for all workers to see. SS0 is always a new phase.
+    // YH: set isNewPhase for all workers to see. SS0 is always a new phase,
+    // but note that we detect it by checking for INPUT_SUPERSTEP.
     //
     // Note that doMasterCompute() above is executed for getSuperstep()+1,
     // so asyncConf will indeed contain info for *next* global superstep
-    if (getSuperstep() == 0 || asyncConf.isNewPhase()) {
+    if (getSuperstep() == INPUT_SUPERSTEP || asyncConf.isNewPhase()) {
       globalStats.setNewPhase(true);
     }
 
