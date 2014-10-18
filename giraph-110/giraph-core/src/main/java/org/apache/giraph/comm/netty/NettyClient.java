@@ -179,6 +179,8 @@ public class NettyClient {
   /** When was the last time we checked if we should resend some requests */
   private final AtomicLong lastTimeCheckedRequestsForProblems =
       new AtomicLong(0);
+  /** Configuration */
+  private final ImmutableClassesGiraphConfiguration conf;
 
   /**
    * Only constructor
@@ -191,6 +193,7 @@ public class NettyClient {
                      final ImmutableClassesGiraphConfiguration conf,
                      TaskInfo myTaskInfo) {
     this.context = context;
+    this.conf = conf;
     this.myTaskInfo = myTaskInfo;
     this.channelsPerServer = GiraphConstants.CHANNELS_PER_SERVER.get(conf);
     sendBufferSize = CLIENT_SEND_BUFFER_SIZE.get(conf);
@@ -684,7 +687,8 @@ public class NettyClient {
     ChannelFuture writeFuture = channel.write(request);
     newRequestInfo.setWriteFuture(writeFuture);
 
-    if (limitNumberOfOpenRequests &&
+    // YH: disable request limit on new phase (b/c it's followed by global SS)
+    if (!conf.getAsyncConf().isNewPhase() && limitNumberOfOpenRequests &&
         clientRequestIdRequestInfoMap.size() > maxNumberOfOpenRequests) {
       waitSomeRequests(maxNumberOfOpenRequests);
     }
