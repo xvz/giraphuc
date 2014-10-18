@@ -121,17 +121,6 @@ public interface MessageStore<I extends WritableComparable,
     throws IOException;
 
   /**
-   * Restore raw message data back on to message store.
-   *
-   * @param partitionId Id of partition
-   * @param vertexId Id of destination vertex
-   * @param messages Raw message data
-   * @throws IOException
-   */
-  void restore(int partitionId, I vertexId, Writable messages)
-    throws IOException;
-
-  /**
    * Gets vertex ids from selected partition which we have messages for
    *
    * @param partitionId Id of partition

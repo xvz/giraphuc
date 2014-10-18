@@ -192,13 +192,6 @@ public abstract class SimpleMessageWithSourceStore<
   }
 
   @Override
-  public void restore(int partitionId, I vertexId, Writable messages)
-    throws IOException {
-    // TODO-YH: implement
-    throw new UnsupportedOperationException("restore: Not supported");
-  }
-
-  @Override
   public Iterable<I> getPartitionDestinationVertices(int partitionId) {
     ConcurrentMap<I, ?> partitionMap = map.get(partitionId);
     return (partitionMap == null) ? EmptyIterable.<I>get() :

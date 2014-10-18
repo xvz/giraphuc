@@ -21,7 +21,6 @@ package org.apache.giraph.comm.messages.primitives;
 import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.comm.messages.MessageStore;
 import org.apache.giraph.comm.messages.MessagesIterable;
-//import org.apache.giraph.comm.messages.MessagesWithPhaseIterable;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.factories.MessageValueFactory;
 import org.apache.giraph.partition.Partition;
@@ -30,7 +29,6 @@ import org.apache.giraph.utils.VertexIdMessageIterator;
 import org.apache.giraph.utils.VertexIdMessages;
 import org.apache.giraph.utils.VerboseByteStructMessageWrite;
 import org.apache.giraph.utils.EmptyIterable;
-import org.apache.giraph.utils.WritableUtils;
 import org.apache.giraph.utils.io.DataInputOutput;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Writable;
@@ -179,24 +177,6 @@ public class LongByteArrayMessageStore<M extends Writable>
   }
 
   @Override
-  public void restore(int partitionId, LongWritable vertexId,
-                      Writable messages) throws IOException {
-    if (!(messages instanceof DataInputOutput)) {
-      throw new IOException("restore: Invalid data format");
-    }
-
-    Long2ObjectOpenHashMap<DataInputOutput> partitionMap =
-      map.get(partitionId);
-    synchronized (partitionMap) {
-      DataInputOutput dataInputOutput =
-        getDataInputOutput(partitionMap, vertexId.get());
-
-      WritableUtils.writeDataInputOutput((DataInputOutput) messages,
-                                         dataInputOutput.getDataOutput());
-    }
-  }
-
-  @Override
   public void clearPartition(int partitionId) throws IOException {
     // YH: not used in async, but synchronize anyway
     Long2ObjectOpenHashMap<?> partitionMap = map.get(partitionId);
@@ -250,7 +230,6 @@ public class LongByteArrayMessageStore<M extends Writable>
       if (dataInputOutput == null) {
         return EmptyIterable.get();
       } else {
-        // YH: when we're not removing, don't return MessagesWithPhaseIterable
         return new MessagesIterable<M>(dataInputOutput, messageValueFactory);
       }
     }
@@ -267,13 +246,6 @@ public class LongByteArrayMessageStore<M extends Writable>
       DataInputOutput dataInputOutput = partitionMap.remove(vertexId.get());
       if (dataInputOutput == null) {
         return EmptyIterable.get();
-        /**
-      } else if (config.getAsyncConf().isMultiPhase()) {
-        return new MessagesWithPhaseIterable<LongWritable, M>(
-            this, vertexId, service.getPartitionId(vertexId),
-            config.getAsyncConf().getCurrentPhase(),
-            dataInputOutput, messageValueFactory);
-        **/
       } else {
         return new MessagesIterable<M>(dataInputOutput, messageValueFactory);
       }

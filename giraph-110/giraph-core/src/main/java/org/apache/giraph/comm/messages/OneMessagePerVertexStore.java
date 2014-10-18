@@ -115,37 +115,7 @@ public class OneMessagePerVertexStore<I extends WritableComparable,
   }
 
   @Override
-  public void restore(int partitionId, I vertexId, Writable messages)
-    throws IOException {
-    // this function should never be called
-    throw new UnsupportedOperationException(
-        "restore: Not supported nor needed!");
-  }
-
-  @Override
-  protected Iterable<M> getMessagesAsIterable(I vertexId, M message,
-                                              boolean isRemove) {
-    /**
-    // YH: see MessagesWithPhaseIterable for logic reasoning
-    if (config.getAsyncConf().isMultiPhase() && isRemove) {
-      MessageWithPhase msg = (MessageWithPhase) message;
-      int currentPhase = config.getAsyncConf().getCurrentPhase();
-
-      if (msg.getPhase() != currentPhase && msg.processInSamePhase()) {
-        return EmptyIterable.<M>get();  // drop message
-      } else if (msg.getPhase() == currentPhase && !msg.processInSamePhase()) {
-        // put message back on to message store, return nothing
-        try {
-          addPartitionMessage(getPartitionId(vertexId), vertexId, message);
-        } catch (IOException e) {
-          throw new RuntimeException(
-              "getMessagesAsIterable: Got IOException ", e);
-        }
-        return EmptyIterable.<M>get();
-      }
-      // else, return the message below
-    }
-    **/
+  protected Iterable<M> getMessagesAsIterable(M message) {
     return Collections.singleton(message);
   }
 

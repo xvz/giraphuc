@@ -20,7 +20,6 @@ package org.apache.giraph.graph;
 import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.comm.WorkerClientRequestProcessor;
 import org.apache.giraph.comm.messages.MessageStore;
-import org.apache.giraph.comm.messages.MessagesWithPhaseIterable;
 import org.apache.giraph.comm.messages.with_source.MessageWithSourceStore;
 import org.apache.giraph.comm.netty.NettyWorkerClientRequestProcessor;
 import org.apache.giraph.conf.AsyncConfiguration;
@@ -311,20 +310,8 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         messages = localMsgs == EmptyIterable.<M1>get() ?
           remoteMsgs : Iterables.concat(remoteMsgs, localMsgs);
 
-        if (vertex.isHalted()) {
-          // YH: for multi-phase computation, messages will always require
-          // custom classes, hence will always rely on XByteArrayStore
-          // and so MessagesWithPhaseIterable
-          //
-          // have to do this to avoid Iterables.isEmpty() call, which
-          // uses hasNext() to check
-          if (asyncConf.isMultiPhase() &&
-              (remoteMsgs instanceof MessagesWithPhaseIterable ||
-               localMsgs instanceof MessagesWithPhaseIterable)) {
-            vertex.wakeUp();
-          } else if (!Iterables.isEmpty(messages)) {
-            vertex.wakeUp();
-          }
+        if (vertex.isHalted() && !Iterables.isEmpty(messages)) {
+          vertex.wakeUp();
         }
         if (!vertex.isHalted()) {
           context.progress();
@@ -335,20 +322,6 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
           computation.setCurrentSourceId(vertex.getId());
           computation.compute(vertex, messages);
           computation.setCurrentSourceId(null);
-
-          // YH: when we're doing async with multi-phase computations,
-          // some messages may need to be placed back on to message store
-          // (This is also needed b/c some supersteps don't process messages
-          // at all, so this will go through them)
-          if (asyncConf.isMultiPhase()) {
-            if (remoteMsgs instanceof MessagesWithPhaseIterable) {
-              ((MessagesWithPhaseIterable) remoteMsgs).restore();
-            }
-
-            if (localMsgs instanceof MessagesWithPhaseIterable) {
-              ((MessagesWithPhaseIterable) localMsgs).restore();
-            }
-          }
 
           // Need to unwrap the mutated edges (possibly)
           vertex.unwrapMutableEdges();

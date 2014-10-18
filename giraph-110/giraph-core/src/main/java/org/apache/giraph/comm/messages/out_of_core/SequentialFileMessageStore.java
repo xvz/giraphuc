@@ -141,7 +141,6 @@ public class SequentialFileMessageStore<I extends WritableComparable,
         I destinationVertexId = entry.getKey();
         destinationVertexId.write(out);
         DataInputOutput dataInputOutput = entry.getValue();
-        // TODO-YH: MessagesWithPhaseIterable not supported yet
         Iterable<M> messages = new MessagesIterable<M>(
             dataInputOutput, messageValueFactory);
         int messageCount = Iterables.size(messages);

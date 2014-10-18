@@ -32,10 +32,10 @@ import org.apache.giraph.utils.VertexIdMessageIterator;
 import org.apache.giraph.utils.VertexIdMessages;
 import org.apache.giraph.utils.RepresentativeByteStructIterator;
 import org.apache.giraph.utils.VerboseByteStructMessageWrite;
-import org.apache.giraph.utils.WritableUtils;
 import org.apache.giraph.utils.io.DataInputOutput;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
+import org.apache.hadoop.io.WritableUtils;
 
 import com.google.common.collect.Iterators;
 
@@ -107,9 +107,8 @@ public class ByteArrayMessagesPerVertexStore<I extends WritableComparable,
       // YH: if needed, clone the vertex id. This is needed when the
       // original object is user-accessible and/or can be invalidated on
       // some iterator's next() call up the call chain.
-      // (use fully qualified class name b/c of name clash)
       I safeVertexId = cloneVertexId ?
-        org.apache.hadoop.io.WritableUtils.clone(vertexId, config) : vertexId;
+        WritableUtils.clone(vertexId, config) : vertexId;
 
       dataInputOutput = partitionMap.putIfAbsent(safeVertexId, newDataOutput);
       if (dataInputOutput == null) {
@@ -176,32 +175,9 @@ public class ByteArrayMessagesPerVertexStore<I extends WritableComparable,
   }
 
   @Override
-  public void restore(int partitionId, I vertexId, Writable messages)
-    throws IOException {
-    if (!(messages instanceof DataInputOutput)) {
-      throw new IOException("restore: Invalid data format");
-    }
-
-    ConcurrentMap<I, DataInputOutput> partitionMap =
-      getOrCreatePartitionMap(partitionId);
-    DataInputOutput dataInputOutput =
-      getDataInputOutput(partitionMap, vertexId, false);
-
-    WritableUtils.writeDataInputOutput((DataInputOutput) messages,
-                                       dataInputOutput.getDataOutput());
-  }
-
-  @Override
   protected Iterable<M> getMessagesAsIterable(
-      I vertexId, DataInputOutput dataInputOutput, boolean isRemove) {
-    if (config.getAsyncConf().isMultiPhase() && isRemove) {
-      return new MessagesWithPhaseIterable<I, M>(
-          this, vertexId, getPartitionId(vertexId),
-          config.getAsyncConf().getCurrentPhase(),
-          dataInputOutput, messageValueFactory);
-    } else {
-      return new MessagesIterable<M>(dataInputOutput, messageValueFactory);
-    }
+      DataInputOutput dataInputOutput) {
+    return new MessagesIterable<M>(dataInputOutput, messageValueFactory);
   }
 
   @Override

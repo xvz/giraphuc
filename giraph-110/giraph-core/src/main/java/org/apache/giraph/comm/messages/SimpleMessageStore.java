@@ -74,13 +74,10 @@ public abstract class SimpleMessageStore<I extends WritableComparable,
   /**
    * Get messages as an iterable from message storage
    *
-   * @param vertexId Id of vertex that these messages are for
    * @param messages Message storage
-   * @param isRemove Whether messages was removed or not
    * @return Messages as an iterable
    */
-  protected abstract Iterable<M> getMessagesAsIterable(I vertexId, T messages,
-                                                       boolean isRemove);
+  protected abstract Iterable<M> getMessagesAsIterable(T messages);
 
   /**
    * Get number of messages in partition map
@@ -179,7 +176,7 @@ public abstract class SimpleMessageStore<I extends WritableComparable,
     }
     T messages = partitionMap.get(vertexId);
     return (messages == null) ? EmptyIterable.<M>get() :
-        getMessagesAsIterable(vertexId, messages, false);
+        getMessagesAsIterable(messages);
   }
 
   @Override
@@ -193,7 +190,7 @@ public abstract class SimpleMessageStore<I extends WritableComparable,
     // ...except that we use remove() instead of get()
     T messages = partitionMap.remove(vertexId);
     return (messages == null) ? EmptyIterable.<M>get() :
-        getMessagesAsIterable(vertexId, messages, true);
+        getMessagesAsIterable(messages);
   }
 
   @Override
