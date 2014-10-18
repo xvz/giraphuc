@@ -27,8 +27,8 @@ execmode=$3
 case ${execmode} in
     0) execopt="";      # sync BSP are used by default
        combiner="-c org.apache.giraph.combiner.DoubleSumMessageCombiner";;
-    1) execopt="-Dgiraph.asyncLocalRead=true \
-                -Dgiraph.asyncRemoteRead=true";
+    1) execopt="-Dgiraph.asyncDoAsync=true \
+                -Dgiraph.asyncNeedAllMessages=true";
        combiner="";;    # no combiner
     2) execopt="-Dgiraph.asyncDisableBarriers=true \
                 -Dgiraph.asyncNeedAllMessages=true";

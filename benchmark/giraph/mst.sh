@@ -29,8 +29,7 @@ machines=$2
 execmode=$3
 case ${execmode} in
     0) execopt=""; class="MinimumSpanningTree";;     # sync BSP are used by default
-    1) execopt="-Dgiraph.asyncLocalRead=true \
-                -Dgiraph.asyncRemoteRead=true";
+    1) execopt="-Dgiraph.asyncDoAsync=true";
        class="MSTAsync";;
     2) execopt="-Dgiraph.asyncDisableBarriers=true";
        class="MSTAsync";;
