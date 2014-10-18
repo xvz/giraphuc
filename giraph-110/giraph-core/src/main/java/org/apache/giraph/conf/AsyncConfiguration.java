@@ -29,10 +29,11 @@ public class AsyncConfiguration {
   /** Class logger */
   private static final Logger LOG = Logger.getLogger(AsyncConfiguration.class);
 
-  /** Whether or not to read most recently available local values */
-  private boolean doLocalRead;
-  /** Whether or not to read most recently available remote values */
-  private boolean doRemoteRead;
+  /**
+   * Whether or not to do async execution. That is, whether or not to
+   * read most recently available local and remote values.
+   */
+  private boolean isAsync;
   /**
    * Whether algorithm (or phase) needs every vertex to have all messages
    * from all its neighbours for every superstep (aka, "stationary")
@@ -67,24 +68,11 @@ public class AsyncConfiguration {
    */
   public AsyncConfiguration(ImmutableClassesGiraphConfiguration conf) {
     disableBarriers = GiraphConstants.ASYNC_DISABLE_BARRIERS.get(conf);
-
-    if (disableBarriers) {
-      doLocalRead = true;
-      doRemoteRead = true;
-    } else {
-      doLocalRead = GiraphConstants.ASYNC_LOCAL_READ.get(conf);
-      doRemoteRead = GiraphConstants.ASYNC_REMOTE_READ.get(conf);
-    }
-
-    if (doLocalRead || doRemoteRead) {
-      needAllMsgs = GiraphConstants.ASYNC_NEED_ALL_MSGS.get(conf);
-    } else {
-      needAllMsgs = false;
-    }
+    isAsync = disableBarriers || GiraphConstants.ASYNC_DO_ASYNC.get(conf);
+    needAllMsgs = isAsync && GiraphConstants.ASYNC_NEED_ALL_MSGS.get(conf);
 
     // This only sets isNewPhase for SS -1 (INPUT_SUPERSTEP).
     isNewPhase = true;
-    // All computations have at least one phase.
     currentPhase = 0;
 
     // if M implements MessageWithPhase, we have multiphase computation
@@ -92,7 +80,7 @@ public class AsyncConfiguration {
     //
     // (doing it here exactly once probably gives better performance;
     // reflection can be expensive)
-    isMultiPhase = MessageWithPhase.class.
+    isMultiPhase = isAsync && MessageWithPhase.class.
       isAssignableFrom(conf.getIncomingMessageValueClass());
 
     // special case: first superstep always needs barrier after
@@ -101,21 +89,12 @@ public class AsyncConfiguration {
   }
 
   /**
-   * Return whether or not to read most recently available local values.
+   * Return whether or not execution is async.
    *
-   * @return True if reading most recent local values
+   * @return True if execution is async
    */
-  public boolean doLocalRead() {
-    return doLocalRead;
-  }
-
-  /**
-   * Return whether or not to read most recently available remote values.
-   *
-   * @return True if reading most recent remote values
-   */
-  public boolean doRemoteRead() {
-    return doRemoteRead;
+  public boolean isAsync() {
+    return isAsync;
   }
 
   /**

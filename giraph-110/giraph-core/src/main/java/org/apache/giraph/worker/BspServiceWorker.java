@@ -26,7 +26,6 @@ import org.apache.giraph.comm.WorkerClient;
 import org.apache.giraph.comm.WorkerClientRequestProcessor;
 import org.apache.giraph.comm.WorkerServer;
 import org.apache.giraph.comm.aggregators.WorkerAggregatorRequestProcessor;
-import org.apache.giraph.comm.messages.MessageStore;
 import org.apache.giraph.comm.netty.NettyWorkerAggregatorRequestProcessor;
 import org.apache.giraph.comm.netty.NettyWorkerClient;
 import org.apache.giraph.comm.netty.NettyWorkerClientRequestProcessor;
@@ -956,11 +955,6 @@ public class BspServiceWorker<I extends WritableComparable,
     // YH: assume barrier is needed
     boolean needBarrier = true;
 
-    MessageStore<I, Writable> remoteMessageStore =
-      asyncConf.doRemoteRead() ?
-      getServerData().getRemoteMessageStore() :
-      getServerData().getCurrentMessageStore();
-
     // YH: Cannot disable global barrier in few cases:
     //
     // 1. SS <= INPUT_SUPERSTEP is when message store is still uninitialized.
@@ -995,7 +989,8 @@ public class BspServiceWorker<I extends WritableComparable,
         // NOTE: we do NOT need to check if all vertices are halted,
         // b/c if we have no messages, the vertices will have nothing
         // to work with---we're better off waiting in that case
-        if (workerSentMessages > 0 || remoteMessageStore.hasMessages()) {
+        if (workerSentMessages > 0 ||
+            getServerData().getRemoteMessageStore().hasMessages()) {
           needBarrier = false;
         }
       }
@@ -1672,21 +1667,22 @@ public class BspServiceWorker<I extends WritableComparable,
       long startPos = verticesOutputStream.getPos();
       partition.write(verticesOutputStream);
       // write messages
-      // YH: write out contents of all message stores in use
-      if (!getConfiguration().getAsyncConf().doLocalRead() ||
-          !getConfiguration().getAsyncConf().doRemoteRead()) {
-        getServerData().getCurrentMessageStore().writePartition(
-            verticesOutputStream, partition.getId());
+      // YH: write out all message stores as needed
+      if (getConfiguration().getAsyncConf().isAsync()) {
+        getServerData().getRemoteMessageStore().
+          writePartition(verticesOutputStream, partition.getId());
+        getServerData().getLocalMessageStore().
+          writePartition(verticesOutputStream, partition.getId());
+      } else {
+        getServerData().getCurrentMessageStore().
+          writePartition(verticesOutputStream, partition.getId());
       }
 
-      if (getConfiguration().getAsyncConf().doRemoteRead()) {
-        getServerData().getRemoteMessageStore().writePartition(
-            verticesOutputStream, partition.getId());
-      }
-
-      if (getConfiguration().getAsyncConf().doLocalRead()) {
-        getServerData().getLocalMessageStore().writePartition(
-            verticesOutputStream, partition.getId());
+      if (getConfiguration().getAsyncConf().isMultiPhase()) {
+        getServerData().getNextPhaseRemoteMessageStore().
+          writePartition(verticesOutputStream, partition.getId());
+        getServerData().getNextPhaseLocalMessageStore().
+          writePartition(verticesOutputStream, partition.getId());
       }
 
       // Write the metadata for this partition
@@ -1748,20 +1744,17 @@ public class BspServiceWorker<I extends WritableComparable,
     try {
       // clear old message stores
       // YH: clear stores based on what's enabled/disabled
-      if (!getConfiguration().getAsyncConf().doLocalRead() ||
-          !getConfiguration().getAsyncConf().doRemoteRead()) {
-        getServerData().getIncomingMessageStore().clearAll();
+      if (getConfiguration().getAsyncConf().isAsync()) {
+        getServerData().getRemoteMessageStore().clearAll();
+        getServerData().getLocalMessageStore().clearAll();
+      } else {
         getServerData().getCurrentMessageStore().clearAll();
       }
 
-      if (getConfiguration().getAsyncConf().doRemoteRead()) {
-        getServerData().getRemoteMessageStore().clearAll();
+      if (getConfiguration().getAsyncConf().isMultiPhase()) {
+        getServerData().getNextPhaseRemoteMessageStore().clearAll();
+        getServerData().getNextPhaseLocalMessageStore().clearAll();
       }
-
-      if (getConfiguration().getAsyncConf().doLocalRead()) {
-        getServerData().getLocalMessageStore().clearAll();
-      }
-
     } catch (IOException e) {
       throw new RuntimeException(
           "loadCheckpoint: Failed to clear message stores ", e);
@@ -1812,20 +1805,21 @@ public class BspServiceWorker<I extends WritableComparable,
           partition.readFields(partitionsStream);
 
           // YH: restore correct message stores
-          if (!getConfiguration().getAsyncConf().doLocalRead() ||
-              !getConfiguration().getAsyncConf().doRemoteRead()) {
-            getServerData().getIncomingMessageStore().readFieldsForPartition(
-                partitionsStream, partitionId);
+          if (getConfiguration().getAsyncConf().isAsync()) {
+            getServerData().getRemoteMessageStore().
+              readFieldsForPartition(partitionsStream, partitionId);
+            getServerData().getLocalMessageStore().
+              readFieldsForPartition(partitionsStream, partitionId);
+          } else {
+            getServerData().getCurrentMessageStore().
+              readFieldsForPartition(partitionsStream, partitionId);
           }
 
-          if (getConfiguration().getAsyncConf().doRemoteRead()) {
-            getServerData().getRemoteMessageStore().readFieldsForPartition(
-                partitionsStream, partitionId);
-          }
-
-          if (getConfiguration().getAsyncConf().doLocalRead()) {
-            getServerData().getLocalMessageStore().readFieldsForPartition(
-                partitionsStream, partitionId);
+          if (getConfiguration().getAsyncConf().isMultiPhase()) {
+            getServerData().getNextPhaseRemoteMessageStore().
+              readFieldsForPartition(partitionsStream, partitionId);
+            getServerData().getNextPhaseLocalMessageStore().
+              readFieldsForPartition(partitionsStream, partitionId);
           }
 
           partitionsStream.close();

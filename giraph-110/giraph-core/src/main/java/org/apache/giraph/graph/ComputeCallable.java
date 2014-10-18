@@ -111,7 +111,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
    * @param context Context
    * @param graphState Current graph state (use to create own graph state)
    * @param messageStore Message store (remote-only, if using async)
-   * @param localMessageStore Local message store (local-only, if using async)
+   * @param localMessageStore Local-only message store (null if not async)
    * @param partitionIdQueue Queue of partition ids (thread-safe)
    * @param configuration Configuration
    * @param serviceWorker Service worker
@@ -273,42 +273,29 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         // YH: messageStore and localMessageStore are set correctly by
         // GraphTaskManager to be remote-only/BSP and local-only/BSP
 
-        // YH: (logical) SS0 is special case for async, because many algs send
-        // messages but do not have any logic to process them, so messages
-        // revealed in SS0 gets lost. Hence, keep them until after.
-
-        // this can also be for all messages, if async is disabled
-        Iterable<M1> remoteMsgs = EmptyIterable.<M1>get();
-        if (!asyncConf.doRemoteRead() ||
-            serviceWorker.getLogicalSuperstep() > 0) {
-          if (asyncConf.needAllMsgs()) {
+        if (asyncConf.isAsync()) {
+          // YH: (logical) SS0 is special case for async, because many algs send
+          // messages but do not have any logic to process them, so messages
+          // revealed in SS0 gets lost. Hence, keep them until after.
+          if (serviceWorker.getLogicalSuperstep() == 0) {
+            messages = EmptyIterable.<M1>get();
+          } else if (asyncConf.needAllMsgs()) {
             // no need to remove, as we always overwrite
-            remoteMsgs = ((MessageWithSourceStore) messageStore).
-              getVertexMessagesWithoutSource(vertex.getId());
+            messages = Iterables.concat(
+              ((MessageWithSourceStore) messageStore).
+                getVertexMessagesWithoutSource(vertex.getId()),
+              ((MessageWithSourceStore) localMessageStore).
+                getVertexMessagesWithoutSource(vertex.getId()));
           } else {
             // always remove messages immediately (rather than get and clear)
-            remoteMsgs = messageStore.removeVertexMessages(vertex.getId());
+            messages = Iterables.concat(
+              messageStore.removeVertexMessages(vertex.getId()),
+              localMessageStore.removeVertexMessages(vertex.getId()));
           }
+        } else {
+          // regular BSP---always remove instead of get and clear
+          messages = messageStore.removeVertexMessages(vertex.getId());
         }
-
-        Iterable<M1> localMsgs = EmptyIterable.<M1>get();
-        if (!asyncConf.doLocalRead() ||
-            serviceWorker.getLogicalSuperstep() > 0) {
-          // tack on local store if at least one async mode is enabled;
-          // else, remoteMsgs already iterates over BSP store
-          // ("local store" can be local or BSP, see GraphTaskManager)
-          if (asyncConf.doRemoteRead() || asyncConf.doLocalRead()) {
-            if (asyncConf.needAllMsgs()) {
-              localMsgs = ((MessageWithSourceStore) localMessageStore).
-                getVertexMessagesWithoutSource(vertex.getId());
-            } else {
-              localMsgs = localMessageStore.
-                removeVertexMessages(vertex.getId());
-            }
-          }
-        }
-        messages = localMsgs == EmptyIterable.<M1>get() ?
-          remoteMsgs : Iterables.concat(remoteMsgs, localMsgs);
 
         if (vertex.isHalted() && !Iterables.isEmpty(messages)) {
           vertex.wakeUp();
@@ -357,16 +344,9 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       // Should NOT clear partitions for stores otherwise, as they will
       // have picked up unprocessed messages during compute calls above.
       //
-      // (For needAllMsgs() without async, still need to clear message
-      //  stores, as BSP will rotate message stores)
-      //
       // TODO-YH: can partitions disappear?...
-      if (!asyncConf.doRemoteRead()) {
+      if (!asyncConf.isAsync()) {
         messageStore.clearPartition(partition.getId());
-      } else {
-        if (!asyncConf.doLocalRead()) {
-          localMessageStore.clearPartition(partition.getId());
-        }
       }
     }
     WorkerProgress.get().addVerticesComputed(verticesComputedProgress);

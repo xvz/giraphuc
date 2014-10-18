@@ -1103,20 +1103,15 @@ public interface GiraphConstants {
           "Milliseconds to wait prior to retrying creation of an HDFS file");
 
 
-  /** YH: Whether to read most recently available local value or not */
-  BooleanConfOption ASYNC_LOCAL_READ =
-      new BooleanConfOption("giraph.asyncLocalRead", false,
-          "Whether to read most recently available local value or not");
+  /** YH: Whether to use async execution or not */
+  BooleanConfOption ASYNC_DO_ASYNC =
+      new BooleanConfOption("giraph.asyncDoAsync", false,
+          "Whether to use async execution or not");
 
-  /** YH: Whether to read most recently available remote value or not */
-  BooleanConfOption ASYNC_REMOTE_READ =
-      new BooleanConfOption("giraph.asyncRemoteRead", false,
-          "Whether to read most recently available remote value or not");
-
-  /** YH: Whether or not BSP barriers for async execution should be disabled */
+  /** YH: Whether to use barrierless async execution or not */
   BooleanConfOption ASYNC_DISABLE_BARRIERS =
       new BooleanConfOption("giraph.asyncDisableBarriers", false,
-          "Whether to disable BSP barriers or not (async only)");
+          "Whether to use barrierless async execution or not");
 
   /**
    * YH: Whether algorithm needs every vertex to have all messages from

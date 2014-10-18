@@ -22,7 +22,6 @@ import org.apache.giraph.bsp.BspService;
 import org.apache.giraph.comm.ServerData;
 import org.apache.giraph.comm.messages.MessageStore;
 import org.apache.giraph.comm.messages.MessageWithPhase;
-import org.apache.giraph.conf.AsyncConfiguration;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.utils.VertexIdMessages;
 import org.apache.giraph.utils.ByteArrayVertexIdMessages;
@@ -96,33 +95,29 @@ public class SendWorkerMessagesRequest<I extends WritableComparable,
    * @param isLocal Whether request is local or not
    */
   private void doRequest(ServerData serverData, boolean isLocal) {
+    // YH: local messages should always be short-circuited directly
+    // to message store---they should NOT have to come through here.
+    // See SendMessageCache.
+    if (isLocal) {
+      throw new IllegalStateException("doLocalRequest: " +
+                                      "Destination is the local worker.");
+    }
+
     PairList<Integer, VertexIdMessages<I, M>>.Iterator
         iterator = partitionVertexData.getIterator();
 
-    AsyncConfiguration asyncConf = getConf().getAsyncConf();
-
     MessageStore msgStore;
-    if (isLocal && asyncConf.doLocalRead()) {
-      // YH: use local message store if doing async and request is local
-      msgStore = serverData.getLocalMessageStore();
-    } else if (!isLocal && asyncConf.doRemoteRead()) {
-      // YH: use remote message store if doing async and request is remote
+    if (getConf().getAsyncConf().isAsync()) {
       msgStore = serverData.getRemoteMessageStore();
     } else {
-      // otherwise use default BSP incoming message store
+      // use default BSP incoming message store otherwise
       msgStore = serverData.getIncomingMessageStore();
     }
 
     MessageStore nextPhaseMsgStore = null;
-    if (asyncConf.isMultiPhase()) {
-      if (isLocal && asyncConf.doLocalRead()) {
-        nextPhaseMsgStore = serverData.getNextPhaseLocalMessageStore();
-      } else if (!isLocal && asyncConf.doRemoteRead()) {
-        nextPhaseMsgStore = serverData.getNextPhaseRemoteMessageStore();
-      } else {
-        // YH: if BSP store is needed, this is still the one to use
-        nextPhaseMsgStore = serverData.getIncomingMessageStore();
-      }
+    if (getConf().getAsyncConf().isMultiPhase()) {
+      // multi-phase enabled means this must be async
+      nextPhaseMsgStore = serverData.getNextPhaseRemoteMessageStore();
     }
 
     // YH: if not using barriers, we have to track the number of
@@ -132,19 +127,20 @@ public class SendWorkerMessagesRequest<I extends WritableComparable,
     // Note: this is prone to comm thread contention, but there's nowhere
     // else to easily track this statistic---received messages go straight
     // from raw channel read to decoding to request processing (here).
-    if (!isLocal && asyncConf.disableBarriers()) {
-      asyncConf.addRecvBytes(this.getSerializedSize());
+    if (getConf().getAsyncConf().disableBarriers()) {
+      getConf().getAsyncConf().addRecvBytes(this.getSerializedSize());
     }
 
-    MessageStore currStore = msgStore;
+    MessageStore currStore;
     while (iterator.hasNext()) {
       iterator.next();
-      int partitionId = iterator.getCurrentFirst();
 
-      if (asyncConf.isMultiPhase()) {
-        currStore = MessageWithPhase.forNextPhase(partitionId) ?
-          nextPhaseMsgStore : msgStore;
+      int partitionId = iterator.getCurrentFirst();
+      if (MessageWithPhase.forNextPhase(partitionId)) {
+        currStore = nextPhaseMsgStore;
         partitionId = MessageWithPhase.decode(partitionId);
+      } else {
+        currStore = msgStore;
       }
 
       try {

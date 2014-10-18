@@ -192,7 +192,7 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
     //
     // Note: taskId is same for all partitions local to same worker
     // b/c it relies on mapred.task.partition (= attempt_...._m_..._0)
-    if (getConf().getAsyncConf().doLocalRead() &&
+    if (getConf().getAsyncConf().isAsync() &&
         getServiceWorker().getWorkerInfo().getTaskId() ==
         workerInfo.getTaskId()) {
 

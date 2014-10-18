@@ -33,6 +33,7 @@ import org.apache.giraph.comm.ServerData;
 import org.apache.giraph.comm.WorkerClient;
 import org.apache.giraph.comm.WorkerClientRequestProcessor;
 import org.apache.giraph.comm.messages.MessageStore;
+import org.apache.giraph.comm.messages.MessageWithPhase;
 import org.apache.giraph.comm.messages.with_source.MessageWithSource;
 import org.apache.giraph.comm.requests.SendPartitionCurrentMessagesRequest;
 import org.apache.giraph.comm.requests.SendPartitionMutationsRequest;
@@ -230,13 +231,19 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
    *
    * @param workerInfo Worker to send the partition messages to
    * @param partitionId Id of partition whose messages are to be sent
+   * @param forNextPhase True if message store holds messages for next phase
    * @param messageStore The message store to iterate through
-   * @param vertexIdMessages The serialized byte array of messages
    */
   private void sendPartitionMessagesHelper(
-      WorkerInfo workerInfo, int partitionId,
-      MessageStore<I, Writable> messageStore,
-      ByteArrayVertexIdMessages<I, Writable> vertexIdMessages) {
+      WorkerInfo workerInfo, int partitionId, boolean forNextPhase,
+      MessageStore<I, Writable> messageStore) {
+
+    ByteArrayVertexIdMessages<I, Writable> vertexIdMessages =
+        new ByteArrayVertexIdMessages<I, Writable>(
+            configuration.getOutgoingMessageValueFactory());
+    vertexIdMessages.setConf(configuration);
+    vertexIdMessages.initialize();
+
     for (I vertexId :
         messageStore.getPartitionDestinationVertices(partitionId)) {
       try {
@@ -256,7 +263,8 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
       if (vertexIdMessages.getSize() > maxMessagesSizePerWorker) {
         WritableRequest messagesRequest = new
             SendPartitionCurrentMessagesRequest<I, V, E, Writable>(
-            partitionId, vertexIdMessages, configuration);
+            MessageWithPhase.encode(partitionId, forNextPhase),
+            vertexIdMessages, configuration);
         doRequest(workerInfo, messagesRequest);
         vertexIdMessages =
             new ByteArrayVertexIdMessages<I, Writable>(
@@ -264,6 +272,14 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
         vertexIdMessages.setConf(configuration);
         vertexIdMessages.initialize();
       }
+    }
+
+    if (!vertexIdMessages.isEmpty()) {
+      WritableRequest messagesRequest = new
+          SendPartitionCurrentMessagesRequest<I, V, E, Writable>(
+          MessageWithPhase.encode(partitionId, forNextPhase),
+          vertexIdMessages, configuration);
+      doRequest(workerInfo, messagesRequest);
     }
   }
 
@@ -277,45 +293,32 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
                                      Partition<I, V, E> partition) {
     final int partitionId = partition.getId();
 
-    // TODO-YH: check correctness!! is this used at all?
+    // TODO-YH: not used?...
 
-    // YH: iterate over remote (or BSP) message store first
-    MessageStore<I, Writable> messageStore =
-        configuration.getAsyncConf().doRemoteRead() ?
-        serverData.getRemoteMessageStore() :
-        serverData.getCurrentMessageStore();
-
-    ByteArrayVertexIdMessages<I, Writable> vertexIdMessages =
-        new ByteArrayVertexIdMessages<I, Writable>(
-            configuration.getOutgoingMessageValueFactory());
-    vertexIdMessages.setConf(configuration);
-    vertexIdMessages.initialize();
-
-    sendPartitionMessagesHelper(workerInfo, partitionId,
-                                messageStore, vertexIdMessages);
-
-    // YH: also iterate over local messages if needed
-    //
-    // Note that if neither local nor remote message stores are used,
-    // this is not executed, as we already handled BSP store above.
-    if (configuration.getAsyncConf().doRemoteRead() ||
-        configuration.getAsyncConf().doLocalRead()) {
-      messageStore =
-          configuration.getAsyncConf().doLocalRead() ?
-          serverData.getLocalMessageStore() :
-          serverData.getCurrentMessageStore();
-
+    MessageStore<I, Writable> messageStore;
+    if (configuration.getAsyncConf().isAsync()) {
+      messageStore = serverData.getRemoteMessageStore();
       sendPartitionMessagesHelper(workerInfo, partitionId,
-                                  messageStore, vertexIdMessages);
+                                  false, messageStore);
+
+      messageStore = serverData.getLocalMessageStore();
+      sendPartitionMessagesHelper(workerInfo, partitionId,
+                                  false, messageStore);
+    } else {
+      // regular BSP case
+      messageStore = serverData.getCurrentMessageStore();
+      sendPartitionMessagesHelper(workerInfo, partitionId,
+                                  false, messageStore);
     }
 
-    // TODO-YH: also send nextPhase stores if needed
+    if (configuration.getAsyncConf().isMultiPhase()) {
+      messageStore = serverData.getNextPhaseRemoteMessageStore();
+      sendPartitionMessagesHelper(workerInfo, partitionId,
+                                  true, messageStore);
 
-    if (!vertexIdMessages.isEmpty()) {
-      WritableRequest messagesRequest = new
-          SendPartitionCurrentMessagesRequest<I, V, E, Writable>(
-          partitionId, vertexIdMessages, configuration);
-      doRequest(workerInfo, messagesRequest);
+      messageStore = serverData.getNextPhaseLocalMessageStore();
+      sendPartitionMessagesHelper(workerInfo, partitionId,
+                                  true, messageStore);
     }
   }
 

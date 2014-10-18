@@ -297,19 +297,16 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
       context.progress();
 
       // YH: pass in correct message store (either remote-only or BSP)
-      // TODO-YH: put this logic into ServerData instead?
-      //   (also see BspServiceWorker#finishSuperstep & message requests)
       MessageStore<I, Writable> messageStore =
-        conf.getAsyncConf().doRemoteRead() ?
+        conf.getAsyncConf().isAsync() ?
         serviceWorker.getServerData().getRemoteMessageStore() :
         serviceWorker.getServerData().getCurrentMessageStore();
 
-      // YH: pass in correct local message store (either local-only or BSP)
-      // Note: if everything is BSP, currentMessageStore will only be read once
+      // YH: pass in local message store if needed (null if not)
       MessageStore<I, Writable> localMessageStore =
-        conf.getAsyncConf().doLocalRead() ?
+        conf.getAsyncConf().isAsync() ?
         serviceWorker.getServerData().getLocalMessageStore() :
-        serviceWorker.getServerData().getCurrentMessageStore();
+        null;
 
       int numPartitions = serviceWorker.getPartitionStore().getNumPartitions();
       int numThreads = Math.min(numComputeThreads, numPartitions);

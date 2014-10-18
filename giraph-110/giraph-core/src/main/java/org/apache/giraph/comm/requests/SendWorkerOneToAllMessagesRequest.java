@@ -166,16 +166,15 @@ public class SendWorkerOneToAllMessagesRequest<I extends WritableComparable,
 
     // Read ByteArrayVertexIdMessages and write to message store
     MessageStore msgStore;
-    if (isLocal && getConf().getAsyncConf().doLocalRead()) {
-      // YH: use local message store if doing async and request is local
-      msgStore = serverData.getLocalMessageStore();
-    } else if (!isLocal && getConf().getAsyncConf().doRemoteRead()) {
-      // YH: use remote message store if doing async and request is remote
-      msgStore = serverData.getRemoteMessageStore();
+    if (getConf().getAsyncConf().isAsync()) {
+      msgStore = isLocal ?
+        serverData.getLocalMessageStore() :
+        serverData.getRemoteMessageStore();
     } else {
-      // otherwise use default BSP incoming message store
       msgStore = serverData.getIncomingMessageStore();
     }
+
+    // TODO-YH: implement multi-phase stuff
 
     // YH: if not using barriers, we have to track the number of
     // received bytes. This is the "counterpart" to counting sent
@@ -187,8 +186,6 @@ public class SendWorkerOneToAllMessagesRequest<I extends WritableComparable,
     if (!isLocal && getConf().getAsyncConf().disableBarriers()) {
       getConf().getAsyncConf().addRecvBytes(this.getSerializedSize());
     }
-
-    // TODO-YH: implement multi-phase stuff?
 
     try {
       for (Entry<Integer, ByteArrayVertexIdMessages> idMsgs :

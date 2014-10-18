@@ -56,10 +56,7 @@ public abstract class MessageWithPhase implements Writable {
       throw new RuntimeException("encode: value cannot be negative!");
     }
 
-    if (forNextPhase) {
-      return val | NEXT_PHASE_MASK;
-    }
-    return val;
+    return forNextPhase ? val | NEXT_PHASE_MASK : val;
   }
 
   /**

@@ -23,6 +23,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import org.apache.giraph.comm.ServerData;
 import org.apache.giraph.comm.messages.MessageStore;
+import org.apache.giraph.comm.messages.MessageWithPhase;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.utils.ByteArrayVertexIdMessages;
 import org.apache.hadoop.io.Writable;
@@ -111,19 +112,30 @@ public class SendPartitionCurrentMessagesRequest<I extends WritableComparable,
     }
 
     MessageStore msgStore;
-    if (getConf().getAsyncConf().doRemoteRead()) {
-      // YH: use remote message store if doing async
-      // (request must always be remote)
+    if (getConf().getAsyncConf().isAsync()) {
       msgStore = serverData.<M>getRemoteMessageStore();
     } else {
       // otherwise use default BSP incoming message store
       msgStore = serverData.<M>getIncomingMessageStore();
     }
 
-    // TODO-YH: fix for multi-phase
+    MessageStore nextPhaseMsgStore = null;
+    if (getConf().getAsyncConf().isMultiPhase()) {
+      nextPhaseMsgStore = serverData.<M>getNextPhaseRemoteMessageStore();
+    }
+
+    MessageStore currStore;
+    int partId = partitionId;
+
+    if (MessageWithPhase.forNextPhase(partId)) {
+      currStore = nextPhaseMsgStore;
+      partId = MessageWithPhase.decode(partId);
+    } else {
+      currStore = msgStore;
+    }
 
     try {
-      msgStore.addPartitionMessages(partitionId, vertexIdMessageMap);
+      currStore.addPartitionMessages(partId, vertexIdMessageMap);
     } catch (IOException e) {
       throw new RuntimeException("doRequest: Got IOException ", e);
     }

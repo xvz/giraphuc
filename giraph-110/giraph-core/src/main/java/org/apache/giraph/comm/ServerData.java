@@ -224,10 +224,8 @@ public class ServerData<I extends WritableComparable,
 
   /** Prepare for next super step */
   public void prepareSuperstep() {
-    // YH: if one of immediate local or remote reads is not used,
-    // we must use regular BSP message stores for the disabled case
-    if (!conf.getAsyncConf().doLocalRead() ||
-        !conf.getAsyncConf().doRemoteRead()) {
+    // YH: if not async, use regular BSP store
+    if (!conf.getAsyncConf().isAsync()) {
       // regular BSP stores get swapped out every superstep
       if (currentMessageStore != null) {
         try {
@@ -249,6 +247,7 @@ public class ServerData<I extends WritableComparable,
     if (conf.getAsyncConf().isMultiPhase() &&
         conf.getAsyncConf().isNewPhase()) {
       // first, clean remote/local stores from previous phase
+      // TODO-YH: is this really necessary???
       if (remoteMessageStore != null) {
         try {
           remoteMessageStore.clearAll();
@@ -269,27 +268,25 @@ public class ServerData<I extends WritableComparable,
       remoteMessageStore = nextPhaseRemoteMessageStore;
       localMessageStore = nextPhaseLocalMessageStore;
 
-      if (conf.getAsyncConf().doRemoteRead()) {
-        nextPhaseRemoteMessageStore =
-          messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
-      }
-      if (conf.getAsyncConf().doLocalRead()) {
-        nextPhaseLocalMessageStore =
-          messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
-      }
+      nextPhaseRemoteMessageStore =
+        messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
+      nextPhaseLocalMessageStore =
+        messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
     }
 
     // create remote/local stores as needed; these persist across multiple
     // supersteps, but only a single phase
     //
     // NOTE: we assume incoming/outgoing types are the same
-    if (conf.getAsyncConf().doRemoteRead() && remoteMessageStore == null) {
-      remoteMessageStore =
-        messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
-    }
-    if (conf.getAsyncConf().doLocalRead() && localMessageStore == null) {
-      localMessageStore =
-        messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
+    if (conf.getAsyncConf().isAsync()) {
+      if (remoteMessageStore == null) {
+        remoteMessageStore =
+          messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
+      }
+      if (localMessageStore == null) {
+        localMessageStore =
+          messageStoreFactory.newStore(conf.getIncomingMessageValueFactory());
+      }
     }
   }
 
