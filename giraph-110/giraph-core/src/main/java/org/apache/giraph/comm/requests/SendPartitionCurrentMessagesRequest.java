@@ -104,7 +104,7 @@ public class SendPartitionCurrentMessagesRequest<I extends WritableComparable,
    * @param isLocal Whether request is local or not
    */
   private void doRequest(ServerData<I, V, E> serverData, boolean isLocal) {
-    // TODO-YH: destinations should always be to remote workers
+    // YH: destinations should always be to remote workers
     if (isLocal) {
       throw new IllegalStateException("doLocalRequest: " +
                                       "Destination is the local worker.");
@@ -119,6 +119,8 @@ public class SendPartitionCurrentMessagesRequest<I extends WritableComparable,
       // otherwise use default BSP incoming message store
       msgStore = serverData.<M>getIncomingMessageStore();
     }
+
+    // TODO-YH: fix for multi-phase
 
     try {
       msgStore.addPartitionMessages(partitionId, vertexIdMessageMap);

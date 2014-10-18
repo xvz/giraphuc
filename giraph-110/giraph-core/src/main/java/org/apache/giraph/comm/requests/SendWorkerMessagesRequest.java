@@ -113,8 +113,6 @@ public class SendWorkerMessagesRequest<I extends WritableComparable,
       msgStore = serverData.getIncomingMessageStore();
     }
 
-    // TODO-YH: is local request even called? maybe we can get rid of it
-    // TODO-YH: fix this code
     MessageStore nextPhaseMsgStore = null;
     if (asyncConf.isMultiPhase()) {
       if (isLocal && asyncConf.doLocalRead()) {

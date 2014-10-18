@@ -309,6 +309,8 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
                                   messageStore, vertexIdMessages);
     }
 
+    // TODO-YH: also send nextPhase stores if needed
+
     if (!vertexIdMessages.isEmpty()) {
       WritableRequest messagesRequest = new
           SendPartitionCurrentMessagesRequest<I, V, E, Writable>(

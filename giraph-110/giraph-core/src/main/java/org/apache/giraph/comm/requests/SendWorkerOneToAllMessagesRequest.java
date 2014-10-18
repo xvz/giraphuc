@@ -188,6 +188,8 @@ public class SendWorkerOneToAllMessagesRequest<I extends WritableComparable,
       getConf().getAsyncConf().addRecvBytes(this.getSerializedSize());
     }
 
+    // TODO-YH: implement multi-phase stuff?
+
     try {
       for (Entry<Integer, ByteArrayVertexIdMessages> idMsgs :
           partitionIdMsgs.entrySet()) {
