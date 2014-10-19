@@ -246,23 +246,6 @@ public class ServerData<I extends WritableComparable,
 
     if (conf.getAsyncConf().isMultiPhase() &&
         conf.getAsyncConf().isNewPhase()) {
-      // first, clean remote/local stores from previous phase
-      // TODO-YH: is this really necessary???
-      if (remoteMessageStore != null) {
-        try {
-          remoteMessageStore.clearAll();
-        } catch (IOException e) {
-          throw new IllegalStateException("Failed to clear previous msg store");
-        }
-      }
-      if (localMessageStore != null) {
-        try {
-          localMessageStore.clearAll();
-        } catch (IOException e) {
-          throw new IllegalStateException("Failed to clear previous msg store");
-        }
-      }
-
       // if next phase stores are null (i.e., SS0), local/remote stores
       // will be properly created down below
       remoteMessageStore = nextPhaseRemoteMessageStore;

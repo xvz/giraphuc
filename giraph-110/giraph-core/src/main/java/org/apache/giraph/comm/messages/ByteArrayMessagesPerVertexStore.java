@@ -177,7 +177,13 @@ public class ByteArrayMessagesPerVertexStore<I extends WritableComparable,
   @Override
   protected Iterable<M> getMessagesAsIterable(
       DataInputOutput dataInputOutput) {
-    return new MessagesIterable<M>(dataInputOutput, messageValueFactory);
+    // YH: have to synchronize even if this is a remove, b/c another thread
+    // may be in process of writing to this dataInputOutput
+    //
+    // TODO-YH: still bit buggy? do we need MessagesIterableSynchronized?..
+    synchronized (dataInputOutput) {
+      return new MessagesIterable<M>(dataInputOutput, messageValueFactory);
+    }
   }
 
   @Override
@@ -185,14 +191,16 @@ public class ByteArrayMessagesPerVertexStore<I extends WritableComparable,
       ConcurrentMap<I, DataInputOutput> partitionMap) {
     int numberOfMessages = 0;
     for (DataInputOutput dataInputOutput : partitionMap.values()) {
-      numberOfMessages += Iterators.size(
-          new RepresentativeByteStructIterator<M>(
-              dataInputOutput.createDataInput()) {
-            @Override
-            protected M createWritable() {
-              return messageValueFactory.newInstance();
-            }
-          });
+      synchronized (dataInputOutput) {
+        numberOfMessages += Iterators.size(
+            new RepresentativeByteStructIterator<M>(
+                dataInputOutput.createDataInput()) {
+              @Override
+              protected M createWritable() {
+                return messageValueFactory.newInstance();
+              }
+            });
+      }
     }
     return numberOfMessages;
   }
@@ -200,12 +208,14 @@ public class ByteArrayMessagesPerVertexStore<I extends WritableComparable,
   @Override
   protected void writeMessages(DataInputOutput dataInputOutput,
       DataOutput out) throws IOException {
+    // YH: used by single thread
     dataInputOutput.write(out);
   }
 
   @Override
   protected DataInputOutput readFieldsForMessages(DataInput in) throws
       IOException {
+    // YH: used by single thread
     DataInputOutput dataInputOutput = config.createMessagesInputOutput();
     dataInputOutput.readFields(in);
     return dataInputOutput;

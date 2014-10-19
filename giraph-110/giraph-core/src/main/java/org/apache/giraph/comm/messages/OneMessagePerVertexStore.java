@@ -116,7 +116,9 @@ public class OneMessagePerVertexStore<I extends WritableComparable,
 
   @Override
   protected Iterable<M> getMessagesAsIterable(M message) {
-    return Collections.singleton(message);
+    synchronized (message) {
+      return Collections.singleton(message);
+    }
   }
 
   @Override
@@ -126,11 +128,13 @@ public class OneMessagePerVertexStore<I extends WritableComparable,
 
   @Override
   protected void writeMessages(M messages, DataOutput out) throws IOException {
+    // YH: used by single thread
     messages.write(out);
   }
 
   @Override
   protected M readFieldsForMessages(DataInput in) throws IOException {
+    // YH: used by single thread
     M message = messageValueFactory.newInstance();
     message.readFields(in);
     return message;

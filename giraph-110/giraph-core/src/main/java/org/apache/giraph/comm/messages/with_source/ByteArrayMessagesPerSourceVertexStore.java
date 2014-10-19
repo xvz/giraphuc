@@ -235,6 +235,7 @@ public class ByteArrayMessagesPerSourceVertexStore<
   @Override
   protected Iterable<MessageWithSource<I, M>> getMessagesAsIterable(
       ConcurrentMap<I, DataInputOutput> sourceMap) {
+    // YH: returned iterator will be synchronized
     return new MessagesWithSourceIterable<I, M>(
         sourceMap.entrySet().iterator(), messageValueFactory);
   }
@@ -242,6 +243,7 @@ public class ByteArrayMessagesPerSourceVertexStore<
   @Override
   protected Iterable<M> getMessagesWithoutSourceAsIterable(
       ConcurrentMap<I, DataInputOutput> sourceMap) {
+    // YH: returned iterator will be synchronized
     return new MessagesIterable<M>(sourceMap.values().iterator(),
                                    messageValueFactory);
   }
@@ -278,14 +280,16 @@ public class ByteArrayMessagesPerSourceVertexStore<
     int numberOfMessages = 0;
     for (ConcurrentMap<I, DataInputOutput> srcMap : partitionMap.values()) {
       for (DataInputOutput dataInputOutput : srcMap.values()) {
-        numberOfMessages += Iterators.size(
-            new RepresentativeByteStructIterator<M>(
-                dataInputOutput.createDataInput()) {
-              @Override
-              protected M createWritable() {
-                return messageValueFactory.newInstance();
-              }
-            });
+        synchronized (dataInputOutput) {
+          numberOfMessages += Iterators.size(
+              new RepresentativeByteStructIterator<M>(
+                  dataInputOutput.createDataInput()) {
+                @Override
+                protected M createWritable() {
+                  return messageValueFactory.newInstance();
+                }
+              });
+        }
       }
     }
     return numberOfMessages;
@@ -294,12 +298,14 @@ public class ByteArrayMessagesPerSourceVertexStore<
   @Override
   protected void writeMessages(DataInputOutput dataInputOutput,
       DataOutput out) throws IOException {
+    // YH: used by single thread
     dataInputOutput.write(out);
   }
 
   @Override
   protected DataInputOutput readFieldsForMessages(DataInput in) throws
       IOException {
+    // YH: used by single thread
     DataInputOutput dataInputOutput = config.createMessagesInputOutput();
     dataInputOutput.readFields(in);
     return dataInputOutput;
