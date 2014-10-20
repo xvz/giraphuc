@@ -325,8 +325,8 @@ def single_iteration(log):
         eth_recv, eth_sent = net_parser(log_prefix, int(machines))
          
         stats = (time_run+time_io, time_io, time_run, mem_min, mem_avg, mem_max, eth_recv, eth_sent, l1norm)
-        separator = "------------+------------+------------+--------------------------------+---------------------------+------------------------"
-        return header + err_str + "\n" + separator + "\n  %8.2fs |  %8.2fs |  %8.2fs | %7.3f / %7.3f / %7.3f GB |  %8.3f / %8.3f GB   | %s \n" % stats + separator
+        separator = "------------+------------+------------+--------------------------------+-----------------------------+------------------------"
+        return header + err_str + "\n" + separator + "\n  %8.2fs |  %8.2fs |  %8.2fs | %7.3f / %7.3f / %7.3f GB |  %9.3f / %9.3f GB   | %s \n" % stats + separator
     else:
         return header + err_str
 
@@ -336,16 +336,16 @@ def single_iteration(log):
 
 # output results serially
 print("")
-print("============================================================================================================================")
-print(" Total time | Setup time | Comp. time |   Memory usage (min/avg/max)   | Total net I/O (recv/sent) |      l1-norm (PR)      ")
-print("============+============+============+================================+===========================+========================")
+print("==============================================================================================================================")
+print(" Total time | Setup time | Comp. time |   Memory usage (min/avg/max)   |  Total net I/O (recv/sent)  |      l1-norm (PR)      ")
+print("============+============+============+================================+=============================+========================")
 print("")
 for log in logs:
     print(single_iteration(log))
     print("")
 
 # another friendly reminder of what each thing is...
-print("============+============+============+================================+===========================+========================")
-print(" Total time | Setup time | Comp. time |   Memory usage (min/avg/max)   | Total net I/O (recv/sent) |      l1-norm (PR)      ")
-print("============================================================================================================================")
+print("============+============+============+================================+=============================+========================")
+print(" Total time | Setup time | Comp. time |   Memory usage (min/avg/max)   |  Total net I/O (recv/sent)  |      l1-norm (PR)      ")
+print("==============================================================================================================================")
 print("")
