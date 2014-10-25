@@ -158,6 +158,11 @@ public class LongLongMessageStore
   @Override
   public boolean hasMessagesForVertex(LongWritable vertexId) {
     Long2LongOpenHashMap partitionMap = getPartitionMap(vertexId);
+
+    if (partitionMap == null) {
+      return false;
+    }
+
     synchronized (partitionMap) {
       return partitionMap.containsKey(vertexId.get());
     }

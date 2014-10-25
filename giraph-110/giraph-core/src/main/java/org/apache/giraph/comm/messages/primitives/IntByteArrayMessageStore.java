@@ -187,6 +187,11 @@ public class IntByteArrayMessageStore<M extends Writable>
   @Override
   public boolean hasMessagesForVertex(IntWritable vertexId) {
     Int2ObjectOpenHashMap<?> partitionMap = getPartitionMap(vertexId);
+
+    if (partitionMap == null) {
+      return false;
+    }
+
     synchronized (partitionMap) {
       return partitionMap.containsKey(vertexId.get());
     }

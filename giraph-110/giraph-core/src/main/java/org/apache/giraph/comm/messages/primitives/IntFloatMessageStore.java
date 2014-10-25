@@ -162,6 +162,11 @@ public class IntFloatMessageStore
   @Override
   public boolean hasMessagesForVertex(IntWritable vertexId) {
     Int2FloatOpenHashMap partitionMap = getPartitionMap(vertexId);
+
+    if (partitionMap == null) {
+      return false;
+    }
+
     synchronized (partitionMap) {
       return partitionMap.containsKey(vertexId.get());
     }
