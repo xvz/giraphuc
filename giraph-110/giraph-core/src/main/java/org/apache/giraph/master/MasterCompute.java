@@ -67,16 +67,6 @@ public abstract class MasterCompute
     IllegalAccessException;
 
   /**
-   * YH: Notify that the next global superstep (to come after master.compute())
-   * will have a different computation phase from the previous superstep.
-   */
-  public final void notifyNewPhase() {
-    // this works correctly, b/c "this" is an instance of
-    // ImmutableClassesGiraphConfigurable (see configureIfPossible)
-    getConf().getAsyncConf().setNewPhase(true);
-  }
-
-  /**
    * Retrieves the current superstep.
    *
    * @return Current superstep

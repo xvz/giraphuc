@@ -1625,8 +1625,7 @@ public class BspServiceMaster<I extends WritableComparable,
     AsyncConfiguration asyncConf = getConfiguration().getAsyncConf();
 
     // Skip this extra barrier in cases where workers MUST have global barrier.
-    if (asyncConf.disableBarriers() && getSuperstep() > INPUT_SUPERSTEP &&
-        !(asyncConf.isMultiPhase() && asyncConf.isNewPhase())) {
+    if (asyncConf.disableBarriers() && getSuperstep() > INPUT_SUPERSTEP) {
       // YH: these paths are also cleaned up when master removes old SS dirs
       String readyToFinishWorkerPath =
         getWorkerReadyToFinishPath(getApplicationAttempt(), getSuperstep());
@@ -1653,9 +1652,6 @@ public class BspServiceMaster<I extends WritableComparable,
         getSuperstepStateChangedEvent())) {
       return SuperstepState.WORKER_FAILURE;
     }
-
-    // YH: before doing master.compute(), reset asyncConf's isNewPhase
-    asyncConf.setNewPhase(false);
 
     // Collect aggregator values, then run the master.compute() and
     // finally save the aggregator values
@@ -1697,15 +1693,6 @@ public class BspServiceMaster<I extends WritableComparable,
             " supersteps (max specified by the user), halting");
       }
       globalStats.setHaltComputation(true);
-    }
-
-    // YH: set isNewPhase for all workers to see. SS0 is always a new phase,
-    // but note that we detect it by checking for INPUT_SUPERSTEP.
-    //
-    // Note that doMasterCompute() above is executed for getSuperstep()+1,
-    // so asyncConf will indeed contain info for *next* global superstep
-    if (getSuperstep() == INPUT_SUPERSTEP || asyncConf.isNewPhase()) {
-      globalStats.setNewPhase(true);
     }
 
     // Superstep 0 doesn't need to have matching types (Message types may not
