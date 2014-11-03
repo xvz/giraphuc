@@ -1088,12 +1088,14 @@ public class BspServiceWorker<I extends WritableComparable,
       getConfiguration().updateSuperstepClasses(superstepClasses);
 
       if (asyncConf.isMultiPhase()) {
-        // for BAP, global supersteps are equivalent to new phase,
-        // since each phase is executed entirely in 1 global SS
-        asyncConf.setNewPhase(true);
-      } else if (asyncConf.isAsync()) {
-        // for AP, have to look at global stats from master
-        asyncConf.setNewPhase(globalStats.isNewPhase());
+        if (asyncConf.disableBarriers()) {
+          // for BAP, global supersteps are equivalent to new phase,
+          // since each phase is executed entirely in 1 global SS
+          asyncConf.setNewPhase(true);
+        } else {
+          // for AP, have to look at global stats from master
+          asyncConf.setNewPhase(globalStats.isNewPhase());
+        }
       }
 
       return new FinishedSuperstepStats(
