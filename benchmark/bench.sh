@@ -1,5 +1,5 @@
 #!/bin/bash -e                                                                                                                               
-source ../common/get-dirs.sh
+source ./common/get-dirs.sh
 
 GRAPHS=(usaroad arabic twitter uk0705)
 GRAPHS_MST=(usaroad arabic twitter)
