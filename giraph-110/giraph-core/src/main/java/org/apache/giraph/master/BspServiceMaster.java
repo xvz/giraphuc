@@ -1706,7 +1706,7 @@ public class BspServiceMaster<I extends WritableComparable,
     // so asyncConf will indeed contain info for *next* global superstep
     //
     // TODO-YH: remove for BAP, this is only for AP
-    if (!asyncConf.isMultiPhase() &&
+    if (!asyncConf.disableBarriers() &&
         (getSuperstep() == INPUT_SUPERSTEP || asyncConf.isNewPhase())) {
       globalStats.setNewPhase(true);
     }
