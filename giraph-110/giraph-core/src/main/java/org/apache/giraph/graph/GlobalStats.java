@@ -41,6 +41,13 @@ public class GlobalStats implements Writable {
   private long messageBytesCount = 0;
   /** Whether the computation should be halted */
   private boolean haltComputation = false;
+  /**
+   * YH: True if the next global superstep will have a different
+   * computational phase from the previous superstep. Only needed
+   * for AP, not BAP.
+   * TODO-YH: remove this for BAP, this is only for AP
+   */
+  private boolean isNewPhase = false;
 
   /**
    * Add the stats of a partition to the global stats.
@@ -81,6 +88,14 @@ public class GlobalStats implements Writable {
     haltComputation = value;
   }
 
+  public boolean isNewPhase() {
+    return isNewPhase;
+  }
+
+  public void setNewPhase(boolean isNewPhase) {
+    this.isNewPhase = isNewPhase;
+  }
+
   /**
    * Add messages to the global stats.
    *
@@ -107,6 +122,7 @@ public class GlobalStats implements Writable {
     messageCount = input.readLong();
     messageBytesCount = input.readLong();
     haltComputation = input.readBoolean();
+    isNewPhase = input.readBoolean();
   }
 
   @Override
@@ -117,6 +133,7 @@ public class GlobalStats implements Writable {
     output.writeLong(messageCount);
     output.writeLong(messageBytesCount);
     output.writeBoolean(haltComputation);
+    output.writeBoolean(isNewPhase);
   }
 
   @Override
@@ -124,6 +141,7 @@ public class GlobalStats implements Writable {
     return "(vtx=" + vertexCount + ",finVtx=" +
         finishedVertexCount + ",edges=" + edgeCount + ",msgCount=" +
         messageCount + ",msgBytesCount=" +
-        messageBytesCount + ",haltComputation=" + haltComputation + ")";
+        messageBytesCount + ",haltComputation=" + haltComputation +
+        ",isNewPhase=" + isNewPhase + ")";
   }
 }

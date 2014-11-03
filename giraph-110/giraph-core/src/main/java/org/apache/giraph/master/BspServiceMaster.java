@@ -1653,6 +1653,10 @@ public class BspServiceMaster<I extends WritableComparable,
       return SuperstepState.WORKER_FAILURE;
     }
 
+    // YH: before doing master.compute(), reset asyncConf's isNewPhase
+    // TODO-YH: remove for BAP, this is only for AP
+    asyncConf.setNewPhase(false);
+
     // Collect aggregator values, then run the master.compute() and
     // finally save the aggregator values
     aggregatorHandler.prepareSuperstep(masterClient);
@@ -1693,6 +1697,18 @@ public class BspServiceMaster<I extends WritableComparable,
             " supersteps (max specified by the user), halting");
       }
       globalStats.setHaltComputation(true);
+    }
+
+    // YH: set isNewPhase for all workers to see. SS0 is always a new phase,
+    // but note that we detect it by checking for INPUT_SUPERSTEP.
+    //
+    // Note that doMasterCompute() above is executed for getSuperstep()+1,
+    // so asyncConf will indeed contain info for *next* global superstep
+    //
+    // TODO-YH: remove for BAP, this is only for AP
+    if (!asyncConf.isMultiPhase() &&
+        (getSuperstep() == INPUT_SUPERSTEP || asyncConf.isNewPhase())) {
+      globalStats.setNewPhase(true);
     }
 
     // Superstep 0 doesn't need to have matching types (Message types may not

@@ -973,10 +973,13 @@ public class BspServiceWorker<I extends WritableComparable,
         if (workerSentMessages > 0 || localVertices != doneVertices) {
           needBarrier = false;
         }
+
       } else if (asyncConf.isMultiPhase()) {
         // For multi-phase computation, we must check only the message stores
         // for the current phase. Hence, we can't use workerSentMessages, since
         // that also captures messages sent for the next phase.
+        //
+        // TODO-YH: combine this clause with else clause below?
         if (getServerData().getLocalMessageStore().hasMessages() ||
             getServerData().getRemoteMessageStore().hasMessages()) {
           needBarrier = false;
@@ -1049,12 +1052,6 @@ public class BspServiceWorker<I extends WritableComparable,
     }
 
     if (asyncConf.needBarrier()) {
-      // global supersteps are equivalent to new phase, since
-      // each phase is executed entirely in 1 global SS
-      if (asyncConf.isMultiPhase()) {
-        asyncConf.setNewPhase(true);
-      }
-
       writeFinishedSuperstepInfoToZK(partitionStatsList,
         workerSentMessages, workerSentMessageBytes);
 
@@ -1090,6 +1087,15 @@ public class BspServiceWorker<I extends WritableComparable,
       incrCachedSuperstep();
       getConfiguration().updateSuperstepClasses(superstepClasses);
 
+      if (asyncConf.isMultiPhase()) {
+        // for BAP, global supersteps are equivalent to new phase,
+        // since each phase is executed entirely in 1 global SS
+        asyncConf.setNewPhase(true);
+      } else if (asyncConf.isAsync()) {
+        // for AP, have to look at global stats from master
+        asyncConf.setNewPhase(globalStats.isNewPhase());
+      }
+
       return new FinishedSuperstepStats(
           localVertices,
           globalStats.getHaltComputation(),
@@ -1104,7 +1110,7 @@ public class BspServiceWorker<I extends WritableComparable,
       // code modifications.
       incrLogicalSuperstep();
 
-      // no longer a new phase
+      // no longer a new phase (AP never executes this code path)
       asyncConf.setNewPhase(false);
 
       // Return junk---GraphTaskManager ignores it.
