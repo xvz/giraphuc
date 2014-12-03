@@ -176,6 +176,11 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
   }
 
   @Override
+  public void setForNextPhase(boolean forNextPhase) {
+    this.sendMessageCache.setForNextPhase(forNextPhase);
+  }
+
+  @Override
   public void sendMessageRequest(I srcId, I destVertexId, Writable message) {
     if (configuration.getAsyncConf().needAllMsgs()) {
       // YH: source id need not be cloned, as it is the id object held by

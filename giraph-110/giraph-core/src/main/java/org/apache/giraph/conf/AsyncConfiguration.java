@@ -18,7 +18,6 @@
 
 package org.apache.giraph.conf;
 
-import org.apache.giraph.comm.messages.MessageWithPhase;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.log4j.Logger;
 
@@ -70,18 +69,11 @@ public class AsyncConfiguration {
     disableBarriers = GiraphConstants.ASYNC_DISABLE_BARRIERS.get(conf);
     isAsync = disableBarriers || GiraphConstants.ASYNC_DO_ASYNC.get(conf);
     needAllMsgs = isAsync && GiraphConstants.ASYNC_NEED_ALL_MSGS.get(conf);
+    isMultiPhase = isAsync && GiraphConstants.ASYNC_MULTI_PHASE.get(conf);
 
     // This only sets isNewPhase for SS -1 (INPUT_SUPERSTEP).
     isNewPhase = true;
     currentPhase = 0;
-
-    // if M implements MessageWithPhase, we have multiphase computation
-    // NOTE: we assume incoming and outgoing types are same
-    //
-    // (doing it here exactly once probably gives better performance;
-    // reflection can be expensive)
-    isMultiPhase = isAsync && MessageWithPhase.class.
-      isAssignableFrom(conf.getIncomingMessageValueClass());
 
     // special case: first superstep always needs barrier after
     needBarrier = true;

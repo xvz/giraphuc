@@ -21,7 +21,6 @@ package org.apache.giraph.comm;
 import java.util.Iterator;
 
 import org.apache.giraph.bsp.CentralizedServiceWorker;
-import org.apache.giraph.comm.messages.MessageWithPhase;
 import org.apache.giraph.comm.messages.MessageWithPhaseUtils;
 import org.apache.giraph.comm.netty.NettyWorkerClientRequestProcessor;
 import org.apache.giraph.comm.requests.SendWorkerMessagesRequest;
@@ -68,6 +67,12 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
   protected final NettyWorkerClientRequestProcessor<I, ?, ?> clientProcessor;
 
   /**
+   * YH: Whether the subsequent messages will be for the next phase
+   * (if performing multi-phase computation).
+   */
+  protected boolean forNextPhase;
+
+  /**
    * Constructor
    *
    * @param conf Giraph configuration
@@ -89,6 +94,16 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
   public VertexIdMessages<I, M> createVertexIdData() {
     return new ByteArrayVertexIdMessages<I, M>(
         getConf().getOutgoingMessageValueFactory());
+  }
+
+  /**
+   * YH: Flag all subsequent messages as being either for the current
+   * phase (false) or for the next phase (true).
+   *
+   * @param forNextPhase True if message should be processed in next phase.
+   */
+  public void setForNextPhase(boolean forNextPhase) {
+    this.forNextPhase = forNextPhase;
   }
 
   /**
@@ -168,14 +183,14 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
     WorkerInfo workerInfo = owner.getWorkerInfo();
     final int partitionId = owner.getPartitionId();
 
-    boolean forNextPhase = false;
-    if (getConf().getAsyncConf().isMultiPhase()) {
-      forNextPhase = ((MessageWithPhase) message).forNextPhase();
-    }
-
     if (LOG.isTraceEnabled()) {
       LOG.trace("sendMessageRequest: Send bytes (" + message.toString() +
         ") to " + destVertexId + " on worker " + workerInfo);
+    }
+
+    // YH: if not doing multiphase, ignore forNextPhase
+    if (!getConf().getAsyncConf().isMultiPhase()) {
+      forNextPhase = false;
     }
 
     // YH: this is used for termination in BspServiceMaster.

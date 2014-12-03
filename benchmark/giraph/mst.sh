@@ -29,9 +29,11 @@ machines=$2
 execmode=$3
 case ${execmode} in
     0) execopt=""; class="MinimumSpanningTree";;     # sync BSP are used by default
-    1) execopt="-Dgiraph.asyncDoAsync=true";
+    1) execopt="-Dgiraph.asyncDoAsync=true \
+                -Dgiraph.asyncMultiPhase=true";
        class="MSTAsync";;
-    2) execopt="-Dgiraph.asyncDisableBarriers=true";
+    2) execopt="-Dgiraph.asyncDisableBarriers=true \
+                -Dgiraph.asyncMultiPhase=true";
        class="MSTAsync";;
     *) echo "Invalid exec-mode"; exit -1;;
 esac

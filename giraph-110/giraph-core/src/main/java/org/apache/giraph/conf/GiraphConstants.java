@@ -1121,5 +1121,12 @@ public interface GiraphConstants {
       new BooleanConfOption("giraph.asyncNeedAllMessages", false,
           "Whether algorithm needs every vertex to have all messages from" +
           "all its neighbours for every superstep (to achieve correctness");
+
+  /**
+   * YH: Whether algorithm has multiple computation phases (async only)
+   */
+  BooleanConfOption ASYNC_MULTI_PHASE =
+      new BooleanConfOption("giraph.asyncMultiPhase", false,
+          "Whether algorithm has multiple computation phases (async only)");
 }
 // CHECKSTYLE: resume InterfaceIsTypeCheck

@@ -30,7 +30,6 @@ import org.apache.giraph.examples.MSTAsyncComputation.MSTEdgeValue;
 import org.apache.giraph.examples.MSTAsyncComputation.MSTMessage;
 import org.apache.giraph.io.formats.TextVertexOutputFormat;
 import org.apache.giraph.master.DefaultMasterCompute;
-import org.apache.giraph.comm.messages.MessageWithPhase;
 //import org.apache.giraph.worker.WorkerContext;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
@@ -110,16 +109,19 @@ public class MSTAsyncComputation extends BasicComputation<
 
     case PHASE_2A:
       //LOG.info(vertex.getId() + ": phase 2A");
+      setMessagesAreForNextPhase(true);
       phase2A(vertex);
       break;
 
     case PHASE_2B:
       //LOG.info(vertex.getId() + ": phase 2B");
+      setMessagesAreForNextPhase(false);
       phase2B(vertex, messages);
       break;
 
     case PHASE_3A:
       //LOG.info(vertex.getId() + ": phase 3A");
+      setMessagesAreForNextPhase(true);
       phase3A(vertex);
       break;
 
@@ -130,6 +132,7 @@ public class MSTAsyncComputation extends BasicComputation<
 
     case PHASE_4A:
       //LOG.info(vertex.getId() + ": phase 4A");
+      setMessagesAreForNextPhase(true);
       phase4A(vertex);
       break;
 
@@ -212,8 +215,7 @@ public class MSTAsyncComputation extends BasicComputation<
 
     MSTMessage msg = new MSTMessage(
         new MSTMsgType(MSTMsgType.MSG_QUESTION),
-        new MSTMsgContentLong(vertex.getId().get()),
-        true);
+        new MSTMsgContentLong(vertex.getId().get()));
 
     // send query to pointer (potential supervertex)
     //LOG.info(vertex.getId() + ": sending question to " +
@@ -333,8 +335,7 @@ public class MSTAsyncComputation extends BasicComputation<
           // so resend question to it
           MSTMessage msg = new MSTMessage(
                              new MSTMsgType(MSTMsgType.MSG_QUESTION),
-                             new MSTMsgContentLong(myId),
-                             false);
+                             new MSTMsgContentLong(myId));
 
           //LOG.info(vertex.getId() + ": resending question to " + pointer);
           sendMessage(new LongWritable(pointer), msg);
@@ -355,8 +356,7 @@ public class MSTAsyncComputation extends BasicComputation<
       long bool = isPointerSupervertex ? 1 : 0;
 
       MSTMessage msg = new MSTMessage(new MSTMsgType(MSTMsgType.MSG_ANSWER),
-                                      new MSTMsgContentLong(pointer, bool),
-                                      false);
+                                      new MSTMsgContentLong(pointer, bool));
 
       //LOG.info(vertex.getId() + ": sent " + pointer + ", " +
       //         isPointerSupervertex);
@@ -388,8 +388,7 @@ public class MSTAsyncComputation extends BasicComputation<
     // send our neighbours <my ID, my supervertex's ID>
     MSTMessage msg = new MSTMessage(new MSTMsgType(MSTMsgType.MSG_CLEAN),
                          new MSTMsgContentLong(vertex.getId().get(),
-                                               vertex.getValue().getPointer()),
-                         true);
+                                               vertex.getValue().getPointer()));
 
     //LOG.info(vertex.getId() + ": sending MSG_CLEAN, my supervertex is " +
     //         vertex.getValue().getPointer());
@@ -517,8 +516,7 @@ public class MSTAsyncComputation extends BasicComputation<
         MSTMessage msg;
         while (itr.hasNext()) {
           msg = new MSTMessage(new MSTMsgType(MSTMsgType.MSG_EDGE),
-                               new MSTMsgContentEdge(itr.next()),
-                               true);
+                               new MSTMsgContentEdge(itr.next()));
           sendMessage(new LongWritable(pointer), msg);
 
           // delete edge---this can help w/ memory (not so much running time)
@@ -1022,11 +1020,10 @@ public class MSTAsyncComputation extends BasicComputation<
    * Essentially a wrapper class containing a type, and a
    * MSTMsgContent value.
    */
-  public static class MSTMessage implements MessageWithPhase {
+  public static class MSTMessage implements Writable {
     /** private variables **/
     private MSTMsgType type;       /** message type **/
     private MSTMsgContent value;   /** message content/value **/
-    private boolean forNextPhase;  /** true if message is for next phase */
 
     /**
      * Default constructor.
@@ -1042,13 +1039,10 @@ public class MSTAsyncComputation extends BasicComputation<
      *
      * @param type Message type.
      * @param value Message value.
-     * @param forNextPhase True if message should be processed in next phase.
      */
-    public MSTMessage(MSTMsgType type, MSTMsgContent value,
-                      boolean forNextPhase) {
+    public MSTMessage(MSTMsgType type, MSTMsgContent value) {
       this.type = type;
       this.value = value;
-      this.forNextPhase = forNextPhase;
     }
 
     public MSTMsgType getType() {
@@ -1057,11 +1051,6 @@ public class MSTAsyncComputation extends BasicComputation<
 
     public MSTMsgContent getValue() {
       return value;
-    }
-
-    @Override
-    public boolean forNextPhase() {
-      return forNextPhase;
     }
 
     @Override

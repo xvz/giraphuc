@@ -136,6 +136,14 @@ public interface Computation<I extends WritableComparable,
   long getTotalNumEdges();
 
   /**
+   * YH: Flag all subsequent messages as being either for the current
+   * phase (false) or for the next phase (true).
+   *
+   * @param forNextPhase True if message should be processed in next phase.
+   */
+  void setMessagesAreForNextPhase(boolean forNextPhase);
+
+  /**
    * YH: Set the source vertex id for all messages that will be sent.
    * By default, this is the current vertex being processed, or null
    * if no vertex is currently being processed.
