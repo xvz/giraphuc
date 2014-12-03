@@ -1022,16 +1022,16 @@ public class MSTAsyncComputation extends BasicComputation<
    * Essentially a wrapper class containing a type, and a
    * MSTMsgContent value.
    */
-  public static class MSTMessage extends MessageWithPhase {
+  public static class MSTMessage implements MessageWithPhase {
     /** private variables **/
     private MSTMsgType type;       /** message type **/
     private MSTMsgContent value;   /** message content/value **/
+    private boolean forNextPhase;  /** true if message is for next phase */
 
     /**
      * Default constructor.
      */
     public MSTMessage() {
-      super(false);
       this.type = new MSTMsgType(MSTMsgType.MSG_INVALID);
       // TODO: ??? or should we use MSTMsgContentLong??
       this.value = new MSTMsgContentLong();
@@ -1046,9 +1046,9 @@ public class MSTAsyncComputation extends BasicComputation<
      */
     public MSTMessage(MSTMsgType type, MSTMsgContent value,
                       boolean forNextPhase) {
-      super(forNextPhase);
       this.type = type;
       this.value = value;
+      this.forNextPhase = forNextPhase;
     }
 
     public MSTMsgType getType() {
@@ -1057,6 +1057,11 @@ public class MSTAsyncComputation extends BasicComputation<
 
     public MSTMsgContent getValue() {
       return value;
+    }
+
+    @Override
+    public boolean forNextPhase() {
+      return forNextPhase;
     }
 
     @Override

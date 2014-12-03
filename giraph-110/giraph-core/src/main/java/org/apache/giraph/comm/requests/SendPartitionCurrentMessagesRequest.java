@@ -23,7 +23,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import org.apache.giraph.comm.ServerData;
 import org.apache.giraph.comm.messages.MessageStore;
-import org.apache.giraph.comm.messages.MessageWithPhase;
+import org.apache.giraph.comm.messages.MessageWithPhaseUtils;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.utils.ByteArrayVertexIdMessages;
 import org.apache.hadoop.io.Writable;
@@ -127,9 +127,9 @@ public class SendPartitionCurrentMessagesRequest<I extends WritableComparable,
     MessageStore currStore;
     int partId = partitionId;
 
-    if (MessageWithPhase.forNextPhase(partId)) {
+    if (MessageWithPhaseUtils.forNextPhase(partId)) {
       currStore = nextPhaseMsgStore;
-      partId = MessageWithPhase.decode(partId);
+      partId = MessageWithPhaseUtils.decode(partId);
     } else {
       currStore = msgStore;
     }

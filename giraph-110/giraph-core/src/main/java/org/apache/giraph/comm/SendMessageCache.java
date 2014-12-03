@@ -22,6 +22,7 @@ import java.util.Iterator;
 
 import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.comm.messages.MessageWithPhase;
+import org.apache.giraph.comm.messages.MessageWithPhaseUtils;
 import org.apache.giraph.comm.netty.NettyWorkerClientRequestProcessor;
 import org.apache.giraph.comm.requests.SendWorkerMessagesRequest;
 import org.apache.giraph.comm.requests.WritableRequest;
@@ -239,7 +240,7 @@ public class SendMessageCache<I extends WritableComparable, M extends Writable>
     // This will naturally separate the different types of messages AND enable
     // the receiver to distinguish between the two cases.
     final int partitionIdWithPhase =
-      MessageWithPhase.encode(partitionId, forNextPhase);
+      MessageWithPhaseUtils.encode(partitionId, forNextPhase);
 
     // Add the message to the cache
     int workerMessageSize = addMessage(

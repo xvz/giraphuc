@@ -33,7 +33,7 @@ import org.apache.giraph.comm.ServerData;
 import org.apache.giraph.comm.WorkerClient;
 import org.apache.giraph.comm.WorkerClientRequestProcessor;
 import org.apache.giraph.comm.messages.MessageStore;
-import org.apache.giraph.comm.messages.MessageWithPhase;
+import org.apache.giraph.comm.messages.MessageWithPhaseUtils;
 import org.apache.giraph.comm.messages.with_source.MessageWithSource;
 import org.apache.giraph.comm.requests.SendPartitionCurrentMessagesRequest;
 import org.apache.giraph.comm.requests.SendPartitionMutationsRequest;
@@ -263,7 +263,7 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
       if (vertexIdMessages.getSize() > maxMessagesSizePerWorker) {
         WritableRequest messagesRequest = new
             SendPartitionCurrentMessagesRequest<I, V, E, Writable>(
-            MessageWithPhase.encode(partitionId, forNextPhase),
+            MessageWithPhaseUtils.encode(partitionId, forNextPhase),
             vertexIdMessages, configuration);
         doRequest(workerInfo, messagesRequest);
         vertexIdMessages =
@@ -277,7 +277,7 @@ public class NettyWorkerClientRequestProcessor<I extends WritableComparable,
     if (!vertexIdMessages.isEmpty()) {
       WritableRequest messagesRequest = new
           SendPartitionCurrentMessagesRequest<I, V, E, Writable>(
-          MessageWithPhase.encode(partitionId, forNextPhase),
+          MessageWithPhaseUtils.encode(partitionId, forNextPhase),
           vertexIdMessages, configuration);
       doRequest(workerInfo, messagesRequest);
     }

@@ -21,7 +21,7 @@ package org.apache.giraph.comm.requests;
 import org.apache.giraph.bsp.BspService;
 import org.apache.giraph.comm.ServerData;
 import org.apache.giraph.comm.messages.MessageStore;
-import org.apache.giraph.comm.messages.MessageWithPhase;
+import org.apache.giraph.comm.messages.MessageWithPhaseUtils;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.utils.VertexIdMessages;
 import org.apache.giraph.utils.ByteArrayVertexIdMessages;
@@ -135,9 +135,9 @@ public class SendWorkerMessagesRequest<I extends WritableComparable,
       iterator.next();
 
       int partitionId = iterator.getCurrentFirst();
-      if (MessageWithPhase.forNextPhase(partitionId)) {
+      if (MessageWithPhaseUtils.forNextPhase(partitionId)) {
         currStore = nextPhaseMsgStore;
-        partitionId = MessageWithPhase.decode(partitionId);
+        partitionId = MessageWithPhaseUtils.decode(partitionId);
       } else {
         currStore = msgStore;
       }

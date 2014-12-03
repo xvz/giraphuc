@@ -21,7 +21,7 @@ package org.apache.giraph.comm;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.apache.giraph.bsp.CentralizedServiceWorker;
-import org.apache.giraph.comm.messages.MessageWithPhase;
+import org.apache.giraph.comm.messages.MessageWithPhaseUtils;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.partition.PartitionOwner;
 import org.apache.giraph.utils.PairList;
@@ -118,8 +118,8 @@ public abstract class SendDataCache<D> {
    */
   private int getIndex(int index) {
     // condition will only be true if we're in multiphase computation
-    return MessageWithPhase.forNextPhase(index) ?
-      MessageWithPhase.decode(index) + (dataCache.length / 2) : index;
+    return MessageWithPhaseUtils.forNextPhase(index) ?
+      MessageWithPhaseUtils.decode(index) + (dataCache.length / 2) : index;
   }
 
   /**
@@ -150,7 +150,8 @@ public abstract class SendDataCache<D> {
 
       if (conf.getAsyncConf().isMultiPhase()) {
         // also remove data that's to be consumed in the next phase
-        int partitionIdWithPhase = MessageWithPhase.encode(partitionId, true);
+        int partitionIdWithPhase =
+          MessageWithPhaseUtils.encode(partitionId, true);
         int index = partitionId + (dataCache.length / 2);
 
         if (dataCache[index] != null) {
