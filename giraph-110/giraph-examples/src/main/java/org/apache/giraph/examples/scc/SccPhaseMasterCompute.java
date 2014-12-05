@@ -36,7 +36,7 @@ public class SccPhaseMasterCompute extends DefaultMasterCompute {
   /**
    * Aggregator that stores the current phase
    */
-  public static final String PHASE = "scccompute.phase";
+  public static final String PHASE = "scccompute.phase_PERSIST";
 
   /**
    * Flags whether a new maximum was found in the Forward Traversal phase
