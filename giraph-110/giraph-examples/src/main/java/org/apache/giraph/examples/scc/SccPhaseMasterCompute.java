@@ -95,7 +95,7 @@ public class SccPhaseMasterCompute extends DefaultMasterCompute {
       case BACKWARD_TRAVERSAL_REST :
         BooleanWritable converged = getAggregatedValue(CONVERGED);
         if (!converged.get()) {
-          setPhase(Phases.TRIMMING);
+          setPhase(Phases.TRANSPOSE);
         }
         break;
       default :
