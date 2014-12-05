@@ -71,6 +71,7 @@ public class SccPhaseMasterCompute extends DefaultMasterCompute {
   @Override
   public void compute() {
     if (getSuperstep() == 0) {
+      notifyNewPhase();
       setPhase(Phases.TRANSPOSE);
     } else {
       Phases currPhase = getPhase();
@@ -110,6 +111,7 @@ public class SccPhaseMasterCompute extends DefaultMasterCompute {
    *          Next phase.
    */
   private void setPhase(Phases phase) {
+    notifyNewPhase();
     setAggregatedValue(PHASE, new IntWritable(phase.ordinal()));
   }
 
