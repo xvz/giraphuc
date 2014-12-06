@@ -46,11 +46,9 @@ import com.google.common.primitives.Longs;
  *
  * <pre>
  * hadoop jar $OKAPI_JAR org.apache.giraph.GiraphRunner \
- *   org.apache.giraph.examples.okapi.graphs.AdamicAdar
- * \$ComputeLogOfInverseDegree                                           \
- *   -mc  org.apache.giraph.examples.okapi.graphs.AdamicAdar\$MasterCompute  \
- *   -eif org.apache.giraph.examples.okapi.io.formats.
- * LongDoubleTextEdgeInputFormat                 \
+ *   ml.grafos.okapi.graphs.AdamicAdar\$ComputeLogOfInverseDegree \
+ *   -mc  ml.grafos.okapi.graphs.AdamicAdar\$MasterCompute  \
+ *   -eif ml.grafos.okapi.io.formats.LongDoubleTextEdgeInputFormat \
  *   -eip $INPUT_EDGES \
  *   -eof org.apache.giraph.io.formats.SrcIdDstIdEdgeValueTextOutputFormat \
  *   -op $OUTPUT \

@@ -21,6 +21,6 @@
  * http://grafos.ml/okapi
  * https://github.com/grafos-ml/okapi/
  *
- * The equivalent package is org.apache.giraph.examples.okapi
+ * The equivalent package is ml.grafos.okapi
  */
 package org.apache.giraph.examples.okapi;

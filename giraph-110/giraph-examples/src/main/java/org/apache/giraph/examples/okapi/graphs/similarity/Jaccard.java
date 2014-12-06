@@ -47,10 +47,9 @@ import com.google.common.primitives.Longs;
  *
  * <pre>
  * hadoop jar $OKAPI_JAR org.apache.giraph.GiraphRunner \
- *   org.apache.giraph.examples.okapi.graphs.Jaccard\$SendFriendsList  \
- *   -mc  org.apache.giraph.examples.okapi.graphs.Jaccard\$MasterCompute  \
- *   -eif org.apache.giraph.examples.okapi.io.formats.
- * LongDoubleZerosTextEdgeInputFormat            \
+ *   ml.grafos.okapi.graphs.Jaccard\$SendFriendsList  \
+ *   -mc  ml.grafos.okapi.graphs.Jaccard\$MasterCompute  \
+ *   -eif ml.grafos.okapi.io.formats.LongDoubleZerosTextEdgeInputFormat \
  *   -eip $INPUT_EDGES \
  *   -eof org.apache.giraph.io.formats.SrcIdDstIdEdgeValueTextOutputFormat \
  *   -op $OUTPUT \

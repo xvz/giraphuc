@@ -41,11 +41,9 @@ import org.apache.hadoop.io.WritableComparable;
  *
  * <pre>
  * hadoop jar $OKAPI_JAR org.apache.giraph.GiraphRunner \
- *   org.apache.giraph.examples.okapi.graphs.SemimetricTriangles\$PropagateId  \
- *   -mc  org.apache.giraph.examples.okapi.graphs.
- * SemimetricTriangles\$SemimetricMasterCompute                          \
- *   -eif org.apache.giraph.examples.okapi.io.formats.
- * LongDoubleTextEdgeInputFormat                 \
+ *   ml.grafos.okapi.graphs.SemimetricTriangles\$PropagateId  \
+ *   -mc  ml.grafos.okapi.graphs.SemimetricTriangles\$SemimetricMasterCompute \
+ *   -eif ml.grafos.okapi.io.formats.LongDoubleTextEdgeInputFormat \
  *   -eip $INPUT_EDGES \
  *   -eof org.apache.giraph.io.formats.SrcIdDstIdEdgeValueTextOutputFormat \
  *   -op $OUTPUT \
