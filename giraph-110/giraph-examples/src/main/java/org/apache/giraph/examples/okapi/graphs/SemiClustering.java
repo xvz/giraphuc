@@ -105,7 +105,7 @@ public class SemiClustering extends BasicComputation<LongWritable,
     // If this is the first superstep, initialize cluster list with a single
     // cluster that contains only the current vertex, and send it to all
     // neighbors.
-    if (getSuperstep() == 0) {
+    if (getLogicalSuperstep() == 0) {
       SemiCluster myCluster = new SemiCluster();
       myCluster.addVertex(vertex, scoreFactor);
 
@@ -118,7 +118,7 @@ public class SemiClustering extends BasicComputation<LongWritable,
       return;
     }
 
-    if (getSuperstep() == iterations) {
+    if (getLogicalSuperstep() >= iterations) {
       vertex.voteToHalt();
       return;
     }
