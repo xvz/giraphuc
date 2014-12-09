@@ -22,7 +22,7 @@ static void usage(char **argv) {
 
 
 static inline void write_output(std::ofstream &ofs, int out_format,
-                                long vertex_id, long edge_dst, long edge_weight) {
+                                long vertex_id, long edge_dst, long long edge_weight) {
   switch(out_format) {
   case F_TO_SNAP:
     ofs << vertex_id << " " << edge_dst << "\n";
@@ -64,7 +64,8 @@ int main(int argc, char **argv) {
   std::cout.sync_with_stdio(false);    // don't flush on \n
 
   // longs, just to be safe
-  long vertex_id, edge_dst, edge_weight;
+  long vertex_id, edge_dst;
+  long long edge_weight;
 
   switch (in_format) {
   case F_IN_ADJ:

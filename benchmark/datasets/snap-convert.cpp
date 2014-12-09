@@ -35,7 +35,7 @@ static void usage(char **argv) {
   std::cout << "            2 3          1 2" << std::endl;
 }
 
-static inline void get_edge_weight(std::ifstream &ifs, int in_format, long &edge_weight) {
+static inline void get_edge_weight(std::ifstream &ifs, int in_format, long long &edge_weight) {
   switch (in_format) {
   case F_IN_SNAP:
     edge_weight = 0;
@@ -85,7 +85,8 @@ int main(int argc, char **argv) {
   std::cout.sync_with_stdio(false);    // don't flush on \n
   
   // longs, just to be safe
-  long vertex_id, edge_dst, edge_weight;
+  long vertex_id, edge_dst;
+  long long edge_weight;
   long curr_id;
 
   // first pair of reads
