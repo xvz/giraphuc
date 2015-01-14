@@ -1052,6 +1052,14 @@ public class BspServiceWorker<I extends WritableComparable,
     }
 
     if (asyncConf.needBarrier()) {
+      // YH: if algorithm terminates after this global barrier, any pending
+      // mutations will fail to execute for *BAP* b/c we never execute
+      // startSuperstep() again. Hence, must also perform mutations here.
+      if (asyncConf.disableBarriers() &&
+          getLogicalSuperstep() > INPUT_SUPERSTEP) {
+        workerServer.finishSuperstep();
+      }
+
       writeFinishedSuperstepInfoToZK(partitionStatsList,
         workerSentMessages, workerSentMessageBytes);
 

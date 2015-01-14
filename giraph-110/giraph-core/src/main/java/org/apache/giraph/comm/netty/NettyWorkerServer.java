@@ -39,6 +39,7 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Collection;
 import java.util.Map.Entry;
@@ -122,14 +123,26 @@ public class NettyWorkerServer<I extends WritableComparable,
   public void prepareSuperstep() {
     serverData.prepareSuperstep();
 
-    // YH: this is safe even when we read messages immediately, wrt part
-    // where missing vertices are added. This is b/c if vertex doesn't
-    // exist yet, we won't encounter them in compute loop, so their messages
-    // are correctly delayed until subsequent superstep.
+    // YH: There are no race conditions because:
+    // - no compute threads are running; this is executed by a single thread
+    // - all mutations are LOCAL to a partition (and hence also worker)
+    //   -> a vertex is owned solely by one partition (its owner partition)
+    //   -> an edge is owned solely by its source vertex
+    // => no synchronization needed across partitions or workers
     //
-    // This is also safe even between logical supersteps, since mutations
-    // are for vertices that belong to this partition AND because there
-    // are no race conditions (exactly one thread executes this).
+    // For vertex mutations, messages can arrive at any time. However:
+    // - messages for yet-to-be-added vertices are buffered in the message
+    //   store, so they are not lost or erroneously exposed in the compute loop
+    // - messages for deleted vertices are automatically purged when
+    //   using BSP/AP (due to switching message stores), and programmatically
+    //   purged when using BAP (see resolveMutations())
+    //
+    // Hence all mutations are safe.
+    resolveMutations();
+  }
+
+  @Override
+  public void finishSuperstep() {
     resolveMutations();
   }
 
@@ -249,6 +262,29 @@ public class NettyWorkerServer<I extends WritableComparable,
           partition.putVertex(vertex);
         } else if (originalVertex != null) {
           partition.removeVertex(originalVertex.getId());
+        }
+
+        // YH: if this is BAP, we MUST clear messages destined for the
+        // removed vertex. This ensures the logic in BspServiceWorker
+        // functions correctly (namely, messages for the deleted vertex
+        // are removed and don't count as "unprocessed" messages).
+        //
+        // Secondly, when a BSP algorithm removes vertices, it must always
+        // ensure that either (a) nobody ever sends messages to said vertex
+        // or (b) removed vertices don't get added again. In the latter
+        // case, the (custom) VertexResolver should return null.
+        // If the alg doesn't, it will be incorrect in BSP (let alone BAP),
+        // b/c a msg sent to a deleted vertex will cause it to be re-added.
+        if (conf.getAsyncConf().disableBarriers() && vertex == null) {
+          try {
+            serverData.getLocalMessageStore().
+              removeVertexMessages(vertexIndex);
+            serverData.getRemoteMessageStore().
+              removeVertexMessages(vertexIndex);
+          } catch (IOException exp) {
+            throw new IllegalStateException("resolveMutations: " +
+                "Caught unexpected IOException, failing.", exp);
+          }
         }
       }
       service.getPartitionStore().putPartition(partition);
