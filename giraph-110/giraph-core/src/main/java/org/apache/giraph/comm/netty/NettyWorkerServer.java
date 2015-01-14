@@ -142,8 +142,11 @@ public class NettyWorkerServer<I extends WritableComparable,
   }
 
   @Override
-  public void finishSuperstep() {
-    resolveMutations();
+  public void finishComputation() {
+    // only do mutations if there are explicit pending ones
+    if (!serverData.getVertexMutations().isEmpty()) {
+      resolveMutations();
+    }
   }
 
   /**

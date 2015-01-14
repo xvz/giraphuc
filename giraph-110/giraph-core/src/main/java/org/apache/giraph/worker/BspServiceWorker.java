@@ -1052,14 +1052,6 @@ public class BspServiceWorker<I extends WritableComparable,
     }
 
     if (asyncConf.needBarrier()) {
-      // YH: if algorithm terminates after this global barrier, any pending
-      // mutations will fail to execute for *BAP* b/c we never execute
-      // startSuperstep() again. Hence, must also perform mutations here.
-      if (asyncConf.disableBarriers() &&
-          getLogicalSuperstep() > INPUT_SUPERSTEP) {
-        workerServer.finishSuperstep();
-      }
-
       writeFinishedSuperstepInfoToZK(partitionStatsList,
         workerSentMessages, workerSentMessageBytes);
 
@@ -1104,6 +1096,14 @@ public class BspServiceWorker<I extends WritableComparable,
           // for AP, have to look at global stats from master
           asyncConf.setNewPhase(globalStats.isNewPhase());
         }
+      }
+
+      // YH: edge-case for mutations in BAP. If algorithm terminates,
+      // there may be pending mutations that will fail to get executed,
+      // since startSuperstep() will never be called. This resolves that.
+      if (asyncConf.disableBarriers() &&
+          globalStats.getHaltComputation()) {
+        workerServer.finishComputation();
       }
 
       return new FinishedSuperstepStats(

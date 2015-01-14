@@ -48,9 +48,9 @@ public interface WorkerServer<I extends WritableComparable,
   void prepareSuperstep();
 
   /**
-   * YH: Finish superstep, resolve pending mutation requests. For BAP only.
+   * YH: Finish computation by resolving pending mutation requests. BAP only.
    */
-  void finishSuperstep();
+  void finishComputation();
 
   /**
    * Get server data
