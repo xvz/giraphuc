@@ -1034,14 +1034,14 @@ public class BspServiceWorker<I extends WritableComparable,
     //         ", isNewPhase=" + asyncConf.isNewPhase());
 
     if (asyncConf.needBarrier()) {
-      waitForRequestsToFinish();
-
       if (asyncConf.printTiming() &&
           getLogicalSuperstep() > INPUT_SUPERSTEP) {
         long elapsedTime = (System.nanoTime() - startTime) / 1000;
         LOG.info("[[__TIMING]] " + elapsedTime + " us [local_barrier_end]");
         //LOG.info("[[__TIMING]] " + elapsedTime + " us [local_block_start]");
       }
+
+      waitForRequestsToFinish();
 
       // YH: if barriers are disabled and we are going to wait for
       // global superstep, approach "ready to sync" barrier first.
