@@ -796,8 +796,12 @@ public class BspServiceWorker<I extends WritableComparable,
     if (asyncConf.printTiming() && getLogicalSuperstep() == 0) {
       LOG.info("[[__TIMING]] " + workerInfo.getTaskId() + " id [who_am_i]");
       startTime = System.nanoTime();
+
       // always 0, since this is the starting point
-      LOG.info("[[__TIMING]] 0 us [ss_start]");
+      //
+      // *_start helps with readability but is redundant, since
+      // *_end implies a corresponding *_start
+      //LOG.info("[[__TIMING]] 0 us [ss_start]");
     }
 
     //LOG.info("[[MST-internal]] ##START##: ss=" + getSuperstep() +
@@ -932,7 +936,10 @@ public class BspServiceWorker<I extends WritableComparable,
       LOG.info("[[__TIMING]] " + elapsedTime + " us [ss_end]");
       // local barriers do exist even for BSP and AP, but abstractly
       // it's easier to describe those models w/o this
-      LOG.info("[[__TIMING]] " + elapsedTime + " us [local_barrier_start]");
+      //
+      // *_start helps with readability but is redundant, since
+      // *_end implies a corresponding *_start
+      //LOG.info("[[__TIMING]] " + elapsedTime + " us [local_barrier_start]");
     }
 
     long workerSentMessages = 0;
@@ -1033,7 +1040,7 @@ public class BspServiceWorker<I extends WritableComparable,
           getLogicalSuperstep() > INPUT_SUPERSTEP) {
         long elapsedTime = (System.nanoTime() - startTime) / 1000;
         LOG.info("[[__TIMING]] " + elapsedTime + " us [local_barrier_end]");
-        LOG.info("[[__TIMING]] " + elapsedTime + " us [local_block_start]");
+        //LOG.info("[[__TIMING]] " + elapsedTime + " us [local_block_start]");
       }
 
       // YH: if barriers are disabled and we are going to wait for
@@ -1059,7 +1066,8 @@ public class BspServiceWorker<I extends WritableComparable,
           getLogicalSuperstep() > INPUT_SUPERSTEP) {
         long elapsedTime = (System.nanoTime() - startTime) / 1000;
         LOG.info("[[__TIMING]] " + elapsedTime + " us [local_block_end]");
-        LOG.info("[[__TIMING]] " + elapsedTime + " us [local_barrier_start]");
+        //LOG.info("[[__TIMING]] " + elapsedTime +
+        //         " us [local_barrier_start]");
       }
     }
 
@@ -1092,7 +1100,8 @@ public class BspServiceWorker<I extends WritableComparable,
           getLogicalSuperstep() > INPUT_SUPERSTEP) {
         long elapsedTime = (System.nanoTime() - startTime) / 1000;
         LOG.info("[[__TIMING]] " + elapsedTime + " us [local_barrier_end]");
-        LOG.info("[[__TIMING]] " + elapsedTime + " us [global_barrier_start]");
+        //LOG.info("[[__TIMING]] " + elapsedTime +
+        //         " us [global_barrier_start]");
       }
       writeFinishedSuperstepInfoToZK(partitionStatsList,
         workerSentMessages, workerSentMessageBytes);
@@ -1157,9 +1166,9 @@ public class BspServiceWorker<I extends WritableComparable,
 
         // for compatibility w/ all modes, "ss" can be BSP or logical superstep
         // (we don't track global ss, b/c can be inferred from barrier type)
-        if (!globalStats.getHaltComputation()) {
-          LOG.info("[[__TIMING]] " + elapsedTime + " us [ss_start]");
-        }
+        //if (!globalStats.getHaltComputation()) {
+        //  LOG.info("[[__TIMING]] " + elapsedTime + " us [ss_start]");
+        //}
       }
 
       return new FinishedSuperstepStats(
@@ -1183,7 +1192,7 @@ public class BspServiceWorker<I extends WritableComparable,
       if (asyncConf.printTiming()) {
         long elapsedTime = (System.nanoTime() - startTime) / 1000;
         LOG.info("[[__TIMING]] " + elapsedTime + " us [local_barrier_end]");
-        LOG.info("[[__TIMING]] " + elapsedTime + " us [ss_start]");
+        //LOG.info("[[__TIMING]] " + elapsedTime + " us [ss_start]");
       }
 
       // Return junk---GraphTaskManager ignores it.
