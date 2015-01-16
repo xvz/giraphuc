@@ -54,6 +54,9 @@ public class AsyncConfiguration {
   /** Local in-flight message bytes */
   private AtomicLong inFlightBytes;
 
+  /** Whether or not to print out timing information */
+  private boolean printTiming;
+
   // YH: inFlightBytes tracks the number of bytes this worker has sent
   // to remote workers MINUS the bytes this worker has received from
   // remote workers. By itself, this value is meaningless. However, when
@@ -70,6 +73,7 @@ public class AsyncConfiguration {
     isAsync = disableBarriers || GiraphConstants.ASYNC_DO_ASYNC.get(conf);
     needAllMsgs = isAsync && GiraphConstants.ASYNC_NEED_ALL_MSGS.get(conf);
     isMultiPhase = isAsync && GiraphConstants.ASYNC_MULTI_PHASE.get(conf);
+    printTiming = GiraphConstants.ASYNC_PRINT_TIMING.get(conf);
 
     // This only sets isNewPhase for SS -1 (INPUT_SUPERSTEP).
     isNewPhase = true;
@@ -175,6 +179,16 @@ public class AsyncConfiguration {
    */
   public void setNeedBarrier(boolean needBarrier) {
     this.needBarrier = needBarrier;
+  }
+
+
+  /**
+   * Return whether or not to print out timing/visualization data.
+   *
+   * @return True if timing is desired
+   */
+  public boolean printTiming() {
+    return printTiming;
   }
 
 

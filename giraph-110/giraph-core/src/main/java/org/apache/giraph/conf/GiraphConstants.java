@@ -1128,5 +1128,12 @@ public interface GiraphConstants {
   BooleanConfOption ASYNC_MULTI_PHASE =
       new BooleanConfOption("giraph.asyncMultiPhase", false,
           "Whether algorithm has multiple computation phases (async only)");
+
+  /**
+   * YH: Whether to print out timing info (for ALL modes)
+   */
+  BooleanConfOption ASYNC_PRINT_TIMING =
+      new BooleanConfOption("giraph.printTiming", false,
+          "Whether to print out timing info (for ALL modes)");
 }
 // CHECKSTYLE: resume InterfaceIsTypeCheck

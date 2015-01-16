@@ -173,6 +173,9 @@ public class BspServiceWorker<I extends WritableComparable,
   /** Time spent waiting on requests to finish */
   private GiraphTimer waitRequestsTimer;
 
+  /** YH: Starting time of superstep 0, used for offset calculations */
+  private long startTime;
+
   /**
    * Constructor for setting up the worker.
    *
@@ -789,6 +792,14 @@ public class BspServiceWorker<I extends WritableComparable,
 
     AsyncConfiguration asyncConf = getConfiguration().getAsyncConf();
 
+    // initialize timer for visualization
+    if (asyncConf.printTiming() && getLogicalSuperstep() == 0) {
+      LOG.info("[[__TIMING]] " + workerInfo.getTaskId() + " id [who_am_i]");
+      startTime = System.nanoTime();
+      // always 0, since this is the starting point
+      LOG.info("[[__TIMING]] 0 us [ss_start]");
+    }
+
     //LOG.info("[[MST-internal]] ##START##: ss=" + getSuperstep() +
     //         ", lss=" + getLogicalSuperstep() +
     //         ", nb=" + asyncConf.needBarrier() +
@@ -913,6 +924,17 @@ public class BspServiceWorker<I extends WritableComparable,
     // 5. Let the master know it is finished.
     // 6. Wait for the master's superstep info, and check if done
 
+    AsyncConfiguration asyncConf = getConfiguration().getAsyncConf();
+
+    if (asyncConf.printTiming() &&
+        getLogicalSuperstep() > INPUT_SUPERSTEP) {
+      long elapsedTime = (System.nanoTime() - startTime) / 1000;
+      LOG.info("[[__TIMING]] " + elapsedTime + " us [ss_end]");
+      // local barriers do exist even for BSP and AP, but abstractly
+      // it's easier to describe those models w/o this
+      LOG.info("[[__TIMING]] " + elapsedTime + " us [local_barrier_start]");
+    }
+
     long workerSentMessages = 0;
     long workerSentMessageBytes = 0;
     long localVertices = 0;
@@ -923,8 +945,6 @@ public class BspServiceWorker<I extends WritableComparable,
       localVertices += partitionStats.getVertexCount();
       doneVertices += partitionStats.getFinishedVertexCount();
     }
-
-    AsyncConfiguration asyncConf = getConfiguration().getAsyncConf();
 
     // YH: only use in-flight bytes when we're beyond SS -1 (INPUT_SUPERSTEP)
     //
@@ -1009,6 +1029,13 @@ public class BspServiceWorker<I extends WritableComparable,
     if (asyncConf.needBarrier()) {
       waitForRequestsToFinish();
 
+      if (asyncConf.printTiming() &&
+          getLogicalSuperstep() > INPUT_SUPERSTEP) {
+        long elapsedTime = (System.nanoTime() - startTime) / 1000;
+        LOG.info("[[__TIMING]] " + elapsedTime + " us [local_barrier_end]");
+        LOG.info("[[__TIMING]] " + elapsedTime + " us [local_block_start]");
+      }
+
       // YH: if barriers are disabled and we are going to wait for
       // global superstep, approach "ready to sync" barrier first.
       // Skip this barrier if worker MUST have global barrier.
@@ -1024,6 +1051,15 @@ public class BspServiceWorker<I extends WritableComparable,
         if (!waitForWorkersOrMessages(workerSentMessageBytes)) {
           asyncConf.setNeedBarrier(false);
         }
+      }
+
+      // we exclude local-block time from local-barrier time, so
+      // local barriers will show up as being "interrupted" by block
+      if (asyncConf.printTiming() &&
+          getLogicalSuperstep() > INPUT_SUPERSTEP) {
+        long elapsedTime = (System.nanoTime() - startTime) / 1000;
+        LOG.info("[[__TIMING]] " + elapsedTime + " us [local_block_end]");
+        LOG.info("[[__TIMING]] " + elapsedTime + " us [local_barrier_start]");
       }
     }
 
@@ -1052,6 +1088,12 @@ public class BspServiceWorker<I extends WritableComparable,
     }
 
     if (asyncConf.needBarrier()) {
+      if (asyncConf.printTiming() &&
+          getLogicalSuperstep() > INPUT_SUPERSTEP) {
+        long elapsedTime = (System.nanoTime() - startTime) / 1000;
+        LOG.info("[[__TIMING]] " + elapsedTime + " us [local_barrier_end]");
+        LOG.info("[[__TIMING]] " + elapsedTime + " us [global_barrier_start]");
+      }
       writeFinishedSuperstepInfoToZK(partitionStatsList,
         workerSentMessages, workerSentMessageBytes);
 
@@ -1106,6 +1148,20 @@ public class BspServiceWorker<I extends WritableComparable,
         workerServer.finishComputation();
       }
 
+      // must keep this here, as end-of-computation is an edge case
+      // that never touches startSuperstep() afterwards
+      // (needs > 0 b/c superstep is incremented above)
+      if (asyncConf.printTiming() && getLogicalSuperstep() > 0) {
+        long elapsedTime = (System.nanoTime() - startTime) / 1000;
+        LOG.info("[[__TIMING]] " + elapsedTime + " us [global_barrier_end]");
+
+        // for compatibility w/ all modes, "ss" can be BSP or logical superstep
+        // (we don't track global ss, b/c can be inferred from barrier type)
+        if (!globalStats.getHaltComputation()) {
+          LOG.info("[[__TIMING]] " + elapsedTime + " us [ss_start]");
+        }
+      }
+
       return new FinishedSuperstepStats(
           localVertices,
           globalStats.getHaltComputation(),
@@ -1122,6 +1178,13 @@ public class BspServiceWorker<I extends WritableComparable,
 
       // no longer a new phase (AP never executes this code path)
       asyncConf.setNewPhase(false);
+
+      // this will only occur when > INPUT_SUPERSTEP
+      if (asyncConf.printTiming()) {
+        long elapsedTime = (System.nanoTime() - startTime) / 1000;
+        LOG.info("[[__TIMING]] " + elapsedTime + " us [local_barrier_end]");
+        LOG.info("[[__TIMING]] " + elapsedTime + " us [ss_start]");
+      }
 
       // Return junk---GraphTaskManager ignores it.
       // Note that we CANNOT fake "halt" as that is a GLOBAL condition.
