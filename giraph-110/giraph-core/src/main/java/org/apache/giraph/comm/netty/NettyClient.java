@@ -183,6 +183,11 @@ public class NettyClient {
   /** Configuration */
   private final ImmutableClassesGiraphConfiguration conf;
 
+  /** YH: Lock for synchronizing timing tracking. */
+  private final Object timingLock = new Object();
+  /** YH: Number of blocked threads. Used for timing. */
+  private volatile int blockedThreads = 0;
+
   /**
    * Only constructor
    *
@@ -720,39 +725,35 @@ public class NettyClient {
    *                        complete
    */
   private void waitSomeRequests(int maxOpenRequests) {
-    // YH: this function is touched by multiple threads, so take
-    // advantage of synchronized block below
-    boolean didBlock = false;
-    long initElapsedTime = -1;
+    // YH: second condition is to avoid print on waitAllRequests() calls,
+    // third condition is hack to ensure current SS >= SS0
+    if (conf.getAsyncConf().printTiming() &&
+        maxOpenRequests != 0 &&
+        BspServiceWorker.getSS0StartTime() != 0) {
+      synchronized (timingLock) {
+        blockedThreads++;
+        if (blockedThreads > GiraphConstants.NUM_COMPUTE_THREADS.get(conf)) {
+          throw new RuntimeException("waitSomeRequests: num blocked " +
+                                     "threads exceeds compute threads!");
+        }
+
+        // We treat worker as blocked only when ALL compute threads are
+        // blocked. Worker returns to running after any thread unblocks.
+        if (blockedThreads == GiraphConstants.NUM_COMPUTE_THREADS.get(conf)) {
+          long elapsedTime = (System.nanoTime() -
+                              BspServiceWorker.getSS0StartTime()) / 1000;
+          LOG.info("[[__TIMING]] " + elapsedTime + " us [ss_block]");
+        }
+      }
+    }
 
     while (clientRequestIdRequestInfoMap.size() > maxOpenRequests) {
       // Wait for requests to complete for some time
       logInfoAboutOpenRequests(maxOpenRequests);
       synchronized (clientRequestIdRequestInfoMap) {
-        // YH: only need to capture time when this function may block
-        // other compute threads from buffering outgoing requests.
-        // (i.e., when it MAY be possible that all of the worker's
-        //  compute threads are all blocked/idle)
-        //
-        // Putting this here ensures timing output is strictly increasing,
-        if (initElapsedTime == -1) {
-          initElapsedTime = (System.nanoTime() -
-                             BspServiceWorker.getSS0StartTime()) / 1000;
-        }
-
         if (clientRequestIdRequestInfoMap.size() <= maxOpenRequests) {
-          // YH: second condition ensures we waited at least once,
-          // last condition is hack to ensure current SS >= SS0
-          if (conf.getAsyncConf().printTiming() && didBlock &&
-              BspServiceWorker.getSS0StartTime() != 0) {
-            LOG.info("[[__TIMING]] " + initElapsedTime + " us [ss_block]");
-            long elapsedTime = (System.nanoTime() -
-                                BspServiceWorker.getSS0StartTime()) / 1000;
-            LOG.info("[[__TIMING]] " + elapsedTime + " us [ss_block_end]");
-          }
           break;
         }
-        didBlock = true;
         try {
           clientRequestIdRequestInfoMap.wait(waitingRequestMsecs);
         } catch (InterruptedException e) {
@@ -763,6 +764,24 @@ public class NettyClient {
       context.progress();
 
       checkRequestsForProblems();
+    }
+
+    if (conf.getAsyncConf().printTiming() &&
+        maxOpenRequests != 0 &&
+        BspServiceWorker.getSS0StartTime() != 0) {
+      synchronized (timingLock) {
+        if (blockedThreads == GiraphConstants.NUM_COMPUTE_THREADS.get(conf)) {
+          long elapsedTime = (System.nanoTime() -
+                              BspServiceWorker.getSS0StartTime()) / 1000;
+          LOG.info("[[__TIMING]] " + elapsedTime + " us [ss_block_end]");
+        }
+
+        blockedThreads--;
+        if (blockedThreads < 0) {
+          throw new RuntimeException("waitSomeRequests: num blocked " +
+                                     "threads is negative!");
+        }
+      }
     }
   }
 
