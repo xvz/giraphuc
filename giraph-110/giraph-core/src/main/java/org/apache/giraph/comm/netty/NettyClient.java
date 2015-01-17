@@ -723,21 +723,31 @@ public class NettyClient {
     // YH: this function is touched by multiple threads, so take
     // advantage of synchronized block below
     boolean didBlock = false;
-    long elapsedTime = (System.nanoTime() -
-                        BspServiceWorker.getSS0StartTime()) / 1000;
+    long initElapsedTime = -1;
 
     while (clientRequestIdRequestInfoMap.size() > maxOpenRequests) {
       // Wait for requests to complete for some time
       logInfoAboutOpenRequests(maxOpenRequests);
       synchronized (clientRequestIdRequestInfoMap) {
+        // YH: only need to capture time when this function may block
+        // other compute threads from buffering outgoing requests.
+        // (i.e., when it MAY be possible that all of the worker's
+        //  compute threads are all blocked/idle)
+        //
+        // Putting this here ensures timing output is strictly increasing,
+        if (initElapsedTime == -1) {
+          initElapsedTime = (System.nanoTime() -
+                             BspServiceWorker.getSS0StartTime()) / 1000;
+        }
+
         if (clientRequestIdRequestInfoMap.size() <= maxOpenRequests) {
           // YH: second condition ensures we waited at least once,
           // last condition is hack to ensure current SS >= SS0
           if (conf.getAsyncConf().printTiming() && didBlock &&
               BspServiceWorker.getSS0StartTime() != 0) {
-            LOG.info("[[__TIMING]] " + elapsedTime + " us [ss_block]");
-            elapsedTime = (System.nanoTime() -
-                           BspServiceWorker.getSS0StartTime()) / 1000;
+            LOG.info("[[__TIMING]] " + initElapsedTime + " us [ss_block]");
+            long elapsedTime = (System.nanoTime() -
+                                BspServiceWorker.getSS0StartTime()) / 1000;
             LOG.info("[[__TIMING]] " + elapsedTime + " us [ss_block_end]");
           }
           break;
