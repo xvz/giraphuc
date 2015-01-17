@@ -129,6 +129,10 @@ public class BspServiceWorker<I extends WritableComparable,
   public static final String TIMER_WAIT_REQUESTS = "wait-requests-us";
   /** Class logger */
   private static final Logger LOG = Logger.getLogger(BspServiceWorker.class);
+
+  /** YH: Starting time of superstep 0, used for offset calculations */
+  private static long START_TIME;
+
   /** My process health znode */
   private String myHealthZnode;
   /** Worker info */
@@ -172,9 +176,6 @@ public class BspServiceWorker<I extends WritableComparable,
   private GiraphTimer wcPostSuperstepTimer;
   /** Time spent waiting on requests to finish */
   private GiraphTimer waitRequestsTimer;
-
-  /** YH: Starting time of superstep 0, used for offset calculations */
-  private long startTime;
 
   /**
    * Constructor for setting up the worker.
@@ -795,7 +796,7 @@ public class BspServiceWorker<I extends WritableComparable,
     // initialize timer for visualization
     if (asyncConf.printTiming() && getLogicalSuperstep() == 0) {
       LOG.info("[[__TIMING]] " + workerInfo.getTaskId() + " id [who_am_i]");
-      startTime = System.nanoTime();
+      START_TIME = System.nanoTime();
 
       // always 0, since this is the starting point
       //
@@ -932,7 +933,7 @@ public class BspServiceWorker<I extends WritableComparable,
 
     if (asyncConf.printTiming() &&
         getLogicalSuperstep() > INPUT_SUPERSTEP) {
-      long elapsedTime = (System.nanoTime() - startTime) / 1000;
+      long elapsedTime = (System.nanoTime() - START_TIME) / 1000;
       LOG.info("[[__TIMING]] " + elapsedTime + " us [ss_end]");
       // local barriers do exist even for BSP and AP, but abstractly
       // it's easier to describe those models w/o this
@@ -1036,7 +1037,7 @@ public class BspServiceWorker<I extends WritableComparable,
     if (asyncConf.needBarrier()) {
       if (asyncConf.printTiming() &&
           getLogicalSuperstep() > INPUT_SUPERSTEP) {
-        long elapsedTime = (System.nanoTime() - startTime) / 1000;
+        long elapsedTime = (System.nanoTime() - START_TIME) / 1000;
         LOG.info("[[__TIMING]] " + elapsedTime + " us [local_barrier_end]");
         //LOG.info("[[__TIMING]] " + elapsedTime + " us [local_block_start]");
       }
@@ -1064,7 +1065,7 @@ public class BspServiceWorker<I extends WritableComparable,
       // local barriers will show up as being "interrupted" by block
       if (asyncConf.printTiming() &&
           getLogicalSuperstep() > INPUT_SUPERSTEP) {
-        long elapsedTime = (System.nanoTime() - startTime) / 1000;
+        long elapsedTime = (System.nanoTime() - START_TIME) / 1000;
         LOG.info("[[__TIMING]] " + elapsedTime + " us [local_block_end]");
         //LOG.info("[[__TIMING]] " + elapsedTime +
         //         " us [local_barrier_start]");
@@ -1098,7 +1099,7 @@ public class BspServiceWorker<I extends WritableComparable,
     if (asyncConf.needBarrier()) {
       if (asyncConf.printTiming() &&
           getLogicalSuperstep() > INPUT_SUPERSTEP) {
-        long elapsedTime = (System.nanoTime() - startTime) / 1000;
+        long elapsedTime = (System.nanoTime() - START_TIME) / 1000;
         LOG.info("[[__TIMING]] " + elapsedTime + " us [local_barrier_end]");
         //LOG.info("[[__TIMING]] " + elapsedTime +
         //         " us [global_barrier_start]");
@@ -1161,7 +1162,7 @@ public class BspServiceWorker<I extends WritableComparable,
       // that never touches startSuperstep() afterwards
       // (needs > 0 b/c superstep is incremented above)
       if (asyncConf.printTiming() && getLogicalSuperstep() > 0) {
-        long elapsedTime = (System.nanoTime() - startTime) / 1000;
+        long elapsedTime = (System.nanoTime() - START_TIME) / 1000;
         LOG.info("[[__TIMING]] " + elapsedTime + " us [global_barrier_end]");
 
         // for compatibility w/ all modes, "ss" can be BSP or logical superstep
@@ -1190,7 +1191,7 @@ public class BspServiceWorker<I extends WritableComparable,
 
       // this will only occur when > INPUT_SUPERSTEP
       if (asyncConf.printTiming()) {
-        long elapsedTime = (System.nanoTime() - startTime) / 1000;
+        long elapsedTime = (System.nanoTime() - START_TIME) / 1000;
         LOG.info("[[__TIMING]] " + elapsedTime + " us [local_barrier_end]");
         //LOG.info("[[__TIMING]] " + elapsedTime + " us [ss_start]");
       }
@@ -1201,6 +1202,15 @@ public class BspServiceWorker<I extends WritableComparable,
     }
   }
   // CHECKSTYLE: resume MethodLengthCheck
+
+  /**
+   * YH: Returns starting time of SS0 for timing purposes.
+   *
+   * @return Starting time of superstep 0 (nanoseconds)
+   */
+  public static long getSS0StartTime() {
+    return START_TIME;
+  }
 
   /**
    * Handle post-superstep callbacks

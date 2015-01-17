@@ -36,6 +36,7 @@ import org.apache.giraph.graph.TaskInfo;
 import org.apache.giraph.utils.PipelineUtils;
 import org.apache.giraph.utils.ProgressableUtils;
 import org.apache.giraph.utils.TimedLogger;
+import org.apache.giraph.worker.BspServiceWorker;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.log4j.Logger;
 
@@ -719,6 +720,14 @@ public class NettyClient {
    *                        complete
    */
   private void waitSomeRequests(int maxOpenRequests) {
+    // YH: second condition is hack to wait until SS0 has occurred
+    if (conf.getAsyncConf().printTiming() &&
+        BspServiceWorker.getSS0StartTime() != 0) {
+      long elapsedTime = (System.nanoTime() -
+                          BspServiceWorker.getSS0StartTime()) / 1000;
+      LOG.info("[[__TIMING]] " + elapsedTime + " us [ss_block]");
+    }
+
     while (clientRequestIdRequestInfoMap.size() > maxOpenRequests) {
       // Wait for requests to complete for some time
       logInfoAboutOpenRequests(maxOpenRequests);
@@ -736,6 +745,13 @@ public class NettyClient {
       context.progress();
 
       checkRequestsForProblems();
+    }
+
+    if (conf.getAsyncConf().printTiming() &&
+        BspServiceWorker.getSS0StartTime() != 0) {
+      long elapsedTime = (System.nanoTime() -
+                          BspServiceWorker.getSS0StartTime()) / 1000;
+      LOG.info("[[__TIMING]] " + elapsedTime + " us [ss_block_end]");
     }
   }
 

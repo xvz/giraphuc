@@ -84,11 +84,11 @@ def bar_parser(logname, offset):
 
         # note that global barrier blocking/waiting time is
         # melded together w/ global barrier processing time
-        if "ss_end" in line:
+        if "ss_end" in line or "ss_block" in line:
             colors.append('#00e600')  # green
         elif "local_barrier_end" in line:
             colors.append('#545454')  # dark gray
-        elif "local_block_end" in line:
+        elif "local_block_end" in line or "ss_block_end" in line:
             colors.append('#ff2349')  # pink/red
         elif "global_barrier_end" in line:
             colors.append('#b4b4b4')  # light gray
