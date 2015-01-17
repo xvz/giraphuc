@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""Parser for timing files."""
+"""Parser and plotter for timing files."""
 
 import os, sys, glob
 import argparse, itertools
@@ -8,9 +8,6 @@ import argparse, itertools
 import numpy as np
 import matplotlib.pyplot as plt
 from pandas import DataFrame  # or *
-
-# do some parallel computing
-#from joblib import Parallel, delayed
 
 ###############
 # Constants
@@ -30,7 +27,7 @@ def workers(workers):
     except:
         raise argparse.ArgumentTypeError('Invalid worker count')
 
-parser = argparse.ArgumentParser(description='Outputs timing graphs for specified timing log files.')
+parser = argparse.ArgumentParser(description='Parses and plots timing graphs for specified timing log files.')
 parser.add_argument('-w', '--workers', type=workers, dest='workers', default=64,
                     help='number of workers (> 0), default=64')
 parser.add_argument('log', type=str, nargs='+',
@@ -51,7 +48,7 @@ def bar_parser(logname, offset):
     Arguments:
     logname -- the log file (str)
     offset -- the file offset (int)
-    
+
     Returns:
     A tuple (worker, values, colors, new-offset).
     """
@@ -77,20 +74,20 @@ def bar_parser(logname, offset):
             else:
                 worker = int(line.split()[0])
                 continue
-        
+
         # have to take difference for stacked bars
         vals.append((int(line.split()[0]) - prev_val)/1000.0)
         prev_val = int(line.split()[0])
 
         # note that global barrier blocking/waiting time is
         # melded together w/ global barrier processing time
-        if "ss_end" in line or "ss_block" in line:
+        if "[ss_end]" in line or "[ss_block]" in line:
             colors.append('#00e600')  # green
-        elif "local_barrier_end" in line:
+        elif "[local_barrier_end]" in line:
             colors.append('#545454')  # dark gray
-        elif "local_block_end" in line or "ss_block_end" in line:
+        elif "[local_block_end]" in line or "[ss_block_end]" in line:
             colors.append('#ff2349')  # pink/red
-        elif "global_barrier_end" in line:
+        elif "[global_barrier_end]" in line:
             colors.append('#b4b4b4')  # light gray
 
         # TODO: hatch patterns?
@@ -115,14 +112,15 @@ def file_plotter(logname):
         # whereas we want worker 1 to be at top
         vals[workers-w] = v
         colors[workers-w] = c
-        
+
     # columns=['W_' + str(i) for in range(1,workers)]
     # columns not required (it labels individual stacks rather than bars)
     df = DataFrame(vals)
 
     # izip_longest is to do transpose while padding with None if missing elements
     # 'm' is used as a dummy fill value
-    df.plot(kind='barh', stacked=True, color=list(itertools.izip_longest(*colors, fillvalue='m')), legend=False)
+    df.plot(kind='barh', stacked=True, color=list(itertools.izip_longest(*colors, fillvalue='m')),
+            legend=False, linewidth=0)
 
 
 ####################
