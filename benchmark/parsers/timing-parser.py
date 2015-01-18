@@ -93,12 +93,14 @@ def worker_parser(logname, offset):
         elif "[ss_block_end]" in line:
             #colors.append('#ff0000')  # dark red
             colors.append('#ff00e2')  # magenta
-        elif "[local_barrier_end]" in line:
-            colors.append('#333333')  # dark gray
         elif "[comm_block_end]" in line:
             colors.append('#ff2020')  # red
+        elif "[lightweight_barrier_end]" in line:
+            colors.append('#0040ff')  # blue
+        elif "[local_barrier_end]" in line:
+            colors.append('#000000')  # black
         elif "[global_barrier_end]" in line:
-            colors.append('#676767')  # gray
+            colors.append('#444444')  # dark gray
 
         # TODO: hatch patterns?
 
@@ -120,7 +122,7 @@ def file_plotter(logname):
         lc = LineCollection(segments, cmap=cmap)
         # this (probably?) sets which of cmap's colors to use
         lc.set_array(np.arange(0, len(colors)))
-        lc.set_linewidth(8)
+        lc.set_linewidth(8*32.0/workers)
 
         plt.gca().add_collection(lc)
 

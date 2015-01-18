@@ -1030,6 +1030,18 @@ public class BspServiceWorker<I extends WritableComparable,
       // cost, since BAP avoids this code-path on logical supersteps.
       waitForRequestsToFinish();
 
+      // YH: everything between [ss_end] and waitForRequestsToFinish() call
+      // is negligible (few hundred us at worst), so just roll it into
+      // "blocked-on-communication" time instead
+      //
+      // If BAP, this code path is skipped on a local barrier, so everything
+      // after [ss_end] is properly accounted as local barrier cost.
+      if (asyncConf.printTiming() &&
+          getLogicalSuperstep() > INPUT_SUPERSTEP) {
+        long elapsedTime = (System.nanoTime() - START_TIME) / 1000;
+        LOG.info("[[__TIMING]] " + elapsedTime + " us [comm_block_end]");
+      }
+
       // YH: if barriers are disabled and we are going to wait for
       // global superstep, approach "ready to sync" barrier first.
       // Skip this barrier if worker MUST have global barrier.
@@ -1045,18 +1057,14 @@ public class BspServiceWorker<I extends WritableComparable,
         if (!waitForWorkersOrMessages(workerSentMessageBytes)) {
           asyncConf.setNeedBarrier(false);
         }
-      }
 
-      // YH: everything between [ss_end] and waitForRequestsToFinish() call
-      // is negligible (few hundred us at worst), so just roll it into
-      // "blocked-on-communication" time instead
-      //
-      // If BAP, this code path is skipped on a local barrier, so everything
-      // after [ss_end] is properly accounted as local barrier cost.
-      if (asyncConf.printTiming() &&
-          getLogicalSuperstep() > INPUT_SUPERSTEP) {
-        long elapsedTime = (System.nanoTime() - START_TIME) / 1000;
-        LOG.info("[[__TIMING]] " + elapsedTime + " us [comm_block_end]");
+        // this captures how long worker is blocked without work to do
+        // (BAP only), after resolving all open requests
+        if (asyncConf.printTiming()) {
+          long elapsedTime = (System.nanoTime() - START_TIME) / 1000;
+          LOG.info("[[__TIMING]] " + elapsedTime +
+                   " us [lightweight_barrier_end]");
+        }
       }
     }
 
