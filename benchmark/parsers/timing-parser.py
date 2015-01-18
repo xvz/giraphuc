@@ -29,16 +29,20 @@ def workers(workers):
 
 parser = argparse.ArgumentParser(description='Parses and plots timing graphs for specified timing log files.')
 parser.add_argument('-w', '--workers', type=workers, dest='workers', default=64,
-                    help='number of workers (> 0), default=64')
+                    help='Number of workers (> 0), default=64')
+parser.add_argument('-v', '--visible-local-barriers', action='store_true', default=False,
+                    help='Make local barriers more visible by inflating their cost')
 parser.add_argument('log', type=str, nargs='+',
-                    help='a timing log file, can be a regular expression (e.g. job_20140101123050_0001_timing.txt or job_2014*timing.txt)')
+                    help='A timing log file, can be a regular expression (e.g. job_20140101123050_0001_timing.txt or job_2014*timing.txt)')
 
 workers = parser.parse_args().workers
+do_visible_lb = parser.parse_args().visible_local_barriers
 logs_re = parser.parse_args().log
 
 logs = [f for re in logs_re for f in glob.glob(re)]
 
 # some global vars for plotting
+MIN_LB_SIZE = 50000.0   # in us
 axes = []
 max_xlim = 0
 
@@ -82,25 +86,31 @@ def worker_parser(logname, offset):
 
         # a line segment is [(x_i, y_i), (x_f, y_f)]
         # "workers - worker + 1" is to put, e.g., W_1 above W_5
-        segments.append([(prev_val/US_PER_MS, workers - worker + 1),
-                         (int(line.split()[0])/US_PER_MS, workers - worker + 1)])
+        if do_visible_lb and "[local_barrier_end]" in line and (int(line.split()[0]) - prev_val) < MIN_LB_SIZE:
+            # this will draw over the previous segment
+            segments.append([((int(line.split()[0])-MIN_LB_SIZE)/US_PER_MS, workers - worker + 1),
+                             (int(line.split()[0])/US_PER_MS, workers - worker + 1)])
+        else:
+            segments.append([(prev_val/US_PER_MS, workers - worker + 1),
+                             (int(line.split()[0])/US_PER_MS, workers - worker + 1)])
+
         prev_val = int(line.split()[0])
 
         # note that global barrier wait time is melded together
         # with global barrier processing time
         if "[ss_end]" in line or "[ss_block]" in line:
-            colors.append('#00e600')  # green
+            colors.append('#33ff33')  # green
         elif "[ss_block_end]" in line:
             #colors.append('#ff0000')  # dark red
             colors.append('#ff00e2')  # magenta
         elif "[comm_block_end]" in line:
-            colors.append('#ff2020')  # red
+            colors.append('#ff583d')  # red
         elif "[lightweight_barrier_end]" in line:
-            colors.append('#0040ff')  # blue
+            colors.append('#348abd')  # blue
         elif "[local_barrier_end]" in line:
             colors.append('#000000')  # black
         elif "[global_barrier_end]" in line:
-            colors.append('#444444')  # dark gray
+            colors.append('#808080')  # dark gray
 
         # TODO: hatch patterns?
 
@@ -122,7 +132,7 @@ def file_plotter(logname):
         lc = LineCollection(segments, cmap=cmap)
         # this (probably?) sets which of cmap's colors to use
         lc.set_array(np.arange(0, len(colors)))
-        lc.set_linewidth(8*32.0/workers)
+        lc.set_linewidth(8*60.0/workers)
 
         plt.gca().add_collection(lc)
 
