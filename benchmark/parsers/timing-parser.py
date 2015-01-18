@@ -86,16 +86,19 @@ def worker_parser(logname, offset):
                          (int(line.split()[0])/US_PER_MS, workers - worker + 1)])
         prev_val = int(line.split()[0])
 
-        # note that global barrier blocking/waiting time is
-        # melded together w/ global barrier processing time
+        # note that global barrier wait time is melded together
+        # with global barrier processing time
         if "[ss_end]" in line or "[ss_block]" in line:
             colors.append('#00e600')  # green
+        elif "[ss_block_end]" in line:
+            #colors.append('#ff0000')  # dark red
+            colors.append('#ff00e2')  # magenta
         elif "[local_barrier_end]" in line:
-            colors.append('#545454')  # dark gray
-        elif "[local_block_end]" in line or "[ss_block_end]" in line:
-            colors.append('#ff2349')  # pink/red
+            colors.append('#333333')  # dark gray
+        elif "[comm_block_end]" in line:
+            colors.append('#ff2020')  # red
         elif "[global_barrier_end]" in line:
-            colors.append('#b4b4b4')  # light gray
+            colors.append('#676767')  # gray
 
         # TODO: hatch patterns?
 
@@ -163,9 +166,11 @@ plt.show()
 
 
 
-##############################
-# Old method using bars
-##############################
+########################################
+## Old method using individual bars.
+## - uses way too much memory
+## - takes forever to plot
+########################################
 #from pandas import DataFrame  # or *
 #
 #def bar_parser(logname, offset):
