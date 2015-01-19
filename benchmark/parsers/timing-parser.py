@@ -30,32 +30,44 @@ def workers(workers):
 parser = argparse.ArgumentParser(description='Parses and plots timing graphs for specified timing log files.')
 parser.add_argument('-w', '--workers', type=workers, dest='workers', default=64,
                     help='Number of workers (> 0), default=64')
+parser.add_argument('-p', '--plot', action='store_true', default=False,
+                    help='Plot graphs in addition to printing out stats')
 parser.add_argument('-v', '--visible-local-barriers', action='store_true', default=False,
                     help='Make local barriers more visible by inflating their cost')
+parser.add_argument('-s', '--simple-colours', action='store_true', default=False,
+                    help='Use a simple colour scheme (red for comm, gray for barrier)')
 parser.add_argument('log', type=str, nargs='+',
                     help='A timing log file, can be a regular expression (e.g. job_20140101123050_0001_timing.txt or job_2014*timing.txt)')
 
 workers = parser.parse_args().workers
+do_plot = parser.parse_args().plot
 do_visible_lb = parser.parse_args().visible_local_barriers
+do_simple = parser.parse_args().simple_colours
 logs_re = parser.parse_args().log
 
 logs = [f for re in logs_re for f in glob.glob(re)]
 
 # some global vars for plotting
-MIN_LB_SIZE = 50000.0   # in us
+MIN_LB_SIZE = 100000.0   # in us
 axes = []
 max_xlim = 0
 
+# constants for global per-file stats (index names)
+NUM_STATS = 7
+[T_TOTAL, T_COMPUTE, T_SS_COMM_BLOCK, T_COMM_BLOCK,
+ T_LOCAL_BARRIER, T_LTW_BARRIER, T_GLOBAL_BARRIER] = range(0, NUM_STATS)
 
 ###############
 # Helper funcs
 ###############
-def worker_parser(logname, offset):
+def worker_parser(logname, offset, summary_stats):
     """Parses a single worker's timings.
 
     Arguments:
     logname -- the log file (str)
     offset -- the file offset (int)
+    summary_stats -- 8xN np.array of ints, where N is the number of workers;
+                     will be modified by this function
 
     Returns:
     A tuple (segments, colors, new-offset). Segments is a Nx2 list where
@@ -79,39 +91,62 @@ def worker_parser(logname, offset):
         # "not line" for EOF
         if not line or "who_am_i" in line:
             if ret_offset != offset:
+                summary_stats[T_TOTAL, worker-1] = prev_val
                 break
             else:
                 worker = int(line.split()[0])
                 continue
 
+        new_val = int(line.split()[0])
+        diff = new_val - prev_val
+
         # a line segment is [(x_i, y_i), (x_f, y_f)]
         # "workers - worker + 1" is to put, e.g., W_1 above W_5
-        if do_visible_lb and "[local_barrier_end]" in line and (int(line.split()[0]) - prev_val) < MIN_LB_SIZE:
+        if do_visible_lb and "[local_barrier_end]" in line and diff < MIN_LB_SIZE:
             # this will draw over the previous segment
-            segments.append([((int(line.split()[0])-MIN_LB_SIZE)/US_PER_MS, workers - worker + 1),
-                             (int(line.split()[0])/US_PER_MS, workers - worker + 1)])
+            segments.append([((new_val-MIN_LB_SIZE)/US_PER_MS, workers - worker + 1),
+                             (new_val/US_PER_MS, workers - worker + 1)])
         else:
             segments.append([(prev_val/US_PER_MS, workers - worker + 1),
-                             (int(line.split()[0])/US_PER_MS, workers - worker + 1)])
-
-        prev_val = int(line.split()[0])
+                             (new_val/US_PER_MS, workers - worker + 1)])
 
         # note that global barrier wait time is melded together
         # with global barrier processing time
         if "[ss_end]" in line or "[ss_block]" in line:
             colors.append('#33ff33')  # green
+            t_index = T_COMPUTE
+
         elif "[ss_block_end]" in line:
-            #colors.append('#ff0000')  # dark red
-            colors.append('#ff00e2')  # magenta
+            if do_simple:
+                colors.append('#ff583d')  # red
+            else:
+                colors.append('#ff00e2')  # magenta
+            t_index = T_SS_COMM_BLOCK
         elif "[comm_block_end]" in line:
             colors.append('#ff583d')  # red
-        elif "[lightweight_barrier_end]" in line:
-            colors.append('#348abd')  # blue
+            t_index = T_COMM_BLOCK
+
         elif "[local_barrier_end]" in line:
             colors.append('#000000')  # black
+            t_index = T_LOCAL_BARRIER
+
+        elif "[lightweight_barrier_end]" in line:
+            if do_simple:
+                colors.append('#808080')  # dark gray
+            else:
+                colors.append('#348abd')  # blue
+            t_index = T_LTW_BARRIER
         elif "[global_barrier_end]" in line:
             colors.append('#808080')  # dark gray
+            t_index = T_GLOBAL_BARRIER
 
+        else:
+            print 'WARNING: encountered bad line <' + line + '> in ' + logname + '!'
+            t_index = -1     # this will cause script to crash
+
+        summary_stats[t_index, worker-1] += diff
+
+        prev_val = new_val
         # TODO: hatch patterns?
 
     return (segments, colors, ret_offset)
@@ -123,30 +158,35 @@ def file_plotter(logname):
     logname -- the log file (str)
     """
 
+    summary_stats = np.zeros((NUM_STATS,workers))
     offset = 0
 
     for i in range(0,workers):
-        (segments, colors, offset) = worker_parser(logname, offset)
+        (segments, colors, offset) = worker_parser(logname, offset, summary_stats)
 
-        cmap = ListedColormap(colors)
-        lc = LineCollection(segments, cmap=cmap)
-        # this (probably?) sets which of cmap's colors to use
-        lc.set_array(np.arange(0, len(colors)))
-        lc.set_linewidth(8*60.0/workers)
+        if do_plot:
+            cmap = ListedColormap(colors)
+            lc = LineCollection(segments, cmap=cmap)
+            # this (probably?) sets which of cmap's colors to use
+            lc.set_array(np.arange(0, len(colors)))
+            lc.set_linewidth(8*60.0/workers)
 
-        plt.gca().add_collection(lc)
+            plt.gca().add_collection(lc)
 
-        # min()/max() finds single digit (i.e., flattens and then finds)
-        # this makes sure there aren't messed up/"reversed" timestamps
-        if np.array(segments).min() < 0:
-            print 'WARNING: encountered negative value in ' + logname + '!'
+            # min()/max() finds single digit (i.e., flattens and then finds)
+            # this makes sure there aren't messed up/"reversed" timestamps
+            if np.array(segments).min() < 0:
+                print 'WARNING: encountered negative value in ' + logname + '!'
 
-        #plt.axis('auto')    # to get auto max-lims
+            #plt.axis('auto')    # to get auto max-lims
 
-        # ensure we modify global var (rather than create local one)
-        global max_xlim
-        max_xlim = max(max_xlim, np.array(segments).max()+500)
+            # ensure we modify global var (rather than create local one)
+            global max_xlim
+            max_xlim = max(max_xlim, np.array(segments).max()+500)
 
+
+    ## pretty plot
+    if do_plot:
         # gca() returns actual Axes object
         plt.gca().set_xlim(left=0)
         plt.gca().minorticks_on()
@@ -159,23 +199,42 @@ def file_plotter(logname):
 
         plt.title(logname)
 
+    ## print statistics
+    for w in range(0,workers):
+        for s in range(1, NUM_STATS):
+            summary_stats[s, w] /= float(summary_stats[T_TOTAL, w])
+    stats = summary_stats[1:NUM_STATS]
+
+    avg_stats = tuple([s.mean()*100 for s in stats])
+    min_stats = tuple([s.min()*100 for s in stats])
+    max_stats = tuple([s.max()*100 for s in stats])
+
+    print '===================================================================================='
+    print '   ' + logname
+    print '===================================================================================='
+    print '    |  compute  | ss comm |   comm   | local barrier | ltw barrier | global barrier'
+    print '----+-----------+---------+----------+---------------+-------------+----------------'
+    print 'avg |  %6.3f%%  | %6.3f%% |  %6.3f%% |    %6.3f%%    |   %6.3f%%   |     %6.3f%%' % avg_stats
+    print 'min |  %6.3f%%  | %6.3f%% |  %6.3f%% |    %6.3f%%    |   %6.3f%%   |     %6.3f%%' % min_stats
+    print 'max |  %6.3f%%  | %6.3f%% |  %6.3f%% |    %6.3f%%    |   %6.3f%%   |     %6.3f%%' % max_stats
+    print ''
 
 ####################
 # Plot all files
 ####################
+print ''
 for log in logs:
-    fig = plt.figure()      # new figure (auto-numbered)
-    axes.append(plt.gca())  # save axis
+    if do_plot:
+        fig = plt.figure()      # new figure (auto-numbered)
+        axes.append(plt.gca())  # save axis
     file_plotter(log)
 
-# set xlim to be same across all figures
-# (useful for comparing across computation models)
-for ax in axes:
-    ax.set_xlim(right=max_xlim)
-
-plt.show()
-
-
+if do_plot:
+    # set xlim to be same across all figures
+    # (useful for comparing across computation models)
+    for ax in axes:
+        ax.set_xlim(right=max_xlim)
+    plt.show()
 
 
 ########################################
@@ -251,8 +310,10 @@ plt.show()
 #    logname -- the log file (str)
 #    """
 #
-#    vals = workers*[[]]
-#    colors = workers*[[]]
+#    # NOTE: do NOT use workers*[[]]---that inner list is a SINGLE object referenced multiple times!!
+#    # (in this case we could, because inner list gets replaced.. but in general, don't do this)
+#    vals = [[] for i in range(0, workers)]
+#    colors = [[] for i in range(0, workers)]
 #    offset = 0
 #
 #    for i in range(0,workers):
