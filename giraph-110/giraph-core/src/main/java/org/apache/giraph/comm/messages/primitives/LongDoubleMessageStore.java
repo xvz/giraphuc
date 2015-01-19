@@ -151,6 +151,11 @@ public class LongDoubleMessageStore
   public void clearPartition(int partitionId) throws IOException {
     // YH: not used in async, but synchronize anyway
     Long2DoubleOpenHashMap partitionMap = map.get(partitionId);
+
+    if (partitionMap == null) {
+      return;
+    }
+
     synchronized (partitionMap) {
       partitionMap.clear();
     }
@@ -199,6 +204,10 @@ public class LongDoubleMessageStore
       LongWritable vertexId) throws IOException {
     Long2DoubleOpenHashMap partitionMap = getPartitionMap(vertexId);
 
+    if (partitionMap == null) {
+      return EmptyIterable.get();
+    }
+
     // YH: must synchronize, as writes are concurrent w/ reads in async
     synchronized (partitionMap) {
       if (!partitionMap.containsKey(vertexId.get())) {
@@ -215,6 +224,10 @@ public class LongDoubleMessageStore
       LongWritable vertexId) throws IOException {
     Long2DoubleOpenHashMap partitionMap = getPartitionMap(vertexId);
 
+    if (partitionMap == null) {
+      return EmptyIterable.get();
+    }
+
     // YH: must synchronize, as writes are concurrent w/ reads in async
     synchronized (partitionMap) {
       if (!partitionMap.containsKey(vertexId.get())) {
@@ -230,6 +243,11 @@ public class LongDoubleMessageStore
   public void clearVertexMessages(LongWritable vertexId) throws IOException {
     // YH: not used in async, but synchronize anyway
     Long2DoubleOpenHashMap partitionMap = getPartitionMap(vertexId);
+
+    if (partitionMap == null) {
+      return;
+    }
+
     synchronized (partitionMap) {
       partitionMap.remove(vertexId.get());
     }
@@ -244,6 +262,11 @@ public class LongDoubleMessageStore
   public Iterable<LongWritable> getPartitionDestinationVertices(
       int partitionId) {
     Long2DoubleOpenHashMap partitionMap = map.get(partitionId);
+
+    if (partitionMap == null) {
+      return EmptyIterable.get();
+    }
+
     // YH: used by single thread
     List<LongWritable> vertices =
         Lists.newArrayListWithCapacity(partitionMap.size());

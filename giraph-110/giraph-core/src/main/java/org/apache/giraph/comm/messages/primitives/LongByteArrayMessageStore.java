@@ -180,6 +180,11 @@ public class LongByteArrayMessageStore<M extends Writable>
   public void clearPartition(int partitionId) throws IOException {
     // YH: not used in async, but synchronize anyway
     Long2ObjectOpenHashMap<?> partitionMap = map.get(partitionId);
+
+    if (partitionMap == null) {
+      return;
+    }
+
     synchronized (partitionMap) {
       partitionMap.clear();
     }
@@ -229,6 +234,10 @@ public class LongByteArrayMessageStore<M extends Writable>
     Long2ObjectOpenHashMap<DataInputOutput> partitionMap =
         getPartitionMap(vertexId);
 
+    if (partitionMap == null) {
+      return EmptyIterable.get();
+    }
+
     // YH: must synchronize, as writes are concurrent w/ reads in async
     synchronized (partitionMap) {
       DataInputOutput dataInputOutput = partitionMap.get(vertexId.get());
@@ -246,6 +255,10 @@ public class LongByteArrayMessageStore<M extends Writable>
     Long2ObjectOpenHashMap<DataInputOutput> partitionMap =
         getPartitionMap(vertexId);
 
+    if (partitionMap == null) {
+      return EmptyIterable.get();
+    }
+
     // YH: must synchronize, as writes are concurrent w/ reads in async
     synchronized (partitionMap) {
       DataInputOutput dataInputOutput = partitionMap.remove(vertexId.get());
@@ -262,6 +275,11 @@ public class LongByteArrayMessageStore<M extends Writable>
     // YH: not used in async, but synchronize anyway
     Long2ObjectOpenHashMap<DataInputOutput> partitionMap =
       getPartitionMap(vertexId);
+
+    if (partitionMap == null) {
+      return;
+    }
+
     synchronized (partitionMap) {
       partitionMap.remove(vertexId.get());
     }
@@ -277,6 +295,11 @@ public class LongByteArrayMessageStore<M extends Writable>
       int partitionId) {
     Long2ObjectOpenHashMap<DataInputOutput> partitionMap =
         map.get(partitionId);
+
+    if (partitionMap == null) {
+      return EmptyIterable.get();
+    }
+
     // YH: used by single thread
     List<LongWritable> vertices =
         Lists.newArrayListWithCapacity(partitionMap.size());

@@ -154,6 +154,11 @@ public class IntFloatMessageStore
   public void clearPartition(int partitionId) throws IOException {
     // YH: not used in async, but synchronize anyway
     Int2FloatOpenHashMap partitionMap = map.get(partitionId);
+
+    if (partitionMap == null) {
+      return;
+    }
+
     synchronized (partitionMap) {
       partitionMap.clear();
     }
@@ -202,6 +207,10 @@ public class IntFloatMessageStore
       IntWritable vertexId) throws IOException {
     Int2FloatOpenHashMap partitionMap = getPartitionMap(vertexId);
 
+    if (partitionMap == null) {
+      return EmptyIterable.get();
+    }
+
     // YH: must synchronize, as writes are concurrent w/ reads in async
     synchronized (partitionMap) {
       if (!partitionMap.containsKey(vertexId.get())) {
@@ -218,6 +227,10 @@ public class IntFloatMessageStore
       IntWritable vertexId) throws IOException {
     Int2FloatOpenHashMap partitionMap = getPartitionMap(vertexId);
 
+    if (partitionMap == null) {
+      return EmptyIterable.get();
+    }
+
     // YH: must synchronize, as writes are concurrent w/ reads in async
     synchronized (partitionMap) {
       if (!partitionMap.containsKey(vertexId.get())) {
@@ -233,6 +246,11 @@ public class IntFloatMessageStore
   public void clearVertexMessages(IntWritable vertexId) throws IOException {
     // YH: not used in async, but synchronize anyway
     Int2FloatOpenHashMap partitionMap = getPartitionMap(vertexId);
+
+    if (partitionMap == null) {
+      return;
+    }
+
     synchronized (partitionMap) {
       partitionMap.remove(vertexId.get());
     }
@@ -247,6 +265,11 @@ public class IntFloatMessageStore
   public Iterable<IntWritable> getPartitionDestinationVertices(
       int partitionId) {
     Int2FloatOpenHashMap partitionMap = map.get(partitionId);
+
+    if (partitionMap == null) {
+      return EmptyIterable.get();
+    }
+
     // YH: used by single thread
     List<IntWritable> vertices =
         Lists.newArrayListWithCapacity(partitionMap.size());
