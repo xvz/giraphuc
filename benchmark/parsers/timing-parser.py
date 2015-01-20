@@ -14,6 +14,7 @@ from matplotlib.colors import ListedColormap
 # Constants
 ###############
 US_PER_MS = 1000.0
+US_PER_S = 1000.0*US_PER_MS
 
 ###############
 # Parse args
@@ -27,27 +28,60 @@ def workers(workers):
     except:
         raise argparse.ArgumentTypeError('Invalid worker count')
 
+def linewidth(linew):
+    try:
+        l = float(linew)
+        if l < 1.0:
+            raise argparse.ArgumentTypeError('Invalid line width')
+        return l
+    except:
+        raise argparse.ArgumentTypeError('Invalid line width')
+
 parser = argparse.ArgumentParser(description='Parses and plots timing graphs for specified timing log files.')
+parser.add_argument('log', type=str, nargs='+',
+                    help='A timing log file, can be a regular expression (e.g. job_20140101123050_0001_timing.txt or job_2014*timing.txt)')
 parser.add_argument('-w', '--workers', type=workers, dest='workers', default=64,
                     help='Number of workers (> 0), default=64')
+
 parser.add_argument('-p', '--plot', action='store_true', default=False,
                     help='Plot graphs in addition to printing out stats')
 parser.add_argument('-v', '--visible-local-barriers', action='store_true', default=False,
                     help='Make local barriers more visible by inflating their cost')
 parser.add_argument('-s', '--simple-colours', action='store_true', default=False,
                     help='Use a simple colour scheme (red for comm, gray for barrier)')
-parser.add_argument('log', type=str, nargs='+',
-                    help='A timing log file, can be a regular expression (e.g. job_20140101123050_0001_timing.txt or job_2014*timing.txt)')
+parser.add_argument('-l', '--line-width', type=linewidth, dest='line_width', default=0.0,
+                    help='Width of lines/bars for each worker (> 1.0), default=8*60.0/WORKERS')
+
+parser.add_argument('--save-eps', dest='file_name', default=False,
+                    help='Save plots as EPS')
+
 
 workers = parser.parse_args().workers
 do_plot = parser.parse_args().plot
 do_visible_lb = parser.parse_args().visible_local_barriers
 do_simple = parser.parse_args().simple_colours
-logs_re = parser.parse_args().log
 
+# default line width
+line_width = parser.parse_args().line_width
+if line_width == 0.0:
+    line_width = 8*60.0/workers
+
+# hacky way to set boolean: default filename is False bool,
+# but if actually present, it will evaluate to True
+output_name = parser.parse_args().file_name
+save_eps = True if output_name else False
+
+logs_re = parser.parse_args().log
 logs = [f for re in logs_re for f in glob.glob(re)]
 
 # some global vars for plotting
+if save_eps:
+    FONTSIZE = 15
+    YLABELSIZE = 11
+    XLABELSIZE = 12
+else:
+    FONTSIZE = YLABELSIZE = XLABELSIZE = 12
+
 MIN_LB_SIZE = 100000.0   # in us
 axes = []
 max_xlim = 0
@@ -104,16 +138,16 @@ def worker_parser(logname, offset, summary_stats):
         # "workers - worker + 1" is to put, e.g., W_1 above W_5
         if do_visible_lb and "[local_barrier_end]" in line and diff < MIN_LB_SIZE:
             # this will draw over the previous segment
-            segments.append([((new_val-MIN_LB_SIZE)/US_PER_MS, workers - worker + 1),
-                             (new_val/US_PER_MS, workers - worker + 1)])
+            segments.append([((new_val-MIN_LB_SIZE)/US_PER_S, workers - worker + 1),
+                             (new_val/US_PER_S, workers - worker + 1)])
         else:
-            segments.append([(prev_val/US_PER_MS, workers - worker + 1),
-                             (new_val/US_PER_MS, workers - worker + 1)])
+            segments.append([(prev_val/US_PER_S, workers - worker + 1),
+                             (new_val/US_PER_S, workers - worker + 1)])
 
         # note that global barrier wait time is melded together
         # with global barrier processing time
         if "[ss_end]" in line or "[ss_block]" in line:
-            colors.append('#33ff33')  # green
+            colors.append('#33f033')  # green
             t_index = T_COMPUTE
 
         elif "[ss_block_end]" in line:
@@ -164,12 +198,12 @@ def file_plotter(logname):
     for i in range(0,workers):
         (segments, colors, offset) = worker_parser(logname, offset, summary_stats)
 
-        if do_plot:
+        if do_plot or save_eps:
             cmap = ListedColormap(colors)
             lc = LineCollection(segments, cmap=cmap)
             # this (probably?) sets which of cmap's colors to use
             lc.set_array(np.arange(0, len(colors)))
-            lc.set_linewidth(8*60.0/workers)
+            lc.set_linewidth(line_width)
 
             plt.gca().add_collection(lc)
 
@@ -182,22 +216,26 @@ def file_plotter(logname):
 
             # ensure we modify global var (rather than create local one)
             global max_xlim
-            max_xlim = max(max_xlim, np.array(segments).max()+500)
+            max_xlim = max(max_xlim, np.array(segments).max()+0.5)
 
 
     ## pretty plot
-    if do_plot:
+    if do_plot or save_eps:
         # gca() returns actual Axes object
         plt.gca().set_xlim(left=0)
         plt.gca().minorticks_on()
-        plt.xlabel('Time (ms)')   # or plt.gca().set_xlabel(...)
+        plt.xlabel('Time (s)', fontsize=FONTSIZE)   # or plt.gca().set_xlabel(...)
+        plt.tick_params(axis='x', which='major', labelsize=XLABELSIZE)
 
-        plt.ylim(0.5, workers+0.5)
+        plt.ylim(0.25, workers+0.75)
         plt.yticks(range(1, workers+1))
-        plt.gca().set_yticklabels([r'W$_{' + str(i) + '}$' for i in range(workers,0,-1)])
+        #plt.gca().set_yticklabels([r'W$_{' + str(i) + '}$' for i in range(workers,0,-1)])
+        plt.gca().set_yticklabels([str(i) for i in range(workers,0,-1)])
         plt.gca().tick_params(axis='y',which='both',right='off',left='off')
+        plt.ylabel('Workers', fontsize=FONTSIZE)
+        plt.tick_params(axis='y', which='major', labelsize=YLABELSIZE)
 
-        plt.title(logname)
+        plt.title(logname, fontsize=FONTSIZE)
 
     ## print statistics
     for w in range(0,workers):
@@ -224,18 +262,36 @@ def file_plotter(logname):
 ####################
 print ''
 for log in logs:
-    if do_plot:
-        fig = plt.figure()      # new figure (auto-numbered)
+    if save_eps:
+        # new figure (auto-numbered)
+        plt.figure(figsize=(8, 2.5),facecolor='w')
+    elif do_plot:
+        plt.figure()
+
+    if save_eps or do_plot:
         axes.append(plt.gca())  # save axis
+
     file_plotter(log)
 
-if do_plot:
+    if save_eps or do_plot:
+        plt.tight_layout()
+        plt.subplots_adjust(hspace = 0.001)
+
+if do_plot or save_eps:
     # set xlim to be same across all figures
     # (useful for comparing across computation models)
     for ax in axes:
         ax.set_xlim(right=max_xlim)
-    plt.show()
+        ax.set_xlim(right=380)
 
+if save_eps:
+    for ax in axes:
+        ax.set_title('')
+        ax.get_figure().savefig('./' + output_name + '.eps', format='eps',
+                                bbox_inches='tight', pad_inhces=0.05)
+
+if do_plot:
+    plt.show()
 
 ########################################
 ## Old method using individual bars.
@@ -285,7 +341,7 @@ if do_plot:
 #        if new_val < 500:
 #            continue
 #
-#        vals.append(new_val/US_PER_MS)
+#        vals.append(new_val/US_PER_S)
 #        prev_val = int(line.split()[0])
 #
 #        # note that global barrier blocking/waiting time is
