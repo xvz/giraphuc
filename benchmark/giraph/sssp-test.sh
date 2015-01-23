@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
 if [ $# -ne 6 ]; then
-    echo "usage: $0 input-graph machines exec-mode supersteps open-req send-buf"
+    echo "usage: $0 input-graph machines exec-mode source-vertex open-req send-buf"
     echo ""
     echo "exec-mode: 0 for synchronous BSP"
     echo "           1 for asynchronous"
@@ -31,10 +31,10 @@ case ${execmode} in
     *) echo "Invalid exec-mode"; exit -1;;
 esac
 
-supersteps=$4
+src=$4
 
 ## log names
-logname=deltapr_${inputgraph}_${machines}_${execmode}_${supersteps}_${5}-${6}_"$(date +%Y%m%d-%H%M%S)"
+logname=sssp_${inputgraph}_${machines}_${execmode}_${5}-${6}_"$(date +%Y%m%d-%H%M%S)"
 logfile=${logname}_time.txt       # running time
 
 
@@ -49,31 +49,19 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop
     -Dgiraph.numComputeThreads=${GIRAPH_THREADS} \
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \
-    -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.DeltaPageRankComputation\$DeltaPageRankVertexValueFactory \
+    -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.SimpleShortestPathsComputation\$SimpleShortestPathsVertexValueFactory \
     -Dmapred.task.timeout=0 \
-    org.apache.giraph.examples.DeltaPageRankComputation \
-    -c org.apache.giraph.combiner.DoubleSumMessageCombiner \
-    -ca DeltaPageRankComputation.maxSS=${supersteps} \
-    -vif org.apache.giraph.examples.io.formats.SimplePageRankInputFormat \
+    org.apache.giraph.examples.SimpleShortestPathsComputation \
+    -c org.apache.giraph.combiner.MinimumDoubleMessageCombiner \
+    -ca SimpleShortestPathsComputation.sourceId=${src} \
+    -vif org.apache.giraph.examples.io.formats.SimpleShortestPathsInputFormat \
     -vip /user/${USER}/input/${inputgraph} \
-    -vof org.apache.giraph.examples.DeltaPageRankComputation\$DeltaPageRankVertexOutputFormat \
+    -vof org.apache.giraph.io.formats.IdWithValueTextOutputFormat \
     -op "$outputdir" \
     -w ${machines} 2>&1 | tee -a ./logs/${logfile}
 
 ## finish logging memory + network usage
 ../common/bench-finish.sh ${logname}
 
-## output l1-norm to time logfile
-prsln=${inputgraph}-300-0.txt
-proutput=${inputgraph}-${supersteps}-${execmode}.txt
-
-hadoop dfs -cat giraph-output/part-* | sort -nk1 --parallel=$(nproc) -S $(grep 'MemTotal' /proc/meminfo | awk '{print $2}') > ${proutput}
-
-if [[ -f ${prsln} && ${proutput} != ${prsln} ]]; then
-    l1norm=$(../parsers/prtolchecker ${prsln} ${proutput})
-    echo "L1-NORM: ${l1norm}" >> ./logs/${logfile}
-    rm -f ${proutput}
-fi
-
-## clean up step needed for Giraph 1.0 (not really needed for 1.1)
+## clean up step needed for Giraph
 ./kill-java-job.sh
