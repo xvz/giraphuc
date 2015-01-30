@@ -282,7 +282,6 @@ if do_plot or save_eps:
     # (useful for comparing across computation models)
     for ax in axes:
         ax.set_xlim(right=max_xlim)
-        ax.set_xlim(right=380)
 
 if save_eps:
     for ax in axes:
