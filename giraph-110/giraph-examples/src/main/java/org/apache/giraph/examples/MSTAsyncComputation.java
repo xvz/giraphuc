@@ -1076,8 +1076,7 @@ public class MSTAsyncComputation extends BasicComputation<
 
     @Override
     public String toString() {
-      return "message: " + super.toString() + " type=" + type.toString() +
-        " value=" + value.toString();
+      return "message: type=" + type.toString() + " value=" + value.toString();
     }
   }
 
