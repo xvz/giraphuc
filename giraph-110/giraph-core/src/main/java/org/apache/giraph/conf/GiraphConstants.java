@@ -1130,6 +1130,13 @@ public interface GiraphConstants {
           "Whether algorithm has multiple computation phases (async only)");
 
   /**
+   * YH: Whether algorithm requires a serializable execution.
+   */
+  BooleanConfOption ASYNC_DO_SERIALIZED =
+      new BooleanConfOption("giraph.doSerialized", false,
+          "Whether algorithm requires a serializable execution.");
+
+  /**
    * YH: Whether to print out timing info (for ALL modes)
    */
   BooleanConfOption ASYNC_PRINT_TIMING =

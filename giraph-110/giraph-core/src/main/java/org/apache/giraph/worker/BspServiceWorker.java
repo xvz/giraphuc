@@ -61,6 +61,7 @@ import org.apache.giraph.partition.PartitionExchange;
 import org.apache.giraph.partition.PartitionOwner;
 import org.apache.giraph.partition.PartitionStats;
 import org.apache.giraph.partition.PartitionStore;
+import org.apache.giraph.partition.HashWorkerPartitioner;
 import org.apache.giraph.partition.WorkerGraphPartitioner;
 import org.apache.giraph.utils.CallableFactory;
 import org.apache.giraph.utils.JMapHistoDumper;
@@ -610,6 +611,7 @@ public class BspServiceWorker<I extends WritableComparable,
       localData.printStats();
     }
 
+    // YH: we only use vertex input formats, so rest are irrelevant
     if (getConfiguration().hasVertexInputFormat()) {
       // Ensure the vertex InputSplits are ready for processing
       ensureInputSplitsReady(vertexInputSplitsPaths, vertexInputSplitsEvents);
@@ -979,41 +981,69 @@ public class BspServiceWorker<I extends WritableComparable,
     if (asyncConf.disableBarriers() &&
         getLogicalSuperstep() > INPUT_SUPERSTEP) {
 
-      if (asyncConf.needAllMsgs()) {
-        // If alg always sends messages, remoteMessageStore.hasMessages()
-        // will always return true (even if it has no actual new messages).
-        // Instead, we do another logical superstep if there are still
-        // local messages OR not all vertices are halted.
-        //
-        // If condition below is false and there are still messages in remote
-        // store, we will catch it on next global superstep or when more
-        // messages arrive while waiting at extra barrier. (This is much easier
-        // than trying to track arrival of "new" messages in remote store.)
-        if (workerSentMessages > 0 || localVertices != doneVertices) {
-          needBarrier = false;
-        }
+      // local and remote conditions that determine whether there is
+      // more work to do (i.e., global barrier NOT needed)
+      boolean haveLocalWork;
+      boolean haveRemoteWork;
 
-      } else if (asyncConf.isMultiPhase()) {
+      if (asyncConf.isMultiPhase()) {
         // For multi-phase computation, we must check only the message stores
         // for the current phase. Hence, we can't use workerSentMessages, since
         // that also captures messages sent for the next phase.
-        //
-        // TODO-YH: combine this clause with else clause below?
-        if (getServerData().getLocalMessageStore().hasMessages() ||
-            getServerData().getRemoteMessageStore().hasMessages()) {
-          needBarrier = false;
-        }
+        haveLocalWork = getServerData().getLocalMessageStore().hasMessages();
       } else {
-        // if we have pending local messages or have received remote messages,
-        // spend another logical superstep to process them
+        // For single-phase algs (including need-all-messages and
+        // need-serializability), workerSentMessages is enough.
+        // This is faster than checking local message store.
         //
         // NOTE: we do NOT need to check if all vertices are halted,
         // b/c if we have no messages, the vertices will have nothing
         // to work with---we're better off waiting in that case
-        if (workerSentMessages > 0 ||
-            getServerData().getRemoteMessageStore().hasMessages()) {
-          needBarrier = false;
-        }
+        haveLocalWork = workerSentMessages > 0;
+      }
+
+      if (asyncConf.isSerialized()) { // TODO-YH: && !asyncConf.haveToken()) {
+        // If need serializable execution, then remote messages are
+        // ignored unless we are holding token. Remote messages can
+        // arrive, b/c there is always one worker with token.
+        haveRemoteWork = false;
+      } else if (asyncConf.needAllMsgs()) {
+        // If alg always sends messages, remoteMessageStore.hasMessages()
+        // will always return true (even if it has no actual new messages).
+        //
+        // Expensive to explicitly track arrival of "new" messages in
+        // remote store, so instead we look at whether all vertices are
+        // deactivated. Trick here is that vertex is immediately reactivated
+        // upon message arrival and doneVertices counter is modified too.
+        //
+        // TODO-YH: implement immediate waking + doneVertices tweaking...
+        //
+        // Right now (with the above unimplemented), there's a slim chance
+        // we may miss pending messages in remote message store. However,
+        // we will almost certainly catch it after unblocking from the
+        // lightweight barrier. Probability is low b/c it requires:
+        // 1. all vertices to have voted to halt (tolerance-based termination)
+        // 2. all remote messages are received AFTER the destination process
+        //   should be awoken, but BEFORE partition stats are recorded
+        //
+        // (2) is generally very unlikely, because it requires that all
+        // remote messages to this worker arrive in very particular time frame.
+        // Additionally, it is highly unlikely for sender vertex to not have
+        // local neighbours (or remote neighbours in other workers) that will
+        // also fail to see its messages. Since all workers arrive on
+        // lightweight barrier AFTER no more remote messages are in-transit,
+        // it's unlikely we'll block past lightweight barrier.
+        haveRemoteWork = localVertices != doneVertices;
+      } else {
+        // For multi-phase alg, this will only check remote store for
+        // current phase (and not next phase).
+        haveRemoteWork = getServerData().getRemoteMessageStore().hasMessages();
+      }
+
+      // If there is local or remote work to do, spend another
+      // logical superstep to process/complete them.
+      if (haveLocalWork || haveRemoteWork) {
+        needBarrier = false;
       }
     }
     asyncConf.setNeedBarrier(needBarrier);
@@ -2181,6 +2211,18 @@ else[HADOOP_NON_SECURE]*/
   public int getPartitionId(I vertexId) {
     PartitionOwner partitionOwner = getVertexPartitionOwner(vertexId);
     return partitionOwner.getPartitionId();
+  }
+
+  @Override
+  public boolean isBoundaryVertex(I vertexId) {
+    return ((HashWorkerPartitioner) workerGraphPartitioner).
+      isBoundaryVertex(vertexId);
+  }
+
+  @Override
+  public void addBoundaryVertex(I vertexId) {
+    ((HashWorkerPartitioner) workerGraphPartitioner).
+      addBoundaryVertex(vertexId);
   }
 
   @Override

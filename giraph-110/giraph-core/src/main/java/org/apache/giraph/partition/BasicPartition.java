@@ -19,6 +19,8 @@
 package org.apache.giraph.partition;
 
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
+import org.apache.giraph.edge.Edge;
+import org.apache.giraph.graph.Vertex;
 import org.apache.giraph.graph.VertexValueCombiner;
 import org.apache.giraph.utils.VertexIterator;
 import org.apache.hadoop.io.Writable;
@@ -97,8 +99,41 @@ public abstract class BasicPartition<I extends WritableComparable,
   public void addPartitionVertices(VertexIterator<I, V, E> vertexIterator) {
     while (vertexIterator.hasNext()) {
       vertexIterator.next();
+      Vertex<I, V, E> vertex = vertexIterator.getVertex();
+
+      // YH: vertices are added to their partitions AFTER they are
+      // transferred to their correct owner. Hence, this ensures only
+      // owning worker knows which of its vertices are boundary.
+      //
+      // This also avoids needing to store boolean for every vertex.
+      //
+      // NOTE: Though this doesn't currently support mutations, it can.
+      // To support mutations, we need to augment Vertex's edge mutation
+      // functions with "is-boundary?" rechecks. (If boolean is added
+      // to Vertex, need to modify WritableUtils as well.)
+      if (getConf().getAsyncConf().isSerialized()) {
+        boolean isBoundary = false;
+
+        // TODO-YH: assumes undirected graph... for directed graph,
+        // need do broadcast to all neighbours
+        for (Edge<I, E> e : vertex.getEdges()) {
+          int dstPartitionId = getConf().getServiceWorker().
+            getVertexPartitionOwner(e.getTargetVertexId()).getPartitionId();
+
+          // id is this (vertex's) partition id
+          if (dstPartitionId != id) {
+            isBoundary = true;
+            break;
+          }
+        }
+
+        if (isBoundary) {
+          getConf().getServiceWorker().addBoundaryVertex(vertex.getId());
+        }
+      }
+
       // Release the vertex if it was put, otherwise reuse as an optimization
-      if (putOrCombine(vertexIterator.getVertex())) {
+      if (putOrCombine(vertex)) {
         vertexIterator.releaseVertex();
       }
     }

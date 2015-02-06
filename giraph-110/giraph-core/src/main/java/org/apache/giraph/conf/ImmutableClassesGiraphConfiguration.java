@@ -20,6 +20,7 @@ package org.apache.giraph.conf;
 
 import com.google.common.base.Preconditions;
 import org.apache.giraph.aggregators.AggregatorWriter;
+import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.combiner.MessageCombiner;
 import org.apache.giraph.edge.Edge;
 import org.apache.giraph.edge.EdgeFactory;
@@ -109,6 +110,9 @@ public class ImmutableClassesGiraphConfiguration<I extends WritableComparable,
 
   /** YH: Configuration for async */
   private final AsyncConfiguration asyncConf;
+
+  /** YH: Coordination service worker */
+  private CentralizedServiceWorker<I, V, E> serviceWorker;
 
   /**
    * Use unsafe serialization? Cached for fast access to instantiate the
@@ -1227,6 +1231,23 @@ public class ImmutableClassesGiraphConfiguration<I extends WritableComparable,
     classes.setMessageCombiner(superstepClasses.getMessageCombinerClass());
   }
 
+
+  /**
+   * YH: Set current service worker.
+   *
+   * @param serviceWorker Current service worker.
+   */
+  public void setServiceWorker(
+      CentralizedServiceWorker<I, V, E> serviceWorker) {
+    this.serviceWorker = serviceWorker;
+  }
+
+  /**
+   * @return Current service worker.
+   */
+  public CentralizedServiceWorker<I, V, E> getServiceWorker() {
+    return serviceWorker;
+  }
 
   /**
    * @return Configuration for async mode.

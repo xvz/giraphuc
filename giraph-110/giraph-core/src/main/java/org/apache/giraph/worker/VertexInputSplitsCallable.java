@@ -148,6 +148,7 @@ public class VertexInputSplitsCallable<I extends WritableComparable,
   @Override
   protected VertexEdgeCount readInputSplit(
       InputSplit inputSplit) throws IOException, InterruptedException {
+    // YH: this will be a user-specified VertexReader
     VertexReader<I, V, E> vertexReader =
         vertexInputFormat.createVertexReader(inputSplit, context);
     vertexReader.setConf(configuration);
@@ -195,6 +196,9 @@ public class VertexInputSplitsCallable<I extends WritableComparable,
         continue;
       }
 
+      // YH: by default, translateEdge will be null (it's used to do
+      // "expensive translations" when vertex are first added)
+      //
       // Before saving to partition-store translate all edges (if present)
       if (translateEdge != null) {
         // only iff vertexInput reads edges also
@@ -225,6 +229,9 @@ public class VertexInputSplitsCallable<I extends WritableComparable,
           readerVertex.setEdges(vertexOutEdges);
         }
       }
+
+      // YH: we don't figure out boundary vertices here, b/c they still
+      // need to be transferred to their correct owning worker
 
       PartitionOwner partitionOwner =
           bspServiceWorker.getVertexPartitionOwner(readerVertex.getId());
@@ -277,4 +284,3 @@ public class VertexInputSplitsCallable<I extends WritableComparable,
         inputSplitEdgesLoaded + edgesSinceLastUpdate);
   }
 }
-

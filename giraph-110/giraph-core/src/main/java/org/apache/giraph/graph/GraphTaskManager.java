@@ -629,6 +629,10 @@ public class GraphTaskManager<I extends WritableComparable, V extends Writable,
         LOG.info("setup: Starting up BspServiceWorker...");
       }
       serviceWorker = new BspServiceWorker<I, V, E>(context, this);
+
+      // YH: hack to make it easier to access serviceWorker in other classes
+      conf.setServiceWorker(serviceWorker);
+
       if (LOG.isInfoEnabled()) {
         LOG.info("setup: Registering health of this worker...");
       }

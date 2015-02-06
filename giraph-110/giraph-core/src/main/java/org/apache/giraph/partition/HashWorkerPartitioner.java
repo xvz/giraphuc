@@ -23,6 +23,8 @@ import org.apache.giraph.worker.WorkerInfo;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 
+import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
+
 import java.util.Collection;
 import java.util.List;
 
@@ -43,9 +45,32 @@ public class HashWorkerPartitioner<I extends WritableComparable,
   protected List<PartitionOwner> partitionOwnerList =
       Lists.newArrayList();
 
+  /** YH: Set of boundary vertex ids (owned by this worker only) */
+  private IntOpenHashSet boundaryVertices = new IntOpenHashSet();
+
   @Override
   public PartitionOwner createPartitionOwner() {
     return new BasicPartitionOwner();
+  }
+
+  /**
+   * YH: Whether a vertex id belongs to a boundary vertex.
+   *
+   * @param vertexId Vertex id
+   * @return True if it is a boundary vertex
+   */
+  public boolean isBoundaryVertex(I vertexId) {
+    return boundaryVertices.contains(vertexId.hashCode());
+  }
+
+  /**
+   * YH: Add a boundary vertex with a particular vertex id.
+   *
+   * @param vertexId Vertex id
+   */
+  public void addBoundaryVertex(I vertexId) {
+    // TODO-YH: collisions if I is not numeric?
+    boundaryVertices.add(vertexId.hashCode());
   }
 
   @Override

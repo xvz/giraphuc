@@ -147,6 +147,21 @@ public interface CentralizedServiceWorker<I extends WritableComparable,
   int getPartitionId(I vertexId);
 
   /**
+   * YH: Whether a vertex id belongs to a boundary vertex.
+   *
+   * @param vertexId Vertex id
+   * @return True if it is a boundary vertex
+   */
+  boolean isBoundaryVertex(I vertexId);
+
+  /**
+   * YH: Add a boundary vertex with a particular vertex id.
+   *
+   * @param vertexId Vertex id
+   */
+  void addBoundaryVertex(I vertexId);
+
+  /**
    * Whether a partition with given id exists on this worker.
    *
    * @param partitionId Partition id

@@ -35,7 +35,7 @@ public class AsyncConfiguration {
   private boolean isAsync;
   /**
    * Whether algorithm (or phase) needs every vertex to have all messages
-   * from all its neighbours for every superstep (aka, "stationary")
+   * from all its neighbours for every superstep (aka, "stationary").
    */
   private boolean needAllMsgs;
 
@@ -53,6 +53,9 @@ public class AsyncConfiguration {
   private boolean needBarrier;
   /** Local in-flight message bytes */
   private AtomicLong inFlightBytes;
+
+  /** Whether algorithm requires a serializable execution. */
+  private boolean isSerialized;
 
   /** Whether or not to print out timing information */
   private boolean printTiming;
@@ -73,6 +76,7 @@ public class AsyncConfiguration {
     isAsync = disableBarriers || GiraphConstants.ASYNC_DO_ASYNC.get(conf);
     needAllMsgs = isAsync && GiraphConstants.ASYNC_NEED_ALL_MSGS.get(conf);
     isMultiPhase = isAsync && GiraphConstants.ASYNC_MULTI_PHASE.get(conf);
+    isSerialized = GiraphConstants.ASYNC_DO_SERIALIZED.get(conf);
     printTiming = GiraphConstants.ASYNC_PRINT_TIMING.get(conf);
 
     // This only sets isNewPhase for SS -1 (INPUT_SUPERSTEP).
@@ -179,6 +183,16 @@ public class AsyncConfiguration {
    */
   public void setNeedBarrier(boolean needBarrier) {
     this.needBarrier = needBarrier;
+  }
+
+
+  /**
+   * Return whether or not a serializable execution is needed.
+   *
+   * @return True if serializable execution is needed
+   */
+  public boolean isSerialized() {
+    return isSerialized;
   }
 
 
