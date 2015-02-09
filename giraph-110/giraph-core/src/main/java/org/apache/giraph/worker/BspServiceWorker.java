@@ -1127,7 +1127,8 @@ public class BspServiceWorker<I extends WritableComparable,
 
         asyncConf.revokeGlobalToken();
         sendGlobalToken(nextWorker);
-        //LOG.info("[[TESTING]] sent global token to: " + nextWorker.getTaskId());
+        //LOG.info("[[TESTING]] sent global token to: " +
+        //         nextWorker.getTaskId());
 
         // wait for all messages, including token hand-over, to send
         // (this ensures serializability)
