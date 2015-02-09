@@ -823,7 +823,7 @@ public class BspServiceWorker<I extends WritableComparable,
         numLocalBoundary - numRemoteBoundary;
 
       LOG.info("[[TESTING]] ===========================================");
-      LOG.info("[[TESTING]] worker-id: " + workerInfo);
+      LOG.info("[[TESTING]] task-id: " + workerInfo.getTaskId());
       LOG.info("[[TESTING]] partition-ids: (" + partitionIds + ")");
       LOG.info("[[TESTING]] worker-only (int, lbv, rbv, bbv): (" +
                numInternal + "," + numLocalBoundary + "," +
@@ -1091,13 +1091,13 @@ public class BspServiceWorker<I extends WritableComparable,
         iterator().next().getWorkerInfo();
       if (workerInfo.equals(firstWorker)) {
         asyncConf.getGlobalToken();
-        LOG.info("[[TESTING]] global token: " + workerInfo);
+        LOG.info("[[TESTING]] init global token: " + workerInfo.getTaskId());
       }
 
       int firstPartitionId = getServerData().getPartitionStore().
         getPartitionIds().iterator().next();
       asyncConf.setLocalTokenHolder(firstPartitionId);
-      LOG.info("[[TESTING]] local token: " + firstPartitionId);
+      LOG.info("[[TESTING]] init local token: " + firstPartitionId);
     }
 
     // Round-robin token passing, one LSS before passing token
@@ -1127,7 +1127,7 @@ public class BspServiceWorker<I extends WritableComparable,
 
         asyncConf.revokeGlobalToken();
         sendGlobalToken(nextWorker);
-        LOG.info("[[TESTING]] sent global token to: " + nextWorker);
+        //LOG.info("[[TESTING]] sent global token to: " + nextWorker.getTaskId());
 
         // wait for all messages, including token hand-over, to send
         // (this ensures serializability)
@@ -1154,7 +1154,7 @@ public class BspServiceWorker<I extends WritableComparable,
           getPartitionIds().iterator().next();
       }
       asyncConf.setLocalTokenHolder(nextPartitionId);
-      LOG.info("[[TESTING]] local token: " + nextPartitionId);
+      //LOG.info("[[TESTING]] local token: " + nextPartitionId);
     }
 
     if (asyncConf.needBarrier()) {
