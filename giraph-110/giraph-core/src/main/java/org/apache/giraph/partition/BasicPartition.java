@@ -23,6 +23,7 @@ import org.apache.giraph.edge.Edge;
 import org.apache.giraph.graph.Vertex;
 import org.apache.giraph.graph.VertexValueCombiner;
 import org.apache.giraph.utils.VertexIterator;
+import org.apache.giraph.worker.WorkerInfo;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.util.Progressable;
@@ -112,24 +113,45 @@ public abstract class BasicPartition<I extends WritableComparable,
       // functions with "is-boundary?" rechecks. (If boolean is added
       // to Vertex, need to modify WritableUtils as well.)
       if (getConf().getAsyncConf().isSerialized()) {
-        boolean isBoundary = false;
+        boolean isRemoteBoundary = false;
+        boolean isLocalBoundary = false;
+
+        WorkerInfo myWorker = getConf().getServiceWorker().getWorkerInfo();
 
         // TODO-YH: assumes undirected graph... for directed graph,
         // need do broadcast to all neighbours
         for (Edge<I, E> e : vertex.getEdges()) {
-          int dstPartitionId = getConf().getServiceWorker().
-            getVertexPartitionOwner(e.getTargetVertexId()).getPartitionId();
+          PartitionOwner dstOwner = getConf().getServiceWorker().
+            getVertexPartitionOwner(e.getTargetVertexId());
 
+          int dstPartitionId = dstOwner.getPartitionId();
+          WorkerInfo dstWorker = dstOwner.getWorkerInfo();
+
+          // check if neighbour is remote; if not,
+          // check if neighbour is in another local partition
           // id is this (vertex's) partition id
-          if (dstPartitionId != id) {
-            isBoundary = true;
+          if (!myWorker.equals(dstWorker)) {
+            isRemoteBoundary = true;
             break;
+          } else if (dstPartitionId != id) {
+            isLocalBoundary = true;
+            // need to check all edges before concluding vertex is
+            // local boundary only (and not remote boundary)
+            continue;
           }
         }
 
-        if (isBoundary) {
-          getConf().getServiceWorker().addBoundaryVertex(vertex.getId());
+        // w/ hash partitioning, edge cuts are extremely high,
+        // meaning 99%+ of vertices are usually remote boundary.
+        // Hence, more efficient to track internal & local boundary ones.
+        if (!isRemoteBoundary && !isLocalBoundary) {
+          getConf().getServiceWorker().
+            setVertexType(vertex.getId(), VertexType.INTERNAL);
+        } else if (!isRemoteBoundary && isLocalBoundary) {
+          getConf().getServiceWorker().
+            setVertexType(vertex.getId(), VertexType.LOCAL_BOUNDARY);
         }
+        // remote boundary tracking is implicit
       }
 
       // Release the vertex if it was put, otherwise reuse as an optimization

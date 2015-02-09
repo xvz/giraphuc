@@ -45,32 +45,101 @@ public class HashWorkerPartitioner<I extends WritableComparable,
   protected List<PartitionOwner> partitionOwnerList =
       Lists.newArrayList();
 
-  /** YH: Set of boundary vertex ids (owned by this worker only) */
-  private IntOpenHashSet boundaryVertices = new IntOpenHashSet();
+  /** YH: Set of internal vertex ids (owned by this worker only) */
+  private IntOpenHashSet internalVertices = new IntOpenHashSet();
+  /** YH: Set of local boundary vertex ids (owned by this worker only) */
+  private IntOpenHashSet localBoundaryVertices = new IntOpenHashSet();
 
   @Override
   public PartitionOwner createPartitionOwner() {
     return new BasicPartitionOwner();
   }
 
+
   /**
-   * YH: Whether a vertex id belongs to a boundary vertex.
+   * YH: Whether a vertex id belongs to a particular vertex type.
    *
    * @param vertexId Vertex id
-   * @return True if it is a boundary vertex
+   * @param type Vertex type
+   * @return True if vertexId has a matching vertex type
    */
-  public boolean isBoundaryVertex(I vertexId) {
-    return boundaryVertices.contains(vertexId.hashCode());
+  public boolean isVertexType(I vertexId, VertexType type) {
+    boolean isType;
+
+    // checkstyle has a stupid requirement for nested {}s in cases
+    // CHECKSTYLE: stop IndentationCheck
+    switch (type) {
+    case INTERNAL:
+      synchronized (internalVertices) {
+        isType = internalVertices.contains(vertexId.hashCode());
+      }
+      break;
+    case LOCAL_BOUNDARY:
+      synchronized (localBoundaryVertices) {
+        isType = localBoundaryVertices.contains(vertexId.hashCode());
+      }
+      break;
+    case REMOTE_BOUNDARY:
+      synchronized (internalVertices) {
+        isType = !internalVertices.contains(vertexId.hashCode());
+      }
+      synchronized (localBoundaryVertices) {
+        isType &= !localBoundaryVertices.contains(vertexId.hashCode());
+      }
+      break;
+    default:
+      throw new RuntimeException("Invalid vertex type!");
+    }
+    // CHECKSTYLE: resume IndentationCheck
+
+    return isType;
   }
 
   /**
-   * YH: Add a boundary vertex with a particular vertex id.
+   * YH: Set/tag a vertex id with the specified type.
    *
    * @param vertexId Vertex id
+   * @param type Vertex type
    */
-  public void addBoundaryVertex(I vertexId) {
-    // TODO-YH: collisions if I is not numeric?
-    boundaryVertices.add(vertexId.hashCode());
+  public void setVertexType(I vertexId, VertexType type) {
+    // CHECKSTYLE: stop IndentationCheck
+    switch (type) {
+    case INTERNAL:
+      // TODO-YH: collisions if I is not numeric?
+      synchronized (internalVertices) {
+        internalVertices.add(vertexId.hashCode());
+      }
+      return;
+    case LOCAL_BOUNDARY:
+      // TODO-YH: collisions if I is not numeric?
+      synchronized (localBoundaryVertices) {
+        localBoundaryVertices.add(vertexId.hashCode());
+      }
+      return;
+    case REMOTE_BOUNDARY:
+      // remote boundary is the absence of being an internal
+      // or local boundary vertex
+      return;
+    default:
+      throw new RuntimeException("Invalid vertex type!");
+    }
+    // CHECKSTYLE: resume IndentationCheck
+  }
+
+  /**
+   * TODO-YH: delete this
+   * @return Number of local boundary vertices.
+   */
+  public int numLocalBoundaryVertices() {
+    return localBoundaryVertices.size();
+  }
+
+  /**
+   * TODO-YH: delete this
+   * @return Number of local boundary vertices.
+   */
+  public int numInternalVertices() {
+    return internalVertices.size();
   }
 
   @Override

@@ -63,6 +63,7 @@ import org.apache.giraph.partition.PartitionStats;
 import org.apache.giraph.partition.PartitionStore;
 import org.apache.giraph.partition.HashWorkerPartitioner;
 import org.apache.giraph.partition.WorkerGraphPartitioner;
+import org.apache.giraph.partition.VertexType;
 import org.apache.giraph.utils.CallableFactory;
 import org.apache.giraph.utils.JMapHistoDumper;
 import org.apache.giraph.utils.LoggerUtils;
@@ -801,6 +802,25 @@ public class BspServiceWorker<I extends WritableComparable,
       START_TIME = System.nanoTime();
     }
 
+    // TODO-YH: delete this
+    if (getLogicalSuperstep() == 0) {
+      int numVertices = 0;
+      for (int i : getServerData().getPartitionStore().getPartitionIds()) {
+        numVertices += getServerData().getPartitionStore().
+          getOrCreatePartition(i).getVertexCount();
+      }
+
+      int numInternal = ((HashWorkerPartitioner) workerGraphPartitioner).
+        numInternalVertices();
+      int numLocalBoundary = ((HashWorkerPartitioner) workerGraphPartitioner).
+        numLocalBoundaryVertices();
+
+      LOG.info("[[TESTING]] worker-only (int, lbv, rbv): (" +
+               numInternal + "," + numLocalBoundary + "," +
+               (numVertices - numInternal - numLocalBoundary) + ")" +
+               " -- numTot: " + numVertices);
+    }
+
     //LOG.info("[[MST-internal]] ##START##: ss=" + getSuperstep() +
     //         ", lss=" + getLogicalSuperstep() +
     //         ", nb=" + asyncConf.needBarrier() +
@@ -1002,7 +1022,7 @@ public class BspServiceWorker<I extends WritableComparable,
         haveLocalWork = workerSentMessages > 0;
       }
 
-      if (asyncConf.isSerialized()) { // TODO-YH: && !asyncConf.haveToken()) {
+      if (asyncConf.isSerialized() && !asyncConf.haveToken()) {
         // If need serializable execution, then remote messages are
         // ignored unless we are holding token. Remote messages can
         // arrive, b/c there is always one worker with token.
@@ -2214,15 +2234,15 @@ else[HADOOP_NON_SECURE]*/
   }
 
   @Override
-  public boolean isBoundaryVertex(I vertexId) {
+  public boolean isVertexType(I vertexId, VertexType type) {
     return ((HashWorkerPartitioner) workerGraphPartitioner).
-      isBoundaryVertex(vertexId);
+      isVertexType(vertexId, type);
   }
 
   @Override
-  public void addBoundaryVertex(I vertexId) {
+  public void setVertexType(I vertexId, VertexType type) {
     ((HashWorkerPartitioner) workerGraphPartitioner).
-      addBoundaryVertex(vertexId);
+      setVertexType(vertexId, type);
   }
 
   @Override

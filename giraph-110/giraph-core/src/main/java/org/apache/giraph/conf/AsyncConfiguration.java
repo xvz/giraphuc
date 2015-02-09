@@ -56,6 +56,8 @@ public class AsyncConfiguration {
 
   /** Whether algorithm requires a serializable execution. */
   private boolean isSerialized;
+  /** Whether worker has token. */
+  private boolean haveToken;
 
   /** Whether or not to print out timing information */
   private boolean printTiming;
@@ -86,6 +88,8 @@ public class AsyncConfiguration {
     // special case: first superstep always needs barrier after
     needBarrier = true;
     inFlightBytes = new AtomicLong();
+
+    haveToken = false;
   }
 
   /**
@@ -187,26 +191,6 @@ public class AsyncConfiguration {
 
 
   /**
-   * Return whether or not a serializable execution is needed.
-   *
-   * @return True if serializable execution is needed
-   */
-  public boolean isSerialized() {
-    return isSerialized;
-  }
-
-
-  /**
-   * Return whether or not to print out timing/visualization data.
-   *
-   * @return True if timing is desired
-   */
-  public boolean printTiming() {
-    return printTiming;
-  }
-
-
-  /**
    * Return the local number of in-flight message bytes for
    * the previous global superstep.
    *
@@ -251,5 +235,48 @@ public class AsyncConfiguration {
    */
   public void addSentBytes(long sentBytes) {
     inFlightBytes.addAndGet(sentBytes);
+  }
+
+
+  /**
+   * Return whether or not a serializable execution is needed.
+   *
+   * @return True if serializable execution is needed
+   */
+  public boolean isSerialized() {
+    return isSerialized;
+  }
+
+  /**
+   * Receive token. Worker now holds token.
+   */
+  public void getToken() {
+    haveToken = true;
+  }
+
+  /**
+   * Revoke token. Worker no longer has token.
+   */
+  public void revokeToken() {
+    haveToken = false;
+  }
+
+  /**
+   * Return whether this worker has token.
+   *
+   * @return True if worker is holding token.
+   */
+  public boolean haveToken() {
+    return haveToken;
+  }
+
+
+  /**
+   * Return whether or not to print out timing/visualization data.
+   *
+   * @return True if timing is desired
+   */
+  public boolean printTiming() {
+    return printTiming;
   }
 }

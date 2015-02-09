@@ -29,6 +29,7 @@ import org.apache.giraph.metrics.GiraphTimerContext;
 import org.apache.giraph.partition.PartitionOwner;
 import org.apache.giraph.partition.PartitionStats;
 import org.apache.giraph.partition.PartitionStore;
+import org.apache.giraph.partition.VertexType;
 import org.apache.giraph.worker.WorkerAggregatorHandler;
 import org.apache.giraph.worker.WorkerContext;
 import org.apache.giraph.worker.WorkerInfo;
@@ -147,19 +148,21 @@ public interface CentralizedServiceWorker<I extends WritableComparable,
   int getPartitionId(I vertexId);
 
   /**
-   * YH: Whether a vertex id belongs to a boundary vertex.
+   * YH: Whether a vertex id belongs to a particular vertex type.
    *
    * @param vertexId Vertex id
-   * @return True if it is a boundary vertex
+   * @param type Vertex type
+   * @return True if vertexId has a matching vertex type
    */
-  boolean isBoundaryVertex(I vertexId);
+  boolean isVertexType(I vertexId, VertexType type);
 
   /**
-   * YH: Add a boundary vertex with a particular vertex id.
+   * YH: Set/tag a vertex id with the specified type.
    *
    * @param vertexId Vertex id
+   * @param type Vertex type
    */
-  void addBoundaryVertex(I vertexId);
+  void setVertexType(I vertexId, VertexType type);
 
   /**
    * Whether a partition with given id exists on this worker.

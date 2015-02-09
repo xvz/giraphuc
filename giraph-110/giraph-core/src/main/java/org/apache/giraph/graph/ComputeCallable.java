@@ -73,7 +73,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
     E extends Writable, M1 extends Writable, M2 extends Writable>
     implements Callable<Collection<PartitionStats>> {
   /** Class logger */
-  private static final Logger LOG  = Logger.getLogger(ComputeCallable.class);
+  private static final Logger LOG = Logger.getLogger(ComputeCallable.class);
   /** Class time object */
   private static final Time TIME = SystemTime.get();
   /** How often to update WorkerProgress */
@@ -270,56 +270,65 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         // superstep, so we instead persist them to be processed in
         // a subsequent superstep.
 
-        // YH: messageStore and localMessageStore are set correctly by
-        // GraphTaskManager to be remote-only/BSP and local-only/BSP
+        // For serializability, don't execute boundary vertices w/o token
+        if (false) { //asyncConf.isSerialized()) {
+          throw new RuntimeException("Testing");
+          //if (asyncConf.haveToken() ||
+          //    !serviceWorker.isBoundaryVertex(vertex.getId())) {
+          //  throw new RuntimeException("Testing");
+          //}
 
-        if (asyncConf.isAsync()) {
-          // YH: (logical) SS0 is special case for async, because many algs send
-          // messages but do not have any logic to process them, so messages
-          // revealed in SS0 gets lost. Hence, keep them until after.
-          if (serviceWorker.getLogicalSuperstep() == 0) {
-            messages = EmptyIterable.<M1>get();
-          } else if (asyncConf.needAllMsgs()) {
-            // no need to remove, as we always overwrite
-            messages = Iterables.concat(
-              ((MessageWithSourceStore) messageStore).
-                getVertexMessagesWithoutSource(vertex.getId()),
-              ((MessageWithSourceStore) localMessageStore).
-                getVertexMessagesWithoutSource(vertex.getId()));
-          } else {
-            // always remove messages immediately (rather than get and clear)
-            messages = Iterables.concat(
-              messageStore.removeVertexMessages(vertex.getId()),
-              localMessageStore.removeVertexMessages(vertex.getId()));
-          }
         } else {
-          // regular BSP---always remove instead of get and clear
-          messages = messageStore.removeVertexMessages(vertex.getId());
-        }
-
-        if (vertex.isHalted() && !Iterables.isEmpty(messages)) {
-          vertex.wakeUp();
-        }
-        if (!vertex.isHalted()) {
-          context.progress();
-
-          // YH: set source id before compute(), and remove the (stale)
-          // reference immediately after compute() is done. This is
-          // thread-safe as there is one Computation per thread.
-          computation.setCurrentSourceId(vertex.getId());
-          computation.compute(vertex, messages);
-          computation.setCurrentSourceId(null);
-
-          // Need to unwrap the mutated edges (possibly)
-          vertex.unwrapMutableEdges();
-          //Compact edges representation if possible
-          if (vertex instanceof Trimmable) {
-            ((Trimmable) vertex).trim();
+          // YH: messageStore and localMessageStore are set correctly by
+          // GraphTaskManager to be remote-only/BSP and local-only/BSP
+          if (asyncConf.isAsync()) {
+            // YH: (logical) SS0 is special case for async, b/c many algs send
+            // messages but do not have any logic to process them, so messages
+            // revealed in SS0 gets lost. Hence, keep them until after.
+            if (serviceWorker.getLogicalSuperstep() == 0) {
+              messages = EmptyIterable.<M1>get();
+            } else if (asyncConf.needAllMsgs()) {
+              // no need to remove, as we always overwrite
+              messages = Iterables.concat(
+                ((MessageWithSourceStore) messageStore).
+                  getVertexMessagesWithoutSource(vertex.getId()),
+                ((MessageWithSourceStore) localMessageStore).
+                  getVertexMessagesWithoutSource(vertex.getId()));
+            } else {
+              // always remove messages immediately (rather than get and clear)
+              messages = Iterables.concat(
+                messageStore.removeVertexMessages(vertex.getId()),
+                localMessageStore.removeVertexMessages(vertex.getId()));
+            }
+          } else {
+            // regular BSP---always remove instead of get and clear
+            messages = messageStore.removeVertexMessages(vertex.getId());
           }
-          // Write vertex to superstep output (no-op if it is not used)
-          vertexWriter.writeVertex(vertex);
-          // Need to save the vertex changes (possibly)
-          partition.saveVertex(vertex);
+
+          if (vertex.isHalted() && !Iterables.isEmpty(messages)) {
+            vertex.wakeUp();
+          }
+          if (!vertex.isHalted()) {
+            context.progress();
+
+            // YH: set source id before compute(), and remove the (stale)
+            // reference immediately after compute() is done. This is
+            // thread-safe as there is one Computation per thread.
+            computation.setCurrentSourceId(vertex.getId());
+            computation.compute(vertex, messages);
+            computation.setCurrentSourceId(null);
+
+            // Need to unwrap the mutated edges (possibly)
+            vertex.unwrapMutableEdges();
+            //Compact edges representation if possible
+            if (vertex instanceof Trimmable) {
+              ((Trimmable) vertex).trim();
+            }
+            // Write vertex to superstep output (no-op if it is not used)
+            vertexWriter.writeVertex(vertex);
+            // Need to save the vertex changes (possibly)
+            partition.saveVertex(vertex);
+          }
         }
         if (vertex.isHalted()) {
           partitionStats.incrFinishedVertexCount();
