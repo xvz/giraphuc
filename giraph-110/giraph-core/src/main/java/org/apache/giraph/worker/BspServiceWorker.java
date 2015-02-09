@@ -30,6 +30,7 @@ import org.apache.giraph.comm.netty.NettyWorkerAggregatorRequestProcessor;
 import org.apache.giraph.comm.netty.NettyWorkerClient;
 import org.apache.giraph.comm.netty.NettyWorkerClientRequestProcessor;
 import org.apache.giraph.comm.netty.NettyWorkerServer;
+import org.apache.giraph.comm.requests.SendGlobalTokenRequest;
 import org.apache.giraph.conf.AsyncConfiguration;
 import org.apache.giraph.conf.GiraphConstants;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
@@ -804,10 +805,12 @@ public class BspServiceWorker<I extends WritableComparable,
 
     // TODO-YH: delete this
     if (getLogicalSuperstep() == 0) {
+      StringBuilder partitionIds = new StringBuilder();
       int numVertices = 0;
       for (int i : getServerData().getPartitionStore().getPartitionIds()) {
         numVertices += getServerData().getPartitionStore().
           getOrCreatePartition(i).getVertexCount();
+        partitionIds.append(i + ",");
       }
 
       int numInternal = ((HashWorkerPartitioner) workerGraphPartitioner).
@@ -819,6 +822,9 @@ public class BspServiceWorker<I extends WritableComparable,
       int numBothBoundary = numVertices - numInternal -
         numLocalBoundary - numRemoteBoundary;
 
+      LOG.info("[[TESTING]] ===========================================");
+      LOG.info("[[TESTING]] worker-id: " + workerInfo);
+      LOG.info("[[TESTING]] partition-ids: (" + partitionIds + ")");
       LOG.info("[[TESTING]] worker-only (int, lbv, rbv, bbv): (" +
                numInternal + "," + numLocalBoundary + "," +
                numRemoteBoundary + "," + numBothBoundary + ")" +
@@ -1079,6 +1085,78 @@ public class BspServiceWorker<I extends WritableComparable,
     //         ", currPhase=" + asyncConf.getCurrentPhase() +
     //         ", isNewPhase=" + asyncConf.isNewPhase());
 
+    // Special case for initializing tokens
+    if (asyncConf.isSerialized() && getLogicalSuperstep() == INPUT_SUPERSTEP) {
+      WorkerInfo firstWorker = workerGraphPartitioner.getPartitionOwners().
+        iterator().next().getWorkerInfo();
+      if (workerInfo.equals(firstWorker)) {
+        asyncConf.getGlobalToken();
+        LOG.info("[[TESTING]] global token: " + workerInfo);
+      }
+
+      int firstPartitionId = getServerData().getPartitionStore().
+        getPartitionIds().iterator().next();
+      asyncConf.setLocalTokenHolder(firstPartitionId);
+      LOG.info("[[TESTING]] local token: " + firstPartitionId);
+    }
+
+    // Round-robin token passing, one LSS before passing token
+    // for BOTH local and global tokens
+    if (asyncConf.isSerialized() && getLogicalSuperstep() > INPUT_SUPERSTEP) {
+      // pass global token
+      if (asyncConf.haveGlobalToken()) {
+        WorkerInfo nextWorker = null;
+        boolean getNextWorker = false;
+
+        // scan through all partition owners until we find ourself,
+        // then next non-matching worker is who we send token to
+        for (PartitionOwner po : workerGraphPartitioner.getPartitionOwners()) {
+          if (workerInfo.equals(po.getWorkerInfo())) {
+            getNextWorker = true;
+          } else if (getNextWorker) {
+            nextWorker = po.getWorkerInfo();
+            break;
+          }
+        }
+
+        // wrap around (to first worker) if next worker wasn't found
+        if (nextWorker == null) {
+          nextWorker = workerGraphPartitioner.getPartitionOwners().
+            iterator().next().getWorkerInfo();
+        }
+
+        asyncConf.revokeGlobalToken();
+        sendGlobalToken(nextWorker);
+        LOG.info("[[TESTING]] sent global token to: " + nextWorker);
+
+        // wait for all messages, including token hand-over, to send
+        // (this ensures serializability)
+        waitForRequestsToFinish();
+      }
+
+      // pass local token
+      boolean getNextPartition = false;
+      int nextPartitionId = -1;
+
+      for (int i : getServerData().getPartitionStore().getPartitionIds()) {
+        if (getNextPartition) {
+          nextPartitionId = i;
+          break;
+        }
+        if (asyncConf.haveLocalToken(i)) {
+          getNextPartition = true;
+        }
+      }
+
+      // wrap around
+      if (nextPartitionId == -1) {
+        nextPartitionId = getServerData().getPartitionStore().
+          getPartitionIds().iterator().next();
+      }
+      asyncConf.setLocalTokenHolder(nextPartitionId);
+      LOG.info("[[TESTING]] local token: " + nextPartitionId);
+    }
+
     if (asyncConf.needBarrier()) {
       // YH: we count this as part of the global barrier synchronization
       // cost, since BAP avoids this code-path on logical supersteps.
@@ -1254,6 +1332,16 @@ public class BspServiceWorker<I extends WritableComparable,
    */
   public static long getSS0StartTime() {
     return START_TIME;
+  }
+
+  /**
+   * YH: Sends global token to specified worker.
+   *
+   * @param workerInfo Worker to send global token to
+   */
+  private void sendGlobalToken(WorkerInfo workerInfo) {
+    workerClient.sendWritableRequest(
+      workerInfo.getTaskId(), new SendGlobalTokenRequest<I, V, E>());
   }
 
   /**

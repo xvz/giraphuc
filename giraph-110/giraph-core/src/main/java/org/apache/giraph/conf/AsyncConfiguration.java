@@ -91,8 +91,9 @@ public class AsyncConfiguration {
     needBarrier = true;
     inFlightBytes = new AtomicLong();
 
+    // these have to be initialized/set properly elsewhere,
+    // since BspServiceWorker doesn't exist when this is created
     haveGlobalToken = false;
-    // TODO-YH: safe as a sentinel value?
     localTokenId = -1;
   }
 
