@@ -59,6 +59,9 @@ public class HashWorkerPartitioner<I extends WritableComparable,
   /**
    * YH: Whether a vertex id belongs to a particular vertex type.
    *
+   * Thread-safe for concurrent isVertexType() calls ONLY.
+   * This is NOT thread-safe with concurrent setVertexType() calls!
+   *
    * @param vertexId Vertex id
    * @param type Vertex type
    * @return True if vertexId has a matching vertex type
@@ -66,26 +69,20 @@ public class HashWorkerPartitioner<I extends WritableComparable,
   public boolean isVertexType(I vertexId, VertexType type) {
     boolean isType;
 
-    // checkstyle has a stupid requirement for nested {}s in cases
-    // CHECKSTYLE: stop IndentationCheck
+    // YH: don't need synchronize b/c only time we write
+    // to these sets is during input loading or mutations,
+    // when no compute threads are running, and we read only
+    // during computation (when compute threads are running)
     switch (type) {
     case INTERNAL:
-      synchronized (internalVertices) {
-        isType = internalVertices.contains(vertexId.hashCode());
-      }
+      isType = internalVertices.contains(vertexId.hashCode());
       break;
     case LOCAL_BOUNDARY:
-      synchronized (localBoundaryVertices) {
-        isType = localBoundaryVertices.contains(vertexId.hashCode());
-      }
+      isType = localBoundaryVertices.contains(vertexId.hashCode());
       break;
     case REMOTE_BOUNDARY:
-      synchronized (internalVertices) {
-        isType = !internalVertices.contains(vertexId.hashCode());
-      }
-      synchronized (localBoundaryVertices) {
-        isType &= !localBoundaryVertices.contains(vertexId.hashCode());
-      }
+      isType = !(internalVertices.contains(vertexId.hashCode()) ||
+                 localBoundaryVertices.contains(vertexId.hashCode()));
       break;
     default:
       throw new RuntimeException("Invalid vertex type!");
@@ -102,6 +99,7 @@ public class HashWorkerPartitioner<I extends WritableComparable,
    * @param type Vertex type
    */
   public void setVertexType(I vertexId, VertexType type) {
+    // checkstyle has a stupid requirement for nested {}s in cases
     // CHECKSTYLE: stop IndentationCheck
     switch (type) {
     case INTERNAL:
