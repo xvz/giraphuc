@@ -56,8 +56,10 @@ public class AsyncConfiguration {
 
   /** Whether algorithm requires a serializable execution. */
   private boolean isSerialized;
-  /** Whether worker has token. */
-  private boolean haveToken;
+  /** Whether worker has global token. */
+  private boolean haveGlobalToken;
+  /** Id of partition holding local token. */
+  private int localTokenId;
 
   /** Whether or not to print out timing information */
   private boolean printTiming;
@@ -89,7 +91,9 @@ public class AsyncConfiguration {
     needBarrier = true;
     inFlightBytes = new AtomicLong();
 
-    haveToken = false;
+    haveGlobalToken = false;
+    // TODO-YH: safe as a sentinel value?
+    localTokenId = -1;
   }
 
   /**
@@ -248,26 +252,47 @@ public class AsyncConfiguration {
   }
 
   /**
-   * Receive token. Worker now holds token.
+   * Receive global token. Worker now holds token.
    */
-  public void getToken() {
-    haveToken = true;
+  public void getGlobalToken() {
+    haveGlobalToken = true;
   }
 
   /**
-   * Revoke token. Worker no longer has token.
+   * Revoke global token. Worker no longer has token.
    */
-  public void revokeToken() {
-    haveToken = false;
+  public void revokeGlobalToken() {
+    haveGlobalToken = false;
   }
 
   /**
-   * Return whether this worker has token.
+   * Return whether this worker has global token.
    *
-   * @return True if worker is holding token.
+   * @return True if worker is holding global token.
    */
-  public boolean haveToken() {
-    return haveToken;
+  public boolean haveGlobalToken() {
+    return haveGlobalToken;
+  }
+
+  /**
+   * Set which partition holds the local token.
+   * NOT thread-safe.
+   *
+   * @param partitionId Id of partition to hold local token.
+   */
+  public void setLocalTokenHolder(int partitionId) {
+    localTokenId = partitionId;
+  }
+
+  /**
+   * Return whether specified partition holds local token.
+   * NOT thread-safe.
+   *
+   * @param partitionId Id of partition of interest
+   * @return True if partition is holding local token.
+   */
+  public boolean haveLocalToken(int partitionId) {
+    return localTokenId == partitionId;
   }
 
 

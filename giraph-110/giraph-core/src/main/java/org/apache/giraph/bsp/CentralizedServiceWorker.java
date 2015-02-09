@@ -150,11 +150,25 @@ public interface CentralizedServiceWorker<I extends WritableComparable,
   /**
    * YH: Whether a vertex id belongs to a particular vertex type.
    *
+   * Thread-safe for concurrent is/getVertexType() calls ONLY.
+   * This is NOT thread-safe with concurrent setVertexType() calls!
+   *
    * @param vertexId Vertex id
    * @param type Vertex type
    * @return True if vertexId has a matching vertex type
    */
   boolean isVertexType(I vertexId, VertexType type);
+
+  /**
+   * YH: Get vertex type for specified vertex id.
+   *
+   * Thread-safe for concurrent is/getVertexType() calls ONLY.
+   * This is NOT thread-safe with concurrent setVertexType() calls!
+   *
+   * @param vertexId Vertex id
+   * @return Type of vertex
+   */
+  VertexType getVertexType(I vertexId);
 
   /**
    * YH: Set/tag a vertex id with the specified type.

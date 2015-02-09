@@ -814,10 +814,14 @@ public class BspServiceWorker<I extends WritableComparable,
         numInternalVertices();
       int numLocalBoundary = ((HashWorkerPartitioner) workerGraphPartitioner).
         numLocalBoundaryVertices();
+      int numRemoteBoundary = ((HashWorkerPartitioner) workerGraphPartitioner).
+        numRemoteBoundaryVertices();
+      int numBothBoundary = numVertices - numInternal -
+        numLocalBoundary - numRemoteBoundary;
 
-      LOG.info("[[TESTING]] worker-only (int, lbv, rbv): (" +
+      LOG.info("[[TESTING]] worker-only (int, lbv, rbv, bbv): (" +
                numInternal + "," + numLocalBoundary + "," +
-               (numVertices - numInternal - numLocalBoundary) + ")" +
+               numRemoteBoundary + "," + numBothBoundary + ")" +
                " -- numTot: " + numVertices);
     }
 
@@ -1022,7 +1026,7 @@ public class BspServiceWorker<I extends WritableComparable,
         haveLocalWork = workerSentMessages > 0;
       }
 
-      if (asyncConf.isSerialized() && !asyncConf.haveToken()) {
+      if (asyncConf.isSerialized() && !asyncConf.haveGlobalToken()) {
         // If need serializable execution, then remote messages are
         // ignored unless we are holding token. Remote messages can
         // arrive, b/c there is always one worker with token.
@@ -2237,6 +2241,12 @@ else[HADOOP_NON_SECURE]*/
   public boolean isVertexType(I vertexId, VertexType type) {
     return ((HashWorkerPartitioner) workerGraphPartitioner).
       isVertexType(vertexId, type);
+  }
+
+  @Override
+  public VertexType getVertexType(I vertexId) {
+    return ((HashWorkerPartitioner) workerGraphPartitioner).
+      getVertexType(vertexId);
   }
 
   @Override

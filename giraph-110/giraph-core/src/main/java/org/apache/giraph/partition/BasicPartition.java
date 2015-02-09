@@ -132,26 +132,31 @@ public abstract class BasicPartition<I extends WritableComparable,
           // id is this (vertex's) partition id
           if (!myWorker.equals(dstWorker)) {
             isRemoteBoundary = true;
-            break;
           } else if (dstPartitionId != id) {
             isLocalBoundary = true;
-            // need to check all edges before concluding vertex is
-            // local boundary only (and not remote boundary)
-            continue;
+          }
+
+          // need to check all edges before concluding vertex
+          // is ONLY local or remote boundary, but if it's
+          // already both, we can quit early
+          if (isRemoteBoundary && isLocalBoundary) {
+            break;
           }
         }
 
-        // w/ hash partitioning, edge cuts are extremely high,
-        // meaning 99%+ of vertices are usually remote boundary.
-        // Hence, more efficient to track internal & local boundary ones.
         if (!isRemoteBoundary && !isLocalBoundary) {
           getConf().getServiceWorker().
             setVertexType(vertex.getId(), VertexType.INTERNAL);
         } else if (!isRemoteBoundary && isLocalBoundary) {
           getConf().getServiceWorker().
             setVertexType(vertex.getId(), VertexType.LOCAL_BOUNDARY);
+        } else if (isRemoteBoundary && !isLocalBoundary) {
+          getConf().getServiceWorker().
+            setVertexType(vertex.getId(), VertexType.REMOTE_BOUNDARY);
+        } else {
+          getConf().getServiceWorker().
+            setVertexType(vertex.getId(), VertexType.BOTH_BOUNDARY);
         }
-        // remote boundary tracking is implicit
       }
 
       // Release the vertex if it was put, otherwise reuse as an optimization

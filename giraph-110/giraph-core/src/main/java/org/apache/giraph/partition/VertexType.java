@@ -22,7 +22,12 @@ package org.apache.giraph.partition;
  * YH: The possible types of vertices. Used for serializability.
  */
 public enum VertexType {
-  // CHECKSTYLE: stop JavadocVariableCheck
-  INTERNAL, LOCAL_BOUNDARY, REMOTE_BOUNDARY;
-  // CHECKSTYLE: resume JavadocVariableCheck
+  /** all neighbours are in same partition */
+  INTERNAL,
+  /** all neighbours are in same worker (but different partitions) */
+  LOCAL_BOUNDARY,
+  /** all neighbours are in remote workers (NONE in same worker) */
+  REMOTE_BOUNDARY,
+  /** neighbours in both remote and local workers */
+  BOTH_BOUNDARY;
 }

@@ -45,21 +45,24 @@ public class HashWorkerPartitioner<I extends WritableComparable,
   protected List<PartitionOwner> partitionOwnerList =
       Lists.newArrayList();
 
+  // YH: w/ hash partitioning, edge cuts are extremely high,
+  // meaning 99%+ of vertices are usually local+remote boundary.
   /** YH: Set of internal vertex ids (owned by this worker only) */
   private IntOpenHashSet internalVertices = new IntOpenHashSet();
   /** YH: Set of local boundary vertex ids (owned by this worker only) */
   private IntOpenHashSet localBoundaryVertices = new IntOpenHashSet();
+  /** YH: Set of remote boundary vertex ids (owned by this worker only) */
+  private IntOpenHashSet remoteBoundaryVertices = new IntOpenHashSet();
 
   @Override
   public PartitionOwner createPartitionOwner() {
     return new BasicPartitionOwner();
   }
 
-
   /**
    * YH: Whether a vertex id belongs to a particular vertex type.
    *
-   * Thread-safe for concurrent isVertexType() calls ONLY.
+   * Thread-safe for concurrent is/getVertexType() calls ONLY.
    * This is NOT thread-safe with concurrent setVertexType() calls!
    *
    * @param vertexId Vertex id
@@ -81,8 +84,12 @@ public class HashWorkerPartitioner<I extends WritableComparable,
       isType = localBoundaryVertices.contains(vertexId.hashCode());
       break;
     case REMOTE_BOUNDARY:
+      isType = remoteBoundaryVertices.contains(vertexId.hashCode());
+      break;
+    case BOTH_BOUNDARY:
       isType = !(internalVertices.contains(vertexId.hashCode()) ||
-                 localBoundaryVertices.contains(vertexId.hashCode()));
+                 localBoundaryVertices.contains(vertexId.hashCode()) ||
+                 remoteBoundaryVertices.contains(vertexId.hashCode()));
       break;
     default:
       throw new RuntimeException("Invalid vertex type!");
@@ -90,6 +97,27 @@ public class HashWorkerPartitioner<I extends WritableComparable,
     // CHECKSTYLE: resume IndentationCheck
 
     return isType;
+  }
+
+  /**
+   * YH: Get vertex type for specified vertex id.
+   *
+   * Thread-safe for concurrent is/getVertexType() calls ONLY.
+   * This is NOT thread-safe with concurrent setVertexType() calls!
+   *
+   * @param vertexId Vertex id
+   * @return Type of vertex
+   */
+  public VertexType getVertexType(I vertexId) {
+    if (internalVertices.contains(vertexId.hashCode())) {
+      return VertexType.INTERNAL;
+    } else if (localBoundaryVertices.contains(vertexId.hashCode())) {
+      return VertexType.LOCAL_BOUNDARY;
+    } else if (remoteBoundaryVertices.contains(vertexId.hashCode())) {
+      return VertexType.REMOTE_BOUNDARY;
+    } else {
+      return VertexType.BOTH_BOUNDARY;
+    }
   }
 
   /**
@@ -109,14 +137,18 @@ public class HashWorkerPartitioner<I extends WritableComparable,
       }
       return;
     case LOCAL_BOUNDARY:
-      // TODO-YH: collisions if I is not numeric?
       synchronized (localBoundaryVertices) {
         localBoundaryVertices.add(vertexId.hashCode());
       }
       return;
     case REMOTE_BOUNDARY:
-      // remote boundary is the absence of being an internal
-      // or local boundary vertex
+      synchronized (remoteBoundaryVertices) {
+        remoteBoundaryVertices.add(vertexId.hashCode());
+      }
+      return;
+    case BOTH_BOUNDARY:
+      // local+remote boundary will not be on any of the sets
+      // (i.e., absence on all sets indicates this)
       return;
     default:
       throw new RuntimeException("Invalid vertex type!");
@@ -125,19 +157,24 @@ public class HashWorkerPartitioner<I extends WritableComparable,
   }
 
   /**
-   * TODO-YH: delete this
-   * @return Number of local boundary vertices.
+   * @return Number of internal vertices.
+   */
+  public int numInternalVertices() {
+    return internalVertices.size();
+  }
+
+  /**
+   * @return Number of local (only) boundary vertices.
    */
   public int numLocalBoundaryVertices() {
     return localBoundaryVertices.size();
   }
 
   /**
-   * TODO-YH: delete this
-   * @return Number of local boundary vertices.
+   * @return Number of remote (only) boundary vertices.
    */
-  public int numInternalVertices() {
-    return internalVertices.size();
+  public int numRemoteBoundaryVertices() {
+    return remoteBoundaryVertices.size();
   }
 
   @Override
