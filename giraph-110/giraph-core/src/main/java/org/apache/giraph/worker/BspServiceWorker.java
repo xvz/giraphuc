@@ -1057,11 +1057,18 @@ public class BspServiceWorker<I extends WritableComparable,
       //     => this must be before post-superstep/aggregator finish, etc.
       if (asyncConf.disableBarriers() &&
           getLogicalSuperstep() > INPUT_SUPERSTEP) {
-        LOG.info("[[TESTING]] blocking on ltw barrier");
-        if (!waitForWorkersOrMessages(workerSentMessageBytes)) {
+        LOG.info("[[TESTING]] block on ltw barrier");
+        // if global tokens are needed, block on lightweight
+        // barrier WITHOUT doing ZK stuff
+        if (asyncConf.isSerialized() &&
+            needGlobalToken(localVertices, doneVertices)) {
+          LOG.info("[[TESTING]]   waiting for token...");
+          waitForGlobalToken();
+          asyncConf.setNeedBarrier(false);
+        } else if (!waitForWorkersOrMessages(workerSentMessageBytes)) {
           asyncConf.setNeedBarrier(false);
         }
-        LOG.info("[[TESTING]] done from ltw barrier, needBarrier: " +
+        LOG.info("[[TESTING]] done ltw barrier, needBarrier: " +
                  asyncConf.needBarrier());
 
         // this captures how long worker is blocked without work to do
@@ -1208,11 +1215,7 @@ public class BspServiceWorker<I extends WritableComparable,
    * @return True if global barrier is required.
    */
   private boolean needBarrier(long workerSentMessages,
-                           long localVertices,
-                           long doneVertices) {
-    // assume barrier is needed
-    boolean needBarrier = true;
-
+                              long localVertices, long doneVertices) {
     // Cannot disable global barrier if SS <= INPUT_SUPERSTEP,
     // as that is when message store is still uninitialized.
     if (asyncConf.disableBarriers() &&
@@ -1223,15 +1226,19 @@ public class BspServiceWorker<I extends WritableComparable,
       boolean haveLocalWork;
       boolean haveRemoteWork;
 
-      if (asyncConf.isMultiPhase()) {
+      if (asyncConf.isMultiPhase() || asyncConf.isSerialized()) {
         // For multi-phase computation, we must check only the message stores
         // for the current phase. Hence, we can't use workerSentMessages, since
         // that also captures messages sent for the next phase.
+        //
+        // For serialized computations, local messages for local boundary
+        // vertices do not get processed right away (needs local token),
+        // so workerSentMessages will mmiss these messages. There's more
+        // local worker to do, b/c more LSSes will pass local token around.
         haveLocalWork = getServerData().getLocalMessageStore().hasMessages();
       } else {
-        // For single-phase algs (including need-all-messages and
-        // need-serializability), workerSentMessages is enough.
-        // This is faster than checking local message store.
+        // For single-phase algs (non-serializable), workerSentMessages is
+        // sufficient. This is faster than checking local message store.
         //
         // NOTE: we do NOT need to check if all vertices are halted,
         // b/c if we have no messages, the vertices will have nothing
@@ -1240,10 +1247,12 @@ public class BspServiceWorker<I extends WritableComparable,
       }
 
       if (asyncConf.isSerialized() && !asyncConf.haveGlobalToken()) {
-        // TODO-YH: does this cause stuff not to be in 1 GSS??
         // If need serializable execution, then remote messages are
         // ignored unless we are holding token. Remote messages can
         // arrive, b/c there is always one worker with token.
+        //
+        // Unlike local tokens, doing more LSSes will not cause global
+        // token to appear.
         haveRemoteWork = false;
       } else if (asyncConf.needAllMsgs()) {
         // If alg always sends messages, remoteMessageStore.hasMessages()
@@ -1281,11 +1290,29 @@ public class BspServiceWorker<I extends WritableComparable,
       // If there is local or remote work to do, spend another
       // logical superstep to process/complete them.
       if (haveLocalWork || haveRemoteWork) {
-        needBarrier = false;
+        return false;
       }
     }
 
-    return needBarrier;
+    // barrier needed by default
+    return true;
+  }
+
+  /**
+   * YH: Whether global token is needed (for serializability only).
+   *
+   * @param localVertices Number of vertices (worker)
+   * @param doneVertices Number of finished vertices (worker)
+   * @return True if global token is required.
+   */
+  private boolean needGlobalToken(long localVertices, long doneVertices) {
+    // basically, if there's stuff that needs remote messages
+    // or there are remote messages, then we need global token
+    if (asyncConf.needAllMsgs()) {
+      return localVertices != doneVertices;
+    } else {
+      return getServerData().getRemoteMessageStore().hasMessages();
+    }
   }
 
   /**
@@ -1375,7 +1402,6 @@ public class BspServiceWorker<I extends WritableComparable,
           getPartitionIds().iterator().next();
       }
       asyncConf.setLocalTokenHolder(nextPartitionId);
-      LOG.info("[[TESTING]] local token: " + nextPartitionId);
     }
   }
 
@@ -1486,20 +1512,13 @@ public class BspServiceWorker<I extends WritableComparable,
         //
         // If doing multi-phase computation, return ONLY if message is
         // for current phase. Do not return if it is for the next phase.
-        //
-        // If doing serialized computation, also unblock on global token.
-        if ((asyncConf.getInFlightBytes() < prevInFlightBytes &&
+        if (asyncConf.getInFlightBytes() < prevInFlightBytes &&
              (!asyncConf.isMultiPhase() ||
-              getServerData().getRemoteMessageStore().hasMessages())) ||
-            (asyncConf.isSerialized() && asyncConf.haveGlobalToken())) {
+              getServerData().getRemoteMessageStore().hasMessages())) {
           try {
             // YH: "true" for recursive not really needed but false
             // won't make it any faster, so leave it to be safe
             getZkExt().deleteExt(finishedWorkerPath, -1, true);
-
-            if (asyncConf.haveGlobalToken()) {
-              LOG.info("[[TESTING]] unblock due to global token!");
-            }
             return false;
 
           } catch (KeeperException e) {
@@ -1511,12 +1530,56 @@ public class BspServiceWorker<I extends WritableComparable,
           }
         }
 
+        // If doing serialized computation, unblock on global token
+        // to pass it along (since this worker doesn't need it).
+        if (asyncConf.isSerialized() && asyncConf.haveGlobalToken()) {
+          LOG.info("[[TESTING]] unblock to pass along token");
+          roundRobinTokens();
+          // do not return, b/c we have no new work to do
+        }
+
         // not a message; reset condition var
         getSuperstepReadyToFinishEvent().reset();
       }
 
       return true;
 
+    } catch (KeeperException e) {
+      throw new IllegalStateException(
+          "finishSuperstep: Failed while waiting for master to " +
+              "signal prepare-to-finish superstep " + getSuperstep(), e);
+    } catch (InterruptedException e) {
+      throw new IllegalStateException(
+          "finishSuperstep: Failed while waiting for master to " +
+              "signal prepare-to-finish superstep " + getSuperstep(), e);
+    }
+  }
+
+  /**
+   * YH: Block until global token is received.
+   */
+  private void waitForGlobalToken() {
+    // ZK path to wait on (created by master)
+    String superstepReadyToFinishNode =
+      getSuperstepReadyToFinishPath(getApplicationAttempt(), getSuperstep());
+
+    try {
+      // This path is created by master when all workers are present, but
+      // since we never record to ZK that we're done, this is effectively
+      // an indefinite block until we get the global token.
+      while (getZkExt().exists(superstepReadyToFinishNode, true) == null) {
+        getSuperstepReadyToFinishEvent().waitForever();
+
+        // TODO-YH: race condition? what if token arrives
+        // just before, s.t. we miss it?
+        if (asyncConf.haveGlobalToken()) {
+          LOG.info("[[TESTING]] unblock b/c got token");
+          return;
+        }
+
+        // not global token; reset condition var
+        getSuperstepReadyToFinishEvent().reset();
+      }
     } catch (KeeperException e) {
       throw new IllegalStateException(
           "finishSuperstep: Failed while waiting for master to " +

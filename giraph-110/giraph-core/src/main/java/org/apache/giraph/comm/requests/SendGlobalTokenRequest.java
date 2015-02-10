@@ -18,6 +18,7 @@
 
 package org.apache.giraph.comm.requests;
 
+import org.apache.giraph.bsp.BspService;
 import org.apache.giraph.comm.ServerData;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
@@ -68,6 +69,12 @@ public class SendGlobalTokenRequest<I extends WritableComparable,
     getConf().getAsyncConf().getGlobalToken();
     LOG.info("[[TESTING]] got global token: " +
              serverData.getServiceWorker().getWorkerInfo().getTaskId());
+
+    // signal worker if needed
+    if (getConf().getAsyncConf().disableBarriers()) {
+      ((BspService) serverData.getServiceWorker()).
+        getSuperstepReadyToFinishEvent().signal();
+    }
   }
 
   @Override
