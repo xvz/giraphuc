@@ -66,8 +66,8 @@ public class SendGlobalTokenRequest<I extends WritableComparable,
     // ReflectionUtils(class, config), which will set conf properly
     // since WritableRequest is configurable (see RequestDecoder)
     getConf().getAsyncConf().getGlobalToken();
-    //LOG.info("[[TESTING]] got global token: " +
-    //         serverData.getServiceWorker().getWorkerInfo().getTaskId());
+    LOG.info("[[TESTING]] got global token: " +
+             serverData.getServiceWorker().getWorkerInfo().getTaskId());
   }
 
   @Override

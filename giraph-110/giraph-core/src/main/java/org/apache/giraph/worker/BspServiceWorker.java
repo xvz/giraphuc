@@ -838,16 +838,17 @@ public class BspServiceWorker<I extends WritableComparable,
                " -- numTot: " + numVertices);
     }
 
-    if (asyncConf.isSerialized() && asyncConf.haveGlobalToken()) {
-      superstepsUntilTokenRevoke--;
-    }
-
     //LOG.info("[[MST-internal]] ##START##: ss=" + getSuperstep() +
     //         ", lss=" + getLogicalSuperstep() +
     //         ", nb=" + asyncConf.needBarrier() +
     //         ", multi-phase=" + asyncConf.isMultiPhase() +
     //         ", currPhase=" + asyncConf.getCurrentPhase() +
     //         ", isNewPhase=" + asyncConf.isNewPhase());
+
+    // YH: decrement revoke counter if needed
+    if (asyncConf.isSerialized() && asyncConf.haveGlobalToken()) {
+      superstepsUntilTokenRevoke--;
+    }
 
     // YH: reset counter on new global superstep
     if (asyncConf.needBarrier()) {
@@ -1056,9 +1057,12 @@ public class BspServiceWorker<I extends WritableComparable,
       //     => this must be before post-superstep/aggregator finish, etc.
       if (asyncConf.disableBarriers() &&
           getLogicalSuperstep() > INPUT_SUPERSTEP) {
+        LOG.info("[[TESTING]] blocking on ltw barrier");
         if (!waitForWorkersOrMessages(workerSentMessageBytes)) {
           asyncConf.setNeedBarrier(false);
         }
+        LOG.info("[[TESTING]] done from ltw barrier, needBarrier: " +
+                 asyncConf.needBarrier());
 
         // this captures how long worker is blocked without work to do
         // (BAP only), after resolving all open requests
@@ -1236,6 +1240,7 @@ public class BspServiceWorker<I extends WritableComparable,
       }
 
       if (asyncConf.isSerialized() && !asyncConf.haveGlobalToken()) {
+        // TODO-YH: does this cause stuff not to be in 1 GSS??
         // If need serializable execution, then remote messages are
         // ignored unless we are holding token. Remote messages can
         // arrive, b/c there is always one worker with token.
@@ -1299,8 +1304,9 @@ public class BspServiceWorker<I extends WritableComparable,
         LOG.info("[[TESTING]] init global token: " + workerInfo.getTaskId());
       }
       // revoke global token after num-partition supersteps
+      // (+1 to avoid off-by-one, since decrment is in startSuperstep())
       superstepsUntilTokenRevoke = getServerData().getPartitionStore().
-        getNumPartitions();
+        getNumPartitions() + 1;
 
       int firstPartitionId = getServerData().getPartitionStore().
         getPartitionIds().iterator().next();
@@ -1308,11 +1314,13 @@ public class BspServiceWorker<I extends WritableComparable,
       LOG.info("[[TESTING]] init local token: " + firstPartitionId);
 
     } else {
-      // Pass global token only after holding for some number of supersteps.
-      // This must be at least ONE SS/LSS, since global token can arrive
-      // during SS when using async.
+      // Pass global token only after holding for some number of supersteps,
+      // BUT do not hold it if this worker is going to block.
+      //
+      // Worker must hold global token for at least ONE entire SS/LSS, b/c
+      // global token can arrive at any time when using async.
       if (asyncConf.haveGlobalToken() &&
-          superstepsUntilTokenRevoke == 0) {
+          (superstepsUntilTokenRevoke == 0 || asyncConf.needBarrier())) {
         WorkerInfo nextWorker = null;
         boolean getNextWorker = false;
 
@@ -1335,12 +1343,12 @@ public class BspServiceWorker<I extends WritableComparable,
 
         // reset counter
         superstepsUntilTokenRevoke = getServerData().getPartitionStore().
-          getNumPartitions();
+          getNumPartitions() + 1;
 
         asyncConf.revokeGlobalToken();
         sendGlobalToken(nextWorker);
-        //LOG.info("[[TESTING]] sent global token to: " +
-        //         nextWorker.getTaskId());
+        LOG.info("[[TESTING]] sent global token to: " +
+                 nextWorker.getTaskId());
 
         // wait for all messages, including token hand-over, to send
         // (this ensures serializability)
@@ -1367,7 +1375,7 @@ public class BspServiceWorker<I extends WritableComparable,
           getPartitionIds().iterator().next();
       }
       asyncConf.setLocalTokenHolder(nextPartitionId);
-      //LOG.info("[[TESTING]] local token: " + nextPartitionId);
+      LOG.info("[[TESTING]] local token: " + nextPartitionId);
     }
   }
 
@@ -1478,13 +1486,20 @@ public class BspServiceWorker<I extends WritableComparable,
         //
         // If doing multi-phase computation, return ONLY if message is
         // for current phase. Do not return if it is for the next phase.
-        if (asyncConf.getInFlightBytes() < prevInFlightBytes &&
-            (!asyncConf.isMultiPhase() ||
-             getServerData().getRemoteMessageStore().hasMessages())) {
+        //
+        // If doing serialized computation, also unblock on global token.
+        if ((asyncConf.getInFlightBytes() < prevInFlightBytes &&
+             (!asyncConf.isMultiPhase() ||
+              getServerData().getRemoteMessageStore().hasMessages())) ||
+            (asyncConf.isSerialized() && asyncConf.haveGlobalToken())) {
           try {
             // YH: "true" for recursive not really needed but false
             // won't make it any faster, so leave it to be safe
             getZkExt().deleteExt(finishedWorkerPath, -1, true);
+
+            if (asyncConf.haveGlobalToken()) {
+              LOG.info("[[TESTING]] unblock due to global token!");
+            }
             return false;
 
           } catch (KeeperException e) {
@@ -1499,6 +1514,7 @@ public class BspServiceWorker<I extends WritableComparable,
         // not a message; reset condition var
         getSuperstepReadyToFinishEvent().reset();
       }
+
       return true;
 
     } catch (KeeperException e) {

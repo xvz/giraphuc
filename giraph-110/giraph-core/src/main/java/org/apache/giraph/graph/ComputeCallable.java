@@ -254,7 +254,10 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
     // Make sure this is thread-safe across runs
     synchronized (partition) {
       for (Vertex<I, V, E> vertex : partition) {
-        if (asyncConf.isSerialized()) {
+        // YH: first superstep must allow ALL vertices to execute
+        // as it can involve initialization that MUST be done
+        if (asyncConf.isSerialized() &&
+            serviceWorker.getLogicalSuperstep() > 0) {
           // internal vertices can always execute
           // boundary vertices need token to execute
           switch (serviceWorker.getVertexType(vertex.getId())) {
