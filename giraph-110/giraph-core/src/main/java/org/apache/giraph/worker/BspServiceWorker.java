@@ -174,6 +174,14 @@ public class BspServiceWorker<I extends WritableComparable,
   /** Writer for worker progress */
   private final WorkerProgressWriter workerProgressWriter;
 
+  /** YH: Async configuration. */
+  private final AsyncConfiguration asyncConf;
+  /**
+   * YH: Number of supersteps to hold global token for.
+   * Global token is revoked when this is 0.
+   */
+  private int superstepsUntilTokenRevoke;
+
   // Per-Superstep Metrics
   /** Timer for WorkerContext#postSuperstep */
   private GiraphTimer wcPostSuperstepTimer;
@@ -229,6 +237,8 @@ public class BspServiceWorker<I extends WritableComparable,
         new WorkerProgressWriter(myProgressPath, getZkExt()) : null;
 
     GiraphMetrics.get().addSuperstepResetObserver(this);
+
+    asyncConf = conf.getAsyncConf();
   }
 
   @Override
@@ -795,8 +805,6 @@ public class BspServiceWorker<I extends WritableComparable,
     // 3. Wait until the partition assignment is complete and get it
     // 4. Get the aggregator values from the previous superstep
 
-    AsyncConfiguration asyncConf = getConfiguration().getAsyncConf();
-
     // initialize timer for visualization
     if (asyncConf.printTiming() && getLogicalSuperstep() == 0) {
       LOG.info("[[__TIMING]] " + workerInfo.getTaskId() + " id [who_am_i]");
@@ -822,13 +830,16 @@ public class BspServiceWorker<I extends WritableComparable,
       int numBothBoundary = numVertices - numInternal -
         numLocalBoundary - numRemoteBoundary;
 
-      LOG.info("[[TESTING]] ===========================================");
       LOG.info("[[TESTING]] task-id: " + workerInfo.getTaskId());
       LOG.info("[[TESTING]] partition-ids: (" + partitionIds + ")");
       LOG.info("[[TESTING]] worker-only (int, lbv, rbv, bbv): (" +
                numInternal + "," + numLocalBoundary + "," +
                numRemoteBoundary + "," + numBothBoundary + ")" +
                " -- numTot: " + numVertices);
+    }
+
+    if (asyncConf.isSerialized() && asyncConf.haveGlobalToken()) {
+      superstepsUntilTokenRevoke--;
     }
 
     //LOG.info("[[MST-internal]] ##START##: ss=" + getSuperstep() +
@@ -955,8 +966,6 @@ public class BspServiceWorker<I extends WritableComparable,
     // 5. Let the master know it is finished.
     // 6. Wait for the master's superstep info, and check if done
 
-    AsyncConfiguration asyncConf = getConfiguration().getAsyncConf();
-
     if (asyncConf.printTiming() &&
         getLogicalSuperstep() > INPUT_SUPERSTEP) {
       long elapsedTime = (System.nanoTime() - START_TIME) / 1000;
@@ -1003,80 +1012,9 @@ public class BspServiceWorker<I extends WritableComparable,
       workerSentMessageBytes = asyncConf.getInFlightBytes();
     }
 
-    // YH: assume barrier is needed
-    boolean needBarrier = true;
-
-    // YH: Cannot disable global barrier if SS <= INPUT_SUPERSTEP,
-    // as that is when message store is still uninitialized.
-    if (asyncConf.disableBarriers() &&
-        getLogicalSuperstep() > INPUT_SUPERSTEP) {
-
-      // local and remote conditions that determine whether there is
-      // more work to do (i.e., global barrier NOT needed)
-      boolean haveLocalWork;
-      boolean haveRemoteWork;
-
-      if (asyncConf.isMultiPhase()) {
-        // For multi-phase computation, we must check only the message stores
-        // for the current phase. Hence, we can't use workerSentMessages, since
-        // that also captures messages sent for the next phase.
-        haveLocalWork = getServerData().getLocalMessageStore().hasMessages();
-      } else {
-        // For single-phase algs (including need-all-messages and
-        // need-serializability), workerSentMessages is enough.
-        // This is faster than checking local message store.
-        //
-        // NOTE: we do NOT need to check if all vertices are halted,
-        // b/c if we have no messages, the vertices will have nothing
-        // to work with---we're better off waiting in that case
-        haveLocalWork = workerSentMessages > 0;
-      }
-
-      if (asyncConf.isSerialized() && !asyncConf.haveGlobalToken()) {
-        // If need serializable execution, then remote messages are
-        // ignored unless we are holding token. Remote messages can
-        // arrive, b/c there is always one worker with token.
-        haveRemoteWork = false;
-      } else if (asyncConf.needAllMsgs()) {
-        // If alg always sends messages, remoteMessageStore.hasMessages()
-        // will always return true (even if it has no actual new messages).
-        //
-        // Expensive to explicitly track arrival of "new" messages in
-        // remote store, so instead we look at whether all vertices are
-        // deactivated. Trick here is that vertex is immediately reactivated
-        // upon message arrival and doneVertices counter is modified too.
-        //
-        // TODO-YH: implement immediate waking + doneVertices tweaking...
-        //
-        // Right now (with the above unimplemented), there's a slim chance
-        // we may miss pending messages in remote message store. However,
-        // we will almost certainly catch it after unblocking from the
-        // lightweight barrier. Probability is low b/c it requires:
-        // 1. all vertices to have voted to halt (tolerance-based termination)
-        // 2. all remote messages are received AFTER the destination process
-        //   should be awoken, but BEFORE partition stats are recorded
-        //
-        // (2) is generally very unlikely, because it requires that all
-        // remote messages to this worker arrive in very particular time frame.
-        // Additionally, it is highly unlikely for sender vertex to not have
-        // local neighbours (or remote neighbours in other workers) that will
-        // also fail to see its messages. Since all workers arrive on
-        // lightweight barrier AFTER no more remote messages are in-transit,
-        // it's unlikely we'll block past lightweight barrier.
-        haveRemoteWork = localVertices != doneVertices;
-      } else {
-        // For multi-phase alg, this will only check remote store for
-        // current phase (and not next phase).
-        haveRemoteWork = getServerData().getRemoteMessageStore().hasMessages();
-      }
-
-      // If there is local or remote work to do, spend another
-      // logical superstep to process/complete them.
-      if (haveLocalWork || haveRemoteWork) {
-        needBarrier = false;
-      }
-    }
-    asyncConf.setNeedBarrier(needBarrier);
+    // YH: determine if global barriers are needed
+    asyncConf.setNeedBarrier(
+      needBarrier(workerSentMessages, localVertices, doneVertices));
 
     //LOG.info("[[MST-internal]] ##FINISH##: ss=" + getSuperstep() +
     //         ", lss=" + getLogicalSuperstep() +
@@ -1085,77 +1023,8 @@ public class BspServiceWorker<I extends WritableComparable,
     //         ", currPhase=" + asyncConf.getCurrentPhase() +
     //         ", isNewPhase=" + asyncConf.isNewPhase());
 
-    // Special case for initializing tokens
-    if (asyncConf.isSerialized() && getLogicalSuperstep() == INPUT_SUPERSTEP) {
-      WorkerInfo firstWorker = workerGraphPartitioner.getPartitionOwners().
-        iterator().next().getWorkerInfo();
-      if (workerInfo.equals(firstWorker)) {
-        asyncConf.getGlobalToken();
-        LOG.info("[[TESTING]] init global token: " + workerInfo.getTaskId());
-      }
-
-      int firstPartitionId = getServerData().getPartitionStore().
-        getPartitionIds().iterator().next();
-      asyncConf.setLocalTokenHolder(firstPartitionId);
-      LOG.info("[[TESTING]] init local token: " + firstPartitionId);
-    }
-
-    // Round-robin token passing, one LSS before passing token
-    // for BOTH local and global tokens
-    if (asyncConf.isSerialized() && getLogicalSuperstep() > INPUT_SUPERSTEP) {
-      // pass global token
-      if (asyncConf.haveGlobalToken()) {
-        WorkerInfo nextWorker = null;
-        boolean getNextWorker = false;
-
-        // scan through all partition owners until we find ourself,
-        // then next non-matching worker is who we send token to
-        for (PartitionOwner po : workerGraphPartitioner.getPartitionOwners()) {
-          if (workerInfo.equals(po.getWorkerInfo())) {
-            getNextWorker = true;
-          } else if (getNextWorker) {
-            nextWorker = po.getWorkerInfo();
-            break;
-          }
-        }
-
-        // wrap around (to first worker) if next worker wasn't found
-        if (nextWorker == null) {
-          nextWorker = workerGraphPartitioner.getPartitionOwners().
-            iterator().next().getWorkerInfo();
-        }
-
-        asyncConf.revokeGlobalToken();
-        sendGlobalToken(nextWorker);
-        //LOG.info("[[TESTING]] sent global token to: " +
-        //         nextWorker.getTaskId());
-
-        // wait for all messages, including token hand-over, to send
-        // (this ensures serializability)
-        waitForRequestsToFinish();
-      }
-
-      // pass local token
-      boolean getNextPartition = false;
-      int nextPartitionId = -1;
-
-      for (int i : getServerData().getPartitionStore().getPartitionIds()) {
-        if (getNextPartition) {
-          nextPartitionId = i;
-          break;
-        }
-        if (asyncConf.haveLocalToken(i)) {
-          getNextPartition = true;
-        }
-      }
-
-      // wrap around
-      if (nextPartitionId == -1) {
-        nextPartitionId = getServerData().getPartitionStore().
-          getPartitionIds().iterator().next();
-      }
-      asyncConf.setLocalTokenHolder(nextPartitionId);
-      //LOG.info("[[TESTING]] local token: " + nextPartitionId);
+    if (asyncConf.isSerialized()) {
+      roundRobinTokens();
     }
 
     if (asyncConf.needBarrier()) {
@@ -1327,12 +1196,179 @@ public class BspServiceWorker<I extends WritableComparable,
   // CHECKSTYLE: resume MethodLengthCheck
 
   /**
-   * YH: Returns starting time of SS0 for timing purposes.
+   * YH: Returns whether global barrier is required.
    *
-   * @return Starting time of superstep 0 (nanoseconds)
+   * @param workerSentMessages Number of sent messages (worker)
+   * @param localVertices Number of vertices (worker)
+   * @param doneVertices Number of finished vertices (worker)
+   * @return True if global barrier is required.
    */
-  public static long getSS0StartTime() {
-    return START_TIME;
+  private boolean needBarrier(long workerSentMessages,
+                           long localVertices,
+                           long doneVertices) {
+    // assume barrier is needed
+    boolean needBarrier = true;
+
+    // Cannot disable global barrier if SS <= INPUT_SUPERSTEP,
+    // as that is when message store is still uninitialized.
+    if (asyncConf.disableBarriers() &&
+        getLogicalSuperstep() > INPUT_SUPERSTEP) {
+
+      // local and remote conditions that determine whether there is
+      // more work to do (i.e., global barrier NOT needed)
+      boolean haveLocalWork;
+      boolean haveRemoteWork;
+
+      if (asyncConf.isMultiPhase()) {
+        // For multi-phase computation, we must check only the message stores
+        // for the current phase. Hence, we can't use workerSentMessages, since
+        // that also captures messages sent for the next phase.
+        haveLocalWork = getServerData().getLocalMessageStore().hasMessages();
+      } else {
+        // For single-phase algs (including need-all-messages and
+        // need-serializability), workerSentMessages is enough.
+        // This is faster than checking local message store.
+        //
+        // NOTE: we do NOT need to check if all vertices are halted,
+        // b/c if we have no messages, the vertices will have nothing
+        // to work with---we're better off waiting in that case
+        haveLocalWork = workerSentMessages > 0;
+      }
+
+      if (asyncConf.isSerialized() && !asyncConf.haveGlobalToken()) {
+        // If need serializable execution, then remote messages are
+        // ignored unless we are holding token. Remote messages can
+        // arrive, b/c there is always one worker with token.
+        haveRemoteWork = false;
+      } else if (asyncConf.needAllMsgs()) {
+        // If alg always sends messages, remoteMessageStore.hasMessages()
+        // will always return true (even if it has no actual new messages).
+        //
+        // Expensive to explicitly track arrival of "new" messages in
+        // remote store, so instead we look at whether all vertices are
+        // deactivated. Trick here is that vertex is immediately reactivated
+        // upon message arrival and doneVertices counter is modified too.
+        //
+        // TODO-YH: implement immediate waking + doneVertices tweaking...
+        //
+        // Right now (with the above unimplemented), there's a slim chance
+        // we may miss pending messages in remote message store. However,
+        // we will almost certainly catch it after unblocking from the
+        // lightweight barrier. Probability is low b/c it requires:
+        // 1. all vertices to have voted to halt (tolerance-based termination)
+        // 2. all remote messages are received AFTER the destination process
+        //   should be awoken, but BEFORE partition stats are recorded
+        //
+        // (2) is generally very unlikely, because it requires that all
+        // remote messages to this worker arrive in very particular time frame.
+        // Additionally, it is highly unlikely for sender vertex to not have
+        // local neighbours (or remote neighbours in other workers) that will
+        // also fail to see its messages. Since all workers arrive on
+        // lightweight barrier AFTER no more remote messages are in-transit,
+        // it's unlikely we'll block past lightweight barrier.
+        haveRemoteWork = localVertices != doneVertices;
+      } else {
+        // For multi-phase alg, this will only check remote store for
+        // current phase (and not next phase).
+        haveRemoteWork = getServerData().getRemoteMessageStore().hasMessages();
+      }
+
+      // If there is local or remote work to do, spend another
+      // logical superstep to process/complete them.
+      if (haveLocalWork || haveRemoteWork) {
+        needBarrier = false;
+      }
+    }
+
+    return needBarrier;
+  }
+
+  /**
+   * YH: Passes local and global tokens around in round robin fashion.
+   * Local tokens are moved every LSS, while global tokens are moved
+   * every "num-partitions" LSS.
+   */
+  private void roundRobinTokens() {
+    if (getLogicalSuperstep() == INPUT_SUPERSTEP) {
+      // special case for initializing tokens
+      LOG.info("[[TESTING]] ===========================================");
+      WorkerInfo firstWorker = workerGraphPartitioner.getPartitionOwners().
+        iterator().next().getWorkerInfo();
+      if (workerInfo.equals(firstWorker)) {
+        asyncConf.getGlobalToken();
+        LOG.info("[[TESTING]] init global token: " + workerInfo.getTaskId());
+      }
+      // revoke global token after num-partition supersteps
+      superstepsUntilTokenRevoke = getServerData().getPartitionStore().
+        getNumPartitions();
+
+      int firstPartitionId = getServerData().getPartitionStore().
+        getPartitionIds().iterator().next();
+      asyncConf.setLocalTokenHolder(firstPartitionId);
+      LOG.info("[[TESTING]] init local token: " + firstPartitionId);
+
+    } else {
+      // Pass global token only after holding for some number of supersteps.
+      // This must be at least ONE SS/LSS, since global token can arrive
+      // during SS when using async.
+      if (asyncConf.haveGlobalToken() &&
+          superstepsUntilTokenRevoke == 0) {
+        WorkerInfo nextWorker = null;
+        boolean getNextWorker = false;
+
+        // scan through all partition owners until we find ourself,
+        // then next non-matching worker is who we send token to
+        for (PartitionOwner po : workerGraphPartitioner.getPartitionOwners()) {
+          if (workerInfo.equals(po.getWorkerInfo())) {
+            getNextWorker = true;
+          } else if (getNextWorker) {
+            nextWorker = po.getWorkerInfo();
+            break;
+          }
+        }
+
+        // wrap around (to first worker) if next worker wasn't found
+        if (nextWorker == null) {
+          nextWorker = workerGraphPartitioner.getPartitionOwners().
+            iterator().next().getWorkerInfo();
+        }
+
+        // reset counter
+        superstepsUntilTokenRevoke = getServerData().getPartitionStore().
+          getNumPartitions();
+
+        asyncConf.revokeGlobalToken();
+        sendGlobalToken(nextWorker);
+        //LOG.info("[[TESTING]] sent global token to: " +
+        //         nextWorker.getTaskId());
+
+        // wait for all messages, including token hand-over, to send
+        // (this ensures serializability)
+        waitForRequestsToFinish();
+      }
+
+      // pass local token
+      boolean getNextPartition = false;
+      int nextPartitionId = -1;
+
+      for (int i : getServerData().getPartitionStore().getPartitionIds()) {
+        if (getNextPartition) {
+          nextPartitionId = i;
+          break;
+        }
+        if (asyncConf.haveLocalToken(i)) {
+          getNextPartition = true;
+        }
+      }
+
+      // wrap around
+      if (nextPartitionId == -1) {
+        nextPartitionId = getServerData().getPartitionStore().
+          getPartitionIds().iterator().next();
+      }
+      asyncConf.setLocalTokenHolder(nextPartitionId);
+      //LOG.info("[[TESTING]] local token: " + nextPartitionId);
+    }
   }
 
   /**
@@ -1343,6 +1379,16 @@ public class BspServiceWorker<I extends WritableComparable,
   private void sendGlobalToken(WorkerInfo workerInfo) {
     workerClient.sendWritableRequest(
       workerInfo.getTaskId(), new SendGlobalTokenRequest<I, V, E>());
+  }
+
+
+  /**
+   * YH: Returns starting time of SS0 for timing purposes.
+   *
+   * @return Starting time of superstep 0 (nanoseconds)
+   */
+  public static long getSS0StartTime() {
+    return START_TIME;
   }
 
   /**
@@ -1432,9 +1478,8 @@ public class BspServiceWorker<I extends WritableComparable,
         //
         // If doing multi-phase computation, return ONLY if message is
         // for current phase. Do not return if it is for the next phase.
-        if (getConfiguration().
-            getAsyncConf().getInFlightBytes() < prevInFlightBytes &&
-            (!getConfiguration().getAsyncConf().isMultiPhase() ||
+        if (asyncConf.getInFlightBytes() < prevInFlightBytes &&
+            (!asyncConf.isMultiPhase() ||
              getServerData().getRemoteMessageStore().hasMessages())) {
           try {
             // YH: "true" for recursive not really needed but false
@@ -1906,7 +1951,7 @@ public class BspServiceWorker<I extends WritableComparable,
       partition.write(verticesOutputStream);
       // write messages
       // YH: write out all message stores as needed
-      if (getConfiguration().getAsyncConf().isAsync()) {
+      if (asyncConf.isAsync()) {
         getServerData().getRemoteMessageStore().
           writePartition(verticesOutputStream, partition.getId());
         getServerData().getLocalMessageStore().
@@ -1916,7 +1961,7 @@ public class BspServiceWorker<I extends WritableComparable,
           writePartition(verticesOutputStream, partition.getId());
       }
 
-      if (getConfiguration().getAsyncConf().isMultiPhase()) {
+      if (asyncConf.isMultiPhase()) {
         getServerData().getNextPhaseRemoteMessageStore().
           writePartition(verticesOutputStream, partition.getId());
         getServerData().getNextPhaseLocalMessageStore().
@@ -1982,14 +2027,14 @@ public class BspServiceWorker<I extends WritableComparable,
     try {
       // clear old message stores
       // YH: clear stores based on what's enabled/disabled
-      if (getConfiguration().getAsyncConf().isAsync()) {
+      if (asyncConf.isAsync()) {
         getServerData().getRemoteMessageStore().clearAll();
         getServerData().getLocalMessageStore().clearAll();
       } else {
         getServerData().getCurrentMessageStore().clearAll();
       }
 
-      if (getConfiguration().getAsyncConf().isMultiPhase()) {
+      if (asyncConf.isMultiPhase()) {
         getServerData().getNextPhaseRemoteMessageStore().clearAll();
         getServerData().getNextPhaseLocalMessageStore().clearAll();
       }
@@ -2043,7 +2088,7 @@ public class BspServiceWorker<I extends WritableComparable,
           partition.readFields(partitionsStream);
 
           // YH: restore correct message stores
-          if (getConfiguration().getAsyncConf().isAsync()) {
+          if (asyncConf.isAsync()) {
             getServerData().getRemoteMessageStore().
               readFieldsForPartition(partitionsStream, partitionId);
             getServerData().getLocalMessageStore().
@@ -2053,7 +2098,7 @@ public class BspServiceWorker<I extends WritableComparable,
               readFieldsForPartition(partitionsStream, partitionId);
           }
 
-          if (getConfiguration().getAsyncConf().isMultiPhase()) {
+          if (asyncConf.isMultiPhase()) {
             getServerData().getNextPhaseRemoteMessageStore().
               readFieldsForPartition(partitionsStream, partitionId);
             getServerData().getNextPhaseLocalMessageStore().
@@ -2363,8 +2408,7 @@ else[HADOOP_NON_SECURE]*/
   public void prepareSuperstep() {
     // YH: global processing for aggregators only occurs for global supersteps
     // (nothing needs to be done for local processing)
-    if (getSuperstep() != INPUT_SUPERSTEP &&
-        getConfiguration().getAsyncConf().needBarrier()) {
+    if (getSuperstep() != INPUT_SUPERSTEP && asyncConf.needBarrier()) {
       aggregatorHandler.prepareSuperstep(workerAggregatorRequestProcessor);
     }
   }

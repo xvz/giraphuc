@@ -99,6 +99,9 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
   /** Get the start time in nanos */
   private final long startNanos = TIME.getNanoseconds();
 
+  /** YH: Async configuration */
+  private final AsyncConfiguration asyncConf;
+
   // Per-Superstep Metrics
   /** Messages sent */
   private final Counter messagesSentCounter;
@@ -135,6 +138,8 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
     messagesSentCounter = metrics.getCounter(MetricNames.MESSAGES_SENT);
     messageBytesSentCounter =
       metrics.getCounter(MetricNames.MESSAGE_BYTES_SENT);
+
+    asyncConf = configuration.getAsyncConf();
   }
 
   @Override
@@ -246,8 +251,6 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         new PartitionStats(partition.getId(), 0, 0, 0, 0, 0);
     long verticesComputedProgress = 0;
 
-    AsyncConfiguration asyncConf = configuration.getAsyncConf();
-
     // Make sure this is thread-safe across runs
     synchronized (partition) {
       for (Vertex<I, V, E> vertex : partition) {
@@ -350,7 +353,6 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
     // YH: messageStore and localMessageStore are set correctly by
     // GraphTaskManager to be remote-only/BSP and local-only/BSP
 
-    AsyncConfiguration asyncConf = configuration.getAsyncConf();
     Iterable<M1> messages;
 
     if (asyncConf.isAsync()) {
@@ -387,7 +389,6 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
    * @return Local messages for the vertex.
    */
   private Iterable<M1> getLocalMessages(I vertexId) throws IOException {
-    AsyncConfiguration asyncConf = configuration.getAsyncConf();
     Iterable<M1> messages;
 
     if (asyncConf.isAsync()) {
