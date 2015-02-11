@@ -1532,6 +1532,14 @@ public class BspServiceWorker<I extends WritableComparable,
 
         // If doing serialized computation, unblock on global token
         // to pass it along (since this worker doesn't need it).
+        //
+        // TODO-YH: For termination, workers will keep passing the
+        // token around. The current naive approach relies on race
+        // condition where, eventually, a worker will block on the
+        // lightweigth barrier and miss seeing the token.
+        // (This is less efficient than properly tracking completed
+        // workers but does not affect correctness, since workers
+        // that need the token will block in a different manner.)
         if (asyncConf.isSerialized() && asyncConf.haveGlobalToken()) {
           LOG.info("[[TESTING]] unblock to pass along token");
           roundRobinTokens();
@@ -1570,8 +1578,6 @@ public class BspServiceWorker<I extends WritableComparable,
       while (getZkExt().exists(superstepReadyToFinishNode, true) == null) {
         getSuperstepReadyToFinishEvent().waitForever();
 
-        // TODO-YH: race condition? what if token arrives
-        // just before, s.t. we miss it?
         if (asyncConf.haveGlobalToken()) {
           LOG.info("[[TESTING]] unblock b/c got token");
           return;
