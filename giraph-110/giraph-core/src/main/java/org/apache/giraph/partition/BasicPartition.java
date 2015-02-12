@@ -112,7 +112,7 @@ public abstract class BasicPartition<I extends WritableComparable,
       // To support mutations, we need to augment Vertex's edge mutation
       // functions with "is-boundary?" rechecks. (If boolean is added
       // to Vertex, need to modify WritableUtils as well.)
-      if (getConf().getAsyncConf().isSerialized()) {
+      if (getConf().getAsyncConf().tokenSerialized()) {
         boolean isRemoteBoundary = false;
         boolean isLocalBoundary = false;
 

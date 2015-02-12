@@ -19,14 +19,25 @@
 package org.apache.giraph.partition;
 
 import com.google.common.collect.Lists;
+import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.worker.WorkerInfo;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
+import org.apache.hadoop.io.WritableUtils;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.FloatWritable;
+import org.apache.hadoop.io.DoubleWritable;
 
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.floats.FloatOpenHashSet;
+import it.unimi.dsi.fastutil.doubles.DoubleOpenHashSet;
+import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Implements hash-based partitioning from the id hash code.
@@ -45,14 +56,59 @@ public class HashWorkerPartitioner<I extends WritableComparable,
   protected List<PartitionOwner> partitionOwnerList =
       Lists.newArrayList();
 
+  /** YH: Provided configuration */
+  private ImmutableClassesGiraphConfiguration conf;
+
   // YH: w/ hash partitioning, edge cuts are extremely high,
   // meaning 99%+ of vertices are usually local+remote boundary.
   /** YH: Set of internal vertex ids (owned by this worker only) */
-  private IntOpenHashSet internalVertices = new IntOpenHashSet();
+  private Set internalVertices;
   /** YH: Set of local boundary vertex ids (owned by this worker only) */
-  private IntOpenHashSet localBoundaryVertices = new IntOpenHashSet();
+  private Set localBoundaryVertices;
   /** YH: Set of remote boundary vertex ids (owned by this worker only) */
-  private IntOpenHashSet remoteBoundaryVertices = new IntOpenHashSet();
+  private Set remoteBoundaryVertices;
+
+  /** YH: whether vertex ids need to be cloned */
+  private boolean cloneVertexId;
+
+  /**
+   * YH: Constructor.
+   *
+   * @param conf Configuration used.
+   */
+  public HashWorkerPartitioner(ImmutableClassesGiraphConfiguration conf) {
+    this.conf = conf;
+
+    // not required for distributed locking
+    if (conf.getAsyncConf().tokenSerialized()) {
+      Class<I> vertexIdClass = conf.getVertexIdClass();
+      cloneVertexId = false;
+
+      // TODO-YH: there's probably a cleaner way of doing this
+      if (vertexIdClass.equals(IntWritable.class)) {
+        internalVertices = new IntOpenHashSet();
+        localBoundaryVertices = new IntOpenHashSet();
+        remoteBoundaryVertices = new IntOpenHashSet();
+      } else if (vertexIdClass.equals(LongWritable.class)) {
+        internalVertices = new LongOpenHashSet();
+        localBoundaryVertices = new LongOpenHashSet();
+        remoteBoundaryVertices = new LongOpenHashSet();
+      } else if (vertexIdClass.equals(FloatWritable.class)) {
+        internalVertices = new FloatOpenHashSet();
+        localBoundaryVertices = new FloatOpenHashSet();
+        remoteBoundaryVertices = new FloatOpenHashSet();
+      } else if (vertexIdClass.equals(DoubleWritable.class)) {
+        internalVertices = new DoubleOpenHashSet();
+        localBoundaryVertices = new DoubleOpenHashSet();
+        remoteBoundaryVertices = new DoubleOpenHashSet();
+      } else {
+        internalVertices = new ObjectOpenHashSet<I>();
+        localBoundaryVertices = new ObjectOpenHashSet<I>();
+        remoteBoundaryVertices = new ObjectOpenHashSet<I>();
+        cloneVertexId = true;
+      }
+    }
+  }
 
   @Override
   public PartitionOwner createPartitionOwner() {
@@ -78,23 +134,22 @@ public class HashWorkerPartitioner<I extends WritableComparable,
     // during computation (when compute threads are running)
     switch (type) {
     case INTERNAL:
-      isType = internalVertices.contains(vertexId.hashCode());
+      isType = internalVertices.contains(vertexId);
       break;
     case LOCAL_BOUNDARY:
-      isType = localBoundaryVertices.contains(vertexId.hashCode());
+      isType = localBoundaryVertices.contains(vertexId);
       break;
     case REMOTE_BOUNDARY:
-      isType = remoteBoundaryVertices.contains(vertexId.hashCode());
+      isType = remoteBoundaryVertices.contains(vertexId);
       break;
     case BOTH_BOUNDARY:
-      isType = !(internalVertices.contains(vertexId.hashCode()) ||
-                 localBoundaryVertices.contains(vertexId.hashCode()) ||
-                 remoteBoundaryVertices.contains(vertexId.hashCode()));
+      isType = !(internalVertices.contains(vertexId) ||
+                 localBoundaryVertices.contains(vertexId) ||
+                 remoteBoundaryVertices.contains(vertexId));
       break;
     default:
       throw new RuntimeException("Invalid vertex type!");
     }
-    // CHECKSTYLE: resume IndentationCheck
 
     return isType;
   }
@@ -109,11 +164,11 @@ public class HashWorkerPartitioner<I extends WritableComparable,
    * @return Type of vertex
    */
   public VertexType getVertexType(I vertexId) {
-    if (internalVertices.contains(vertexId.hashCode())) {
+    if (internalVertices.contains(vertexId)) {
       return VertexType.INTERNAL;
-    } else if (localBoundaryVertices.contains(vertexId.hashCode())) {
+    } else if (localBoundaryVertices.contains(vertexId)) {
       return VertexType.LOCAL_BOUNDARY;
-    } else if (remoteBoundaryVertices.contains(vertexId.hashCode())) {
+    } else if (remoteBoundaryVertices.contains(vertexId)) {
       return VertexType.REMOTE_BOUNDARY;
     } else {
       return VertexType.BOTH_BOUNDARY;
@@ -127,23 +182,26 @@ public class HashWorkerPartitioner<I extends WritableComparable,
    * @param type Vertex type
    */
   public void setVertexType(I vertexId, VertexType type) {
+    // cloning only needed when I is not primitive (wrapper) type
+    I safeVertexId = cloneVertexId ?
+      WritableUtils.clone(vertexId, conf) : vertexId;
+
     // checkstyle has a stupid requirement for nested {}s in cases
     // CHECKSTYLE: stop IndentationCheck
     switch (type) {
     case INTERNAL:
-      // TODO-YH: collisions if I is not numeric?
       synchronized (internalVertices) {
-        internalVertices.add(vertexId.hashCode());
+        internalVertices.add(safeVertexId);
       }
       return;
     case LOCAL_BOUNDARY:
       synchronized (localBoundaryVertices) {
-        localBoundaryVertices.add(vertexId.hashCode());
+        localBoundaryVertices.add(safeVertexId);
       }
       return;
     case REMOTE_BOUNDARY:
       synchronized (remoteBoundaryVertices) {
-        remoteBoundaryVertices.add(vertexId.hashCode());
+        remoteBoundaryVertices.add(safeVertexId);
       }
       return;
     case BOTH_BOUNDARY:

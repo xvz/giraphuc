@@ -256,7 +256,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       for (Vertex<I, V, E> vertex : partition) {
         // YH: first superstep must allow ALL vertices to execute
         // as it can involve initialization that MUST be done
-        if (asyncConf.isSerialized() &&
+        if (asyncConf.tokenSerialized() &&
             serviceWorker.getLogicalSuperstep() > 0) {
           // internal vertices can always execute
           // boundary vertices need token to execute
@@ -290,6 +290,12 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
           default:
             throw new RuntimeException("Invalid vertex type!");
           }
+
+        } else if (asyncConf.lockSerialized() &&
+                   serviceWorker.getLogicalSuperstep() > 0) {
+          // TODO-YH: stuff
+          continue;
+
         } else {
           // regular non-serializable execution
           computeVertex(computation, partition, vertex,

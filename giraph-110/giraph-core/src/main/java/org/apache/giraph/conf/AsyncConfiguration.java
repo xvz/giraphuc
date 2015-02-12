@@ -54,12 +54,18 @@ public class AsyncConfiguration {
   /** Local in-flight message bytes */
   private AtomicLong inFlightBytes;
 
-  /** Whether algorithm requires a serializable execution. */
-  private boolean isSerialized;
+  /** Whether algorithm requires a serializable execution, via tokens. */
+  private boolean tokenSerialized;
   /** Whether worker has global token. */
   private boolean haveGlobalToken;
   /** Id of partition holding local token. */
   private int localTokenId;
+
+  /**
+   * Whether algorithm requires a serializable execution,
+   * via distributed locking
+   */
+  private boolean lockSerialized;
 
   /** Whether or not to print out timing information */
   private boolean printTiming;
@@ -76,11 +82,17 @@ public class AsyncConfiguration {
    * @param conf GiraphConfiguration
    */
   public AsyncConfiguration(ImmutableClassesGiraphConfiguration conf) {
+    // get user configs
     disableBarriers = GiraphConstants.ASYNC_DISABLE_BARRIERS.get(conf);
     isAsync = disableBarriers || GiraphConstants.ASYNC_DO_ASYNC.get(conf);
     needAllMsgs = isAsync && GiraphConstants.ASYNC_NEED_ALL_MSGS.get(conf);
     isMultiPhase = isAsync && GiraphConstants.ASYNC_MULTI_PHASE.get(conf);
-    isSerialized = GiraphConstants.ASYNC_DO_SERIALIZED.get(conf);
+
+    // if both enabled, arbitrarily take token over lock
+    tokenSerialized = GiraphConstants.ASYNC_TOKEN_SERIALIZED.get(conf);
+    lockSerialized = !tokenSerialized &&
+      GiraphConstants.ASYNC_LOCK_SERIALIZED.get(conf);
+
     printTiming = GiraphConstants.ASYNC_PRINT_TIMING.get(conf);
 
     // This only sets isNewPhase for SS -1 (INPUT_SUPERSTEP).
@@ -244,12 +256,12 @@ public class AsyncConfiguration {
 
 
   /**
-   * Return whether or not a serializable execution is needed.
+   * Return whether or not a serializable execution via token is needed.
    *
-   * @return True if serializable execution is needed
+   * @return True if serializable execution via token is needed
    */
-  public boolean isSerialized() {
-    return isSerialized;
+  public boolean tokenSerialized() {
+    return tokenSerialized;
   }
 
   /**
@@ -294,6 +306,17 @@ public class AsyncConfiguration {
    */
   public boolean haveLocalToken(int partitionId) {
     return localTokenId == partitionId;
+  }
+
+
+  /**
+   * Return whether or not a serializable execution
+   * via dist locking is needed.
+   *
+   * @return True if serializable execution via locking is needed
+   */
+  public boolean lockSerialized() {
+    return lockSerialized;
   }
 
 

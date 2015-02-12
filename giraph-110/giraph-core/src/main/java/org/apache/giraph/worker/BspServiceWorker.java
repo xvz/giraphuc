@@ -846,7 +846,7 @@ public class BspServiceWorker<I extends WritableComparable,
     //         ", isNewPhase=" + asyncConf.isNewPhase());
 
     // YH: decrement revoke counter if needed
-    if (asyncConf.isSerialized() && asyncConf.haveGlobalToken()) {
+    if (asyncConf.tokenSerialized() && asyncConf.haveGlobalToken()) {
       superstepsUntilTokenRevoke--;
     }
 
@@ -1024,7 +1024,7 @@ public class BspServiceWorker<I extends WritableComparable,
     //         ", currPhase=" + asyncConf.getCurrentPhase() +
     //         ", isNewPhase=" + asyncConf.isNewPhase());
 
-    if (asyncConf.isSerialized()) {
+    if (asyncConf.tokenSerialized()) {
       roundRobinTokens();
     }
 
@@ -1060,7 +1060,7 @@ public class BspServiceWorker<I extends WritableComparable,
         LOG.info("[[TESTING]] block on ltw barrier");
         // if global tokens are needed, block on lightweight
         // barrier WITHOUT doing ZK stuff
-        if (asyncConf.isSerialized() &&
+        if (asyncConf.tokenSerialized() &&
             needGlobalToken(localVertices, doneVertices)) {
           LOG.info("[[TESTING]]   waiting for token...");
           waitForGlobalToken();
@@ -1226,7 +1226,7 @@ public class BspServiceWorker<I extends WritableComparable,
       boolean haveLocalWork;
       boolean haveRemoteWork;
 
-      if (asyncConf.isMultiPhase() || asyncConf.isSerialized()) {
+      if (asyncConf.isMultiPhase() || asyncConf.tokenSerialized()) {
         // For multi-phase computation, we must check only the message stores
         // for the current phase. Hence, we can't use workerSentMessages, since
         // that also captures messages sent for the next phase.
@@ -1246,7 +1246,7 @@ public class BspServiceWorker<I extends WritableComparable,
         haveLocalWork = workerSentMessages > 0;
       }
 
-      if (asyncConf.isSerialized() && !asyncConf.haveGlobalToken()) {
+      if (asyncConf.tokenSerialized() && !asyncConf.haveGlobalToken()) {
         // If need serializable execution, then remote messages are
         // ignored unless we are holding token. Remote messages can
         // arrive, b/c there is always one worker with token.
@@ -1540,7 +1540,7 @@ public class BspServiceWorker<I extends WritableComparable,
         // (This is less efficient than properly tracking completed
         // workers but does not affect correctness, since workers
         // that need the token will block in a different manner.)
-        if (asyncConf.isSerialized() && asyncConf.haveGlobalToken()) {
+        if (asyncConf.tokenSerialized() && asyncConf.haveGlobalToken()) {
           LOG.info("[[TESTING]] unblock to pass along token");
           roundRobinTokens();
           // do not return, b/c we have no new work to do
