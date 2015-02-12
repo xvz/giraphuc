@@ -812,7 +812,7 @@ public class BspServiceWorker<I extends WritableComparable,
     }
 
     // TODO-YH: delete this
-    if (getLogicalSuperstep() == 0) {
+    if (asyncConf.tokenSerialized() && getLogicalSuperstep() == 0) {
       StringBuilder partitionIds = new StringBuilder();
       int numVertices = 0;
       for (int i : getServerData().getPartitionStore().getPartitionIds()) {
