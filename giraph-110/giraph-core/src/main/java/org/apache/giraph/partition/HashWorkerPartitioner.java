@@ -26,13 +26,9 @@ import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.FloatWritable;
-import org.apache.hadoop.io.DoubleWritable;
 
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
-import it.unimi.dsi.fastutil.floats.FloatOpenHashSet;
-import it.unimi.dsi.fastutil.doubles.DoubleOpenHashSet;
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 
 import java.util.Collection;
@@ -68,9 +64,6 @@ public class HashWorkerPartitioner<I extends WritableComparable,
   /** YH: Set of remote boundary vertex ids (owned by this worker only) */
   private Set remoteBoundaryVertices;
 
-  /** YH: whether vertex ids need to be cloned */
-  private boolean cloneVertexId;
-
   /**
    * YH: Constructor.
    *
@@ -82,9 +75,6 @@ public class HashWorkerPartitioner<I extends WritableComparable,
     // not required for distributed locking
     if (conf.getAsyncConf().tokenSerialized()) {
       Class<I> vertexIdClass = conf.getVertexIdClass();
-      cloneVertexId = false;
-
-      // TODO-YH: there's probably a cleaner way of doing this
       if (vertexIdClass.equals(IntWritable.class)) {
         internalVertices = new IntOpenHashSet();
         localBoundaryVertices = new IntOpenHashSet();
@@ -93,26 +83,12 @@ public class HashWorkerPartitioner<I extends WritableComparable,
         internalVertices = new LongOpenHashSet();
         localBoundaryVertices = new LongOpenHashSet();
         remoteBoundaryVertices = new LongOpenHashSet();
-      } else if (vertexIdClass.equals(FloatWritable.class)) {
-        internalVertices = new FloatOpenHashSet();
-        localBoundaryVertices = new FloatOpenHashSet();
-        remoteBoundaryVertices = new FloatOpenHashSet();
-      } else if (vertexIdClass.equals(DoubleWritable.class)) {
-        internalVertices = new DoubleOpenHashSet();
-        localBoundaryVertices = new DoubleOpenHashSet();
-        remoteBoundaryVertices = new DoubleOpenHashSet();
       } else {
         internalVertices = new ObjectOpenHashSet<I>();
         localBoundaryVertices = new ObjectOpenHashSet<I>();
         remoteBoundaryVertices = new ObjectOpenHashSet<I>();
-        cloneVertexId = true;
       }
     }
-  }
-
-  @Override
-  public PartitionOwner createPartitionOwner() {
-    return new BasicPartitionOwner();
   }
 
   /**
@@ -126,32 +102,24 @@ public class HashWorkerPartitioner<I extends WritableComparable,
    * @return True if vertexId has a matching vertex type
    */
   public boolean isVertexType(I vertexId, VertexType type) {
-    boolean isType;
-
     // YH: don't need synchronize b/c only time we write
     // to these sets is during input loading or mutations,
     // when no compute threads are running, and we read only
     // during computation (when compute threads are running)
     switch (type) {
     case INTERNAL:
-      isType = internalVertices.contains(vertexId);
-      break;
+      return contains(internalVertices, vertexId);
     case LOCAL_BOUNDARY:
-      isType = localBoundaryVertices.contains(vertexId);
-      break;
+      return contains(localBoundaryVertices, vertexId);
     case REMOTE_BOUNDARY:
-      isType = remoteBoundaryVertices.contains(vertexId);
-      break;
+      return contains(remoteBoundaryVertices, vertexId);
     case BOTH_BOUNDARY:
-      isType = !(internalVertices.contains(vertexId) ||
-                 localBoundaryVertices.contains(vertexId) ||
-                 remoteBoundaryVertices.contains(vertexId));
-      break;
+      return !(contains(internalVertices, vertexId) ||
+               contains(localBoundaryVertices, vertexId) ||
+               contains(remoteBoundaryVertices, vertexId));
     default:
       throw new RuntimeException("Invalid vertex type!");
     }
-
-    return isType;
   }
 
   /**
@@ -164,11 +132,11 @@ public class HashWorkerPartitioner<I extends WritableComparable,
    * @return Type of vertex
    */
   public VertexType getVertexType(I vertexId) {
-    if (internalVertices.contains(vertexId)) {
+    if (contains(internalVertices, vertexId)) {
       return VertexType.INTERNAL;
-    } else if (localBoundaryVertices.contains(vertexId)) {
+    } else if (contains(localBoundaryVertices, vertexId)) {
       return VertexType.LOCAL_BOUNDARY;
-    } else if (remoteBoundaryVertices.contains(vertexId)) {
+    } else if (contains(remoteBoundaryVertices, vertexId)) {
       return VertexType.REMOTE_BOUNDARY;
     } else {
       return VertexType.BOTH_BOUNDARY;
@@ -182,27 +150,15 @@ public class HashWorkerPartitioner<I extends WritableComparable,
    * @param type Vertex type
    */
   public void setVertexType(I vertexId, VertexType type) {
-    // cloning only needed when I is not primitive (wrapper) type
-    I safeVertexId = cloneVertexId ?
-      WritableUtils.clone(vertexId, conf) : vertexId;
-
-    // checkstyle has a stupid requirement for nested {}s in cases
-    // CHECKSTYLE: stop IndentationCheck
     switch (type) {
     case INTERNAL:
-      synchronized (internalVertices) {
-        internalVertices.add(safeVertexId);
-      }
+      synchronizedAdd(internalVertices, vertexId);
       return;
     case LOCAL_BOUNDARY:
-      synchronized (localBoundaryVertices) {
-        localBoundaryVertices.add(safeVertexId);
-      }
+      synchronizedAdd(localBoundaryVertices, vertexId);
       return;
     case REMOTE_BOUNDARY:
-      synchronized (remoteBoundaryVertices) {
-        remoteBoundaryVertices.add(safeVertexId);
-      }
+      synchronizedAdd(remoteBoundaryVertices, vertexId);
       return;
     case BOTH_BOUNDARY:
       // local+remote boundary will not be on any of the sets
@@ -211,8 +167,46 @@ public class HashWorkerPartitioner<I extends WritableComparable,
     default:
       throw new RuntimeException("Invalid vertex type!");
     }
-    // CHECKSTYLE: resume IndentationCheck
   }
+
+  /**
+   * YH: Checks if vertex id exists in a set.
+   *
+   * @param set Set to check
+   * @param vertexId Vertex id to look for
+   * @return True if vertexId is in set
+   */
+  private boolean contains(Set set, I vertexId) {
+    Class<I> vertexIdClass = conf.getVertexIdClass();
+    if (vertexIdClass.equals(IntWritable.class)) {
+      return set.contains(((IntWritable) vertexId).get());
+    } else if (vertexIdClass.equals(LongWritable.class)) {
+      return set.contains(((LongWritable) vertexId).get());
+    } else {
+      return set.contains(vertexId);
+    }
+  }
+
+  /**
+   * YH: Adds vertexId to set, synchronizing on set.
+   *
+   * @param set Set to add to
+   * @param vertexId Vertex id to add
+   */
+  private void synchronizedAdd(Set set, I vertexId) {
+    Class<I> vertexIdClass = conf.getVertexIdClass();
+    synchronized (set) {
+      if (vertexIdClass.equals(IntWritable.class)) {
+        set.add(((IntWritable) vertexId).get());
+      } else if (vertexIdClass.equals(LongWritable.class)) {
+        set.add(((LongWritable) vertexId).get());
+      } else {
+        // need to clone id when not primitive
+        set.add(WritableUtils.clone(vertexId, conf));
+      }
+    }
+  }
+
 
   /**
    * @return Number of internal vertices.
@@ -233,6 +227,12 @@ public class HashWorkerPartitioner<I extends WritableComparable,
    */
   public int numRemoteBoundaryVertices() {
     return remoteBoundaryVertices.size();
+  }
+
+
+  @Override
+  public PartitionOwner createPartitionOwner() {
+    return new BasicPartitionOwner();
   }
 
   @Override
