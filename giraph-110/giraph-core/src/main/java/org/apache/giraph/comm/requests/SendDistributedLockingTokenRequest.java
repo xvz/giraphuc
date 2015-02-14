@@ -19,6 +19,7 @@
 package org.apache.giraph.comm.requests;
 
 import org.apache.giraph.comm.ServerData;
+import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableUtils;
@@ -44,18 +45,31 @@ public class SendDistributedLockingTokenRequest<I extends WritableComparable,
   private I receiverId;
 
   /**
+   * Constructor used for reflection only
+   */
+  public SendDistributedLockingTokenRequest() {
+  }
+
+  /**
    * Constructor.
    *
    * @param senderId Sender vertex id
    * @param receiverId Receiver vertex id
+   * @param conf ImmutableClassesGiraphConfiguration
    */
-  public SendDistributedLockingTokenRequest(I senderId, I receiverId) {
+  public SendDistributedLockingTokenRequest(
+      I senderId, I receiverId,
+      ImmutableClassesGiraphConfiguration<I, V, E> conf) {
+    setConf(conf);    // getConf() is null until properly set
     this.senderId = WritableUtils.clone(senderId, getConf());
     this.receiverId = WritableUtils.clone(receiverId, getConf());
   }
 
   @Override
   public void readFieldsRequest(DataInput input) throws IOException {
+    // conf will be set by server handler
+    senderId = getConf().createVertexId();
+    receiverId = getConf().createVertexId();
     senderId.readFields(input);
     receiverId.readFields(input);
   }
