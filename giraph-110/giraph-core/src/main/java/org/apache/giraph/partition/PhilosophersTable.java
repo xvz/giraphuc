@@ -156,6 +156,7 @@ public class PhilosophersTable<I extends WritableComparable,
    * @param vertexId Vertex id (philosopher) to acquire forks for
    */
   public void acquireForks(I vertexId) {
+    LOG.info("[[TESTING]] " + vertexId + ": acquiring forks");
     boolean needRemoteFork = false;
     boolean needForks = false;
     LongWritable dstId = new LongWritable();  // reused
@@ -173,31 +174,43 @@ public class PhilosophersTable<I extends WritableComparable,
 
         if (haveToken(forkInfo) && !haveFork(forkInfo)) {
           forkInfo &= ~MASK_HAVE_TOKEN;
+          // must apply updates BEFORE sending token requests,
+          // as local requests that are satisified imimdeatily
+          // WILL modify forkInfo!!
+          neighbours.put(neighbourId, forkInfo);
           needForks = true;
+          LOG.info("[[TESTING]] " + vertexId + ":   missing fork " +
+                   neighbourId + " " + toString(forkInfo));
           dstId.set(neighbourId);
           needRemoteFork |= sendToken(vertexId, (I) dstId);
         } else if (!haveToken(forkInfo) &&
                    haveFork(forkInfo) && isDirty(forkInfo)) {
           forkInfo &= ~MASK_IS_DIRTY;
+          neighbours.put(neighbourId, forkInfo);
+          LOG.info("[[TESTING]] " + vertexId + ":   have fork " +
+                   neighbourId + " " + toString(forkInfo));
         } else {
           new RuntimeException("Unexpected philosopher state!");
         }
-
-        neighbours.put(neighbourId, forkInfo);
       }
     }
 
     if (needRemoteFork) {
+      LOG.info("[[TESTING]] " + vertexId + ":   flushing");
       serviceWorker.getWorkerClient().waitAllRequests();
+      LOG.info("[[TESTING]] " + vertexId + ":   done flush");
     }
 
     if (!needForks) {
+      LOG.info("[[TESTING]] " + vertexId + ": got all forks");
       return;
     }
 
     while (true) {
+      LOG.info("[[TESTING]] " + vertexId + ":   trying to get lock");
       // must lock entire inner loop so we never miss signals
       cvLock.lock();
+      LOG.info("[[TESTING]] " + vertexId + ":   got lock");
 
       // TODO-YH: use a id -> num-forks-got map, will make check faster
       // should recheck forks right away, since some if not all
@@ -207,8 +220,12 @@ public class PhilosophersTable<I extends WritableComparable,
         ObjectIterator<Long2ByteMap.Entry> itr =
           neighbours.long2ByteEntrySet().fastIterator();
         while (itr.hasNext()) {
-          byte forkInfo = itr.next().getByteValue();
+          // TODO-YH: compact this
+          Long2ByteMap.Entry e = itr.next();
+          byte forkInfo = e.getByteValue();
           if (!haveFork(forkInfo)) {
+            LOG.info("[[TESTING]] " + vertexId + ":  still need fork " +
+                     e.getLongKey());
             needForks = true;
             break;
           }
@@ -217,11 +234,13 @@ public class PhilosophersTable<I extends WritableComparable,
 
       if (!needForks) {
         cvLock.unlock();
+        LOG.info("[[TESTING]] " + vertexId + ": got all forks");
         break;
       }
 
       try {
         getFork.await();  // wait for signal
+        LOG.info("[[TESTING]] " + vertexId + ":  signalled");
       } catch (InterruptedException e) {
         throw new RuntimeException("Got interrupted!");  // blow up
       } finally {
@@ -237,6 +256,7 @@ public class PhilosophersTable<I extends WritableComparable,
    * @param vertexId Vertex id (philosopher) that finished eating
    */
   public void releaseForks(I vertexId) {
+    LOG.info("[[TESTING]] " + vertexId + ": releasing forks");
     boolean needFlush = false;
     LongWritable dstId = new LongWritable();  // reused
 
@@ -255,20 +275,26 @@ public class PhilosophersTable<I extends WritableComparable,
         if (haveToken(forkInfo)) {
           // send fork if our philosopher pair has requested it
           forkInfo &= ~MASK_HAVE_FORK;
+          neighbours.put(neighbourId, forkInfo);
+          LOG.info("[[TESTING]] " + vertexId + ": sending clean fork to " +
+                   neighbourId + " " + toString(forkInfo));
           dstId.set(neighbourId);
           needFlush |= sendFork(vertexId, (I) dstId);
         } else {
           // otherwise, explicitly dirty the fork
           // (so that fork is released immediately on token receipt)
           forkInfo |= MASK_IS_DIRTY;
+          neighbours.put(neighbourId, forkInfo);
+          LOG.info("[[TESTING]] " + vertexId + ": dirty fork " +
+                   neighbourId + " " + toString(forkInfo));
         }
-
-        neighbours.put(neighbourId, forkInfo);
       }
     }
 
     if (needFlush) {
+      LOG.info("[[TESTING]] " + vertexId + ": flushing");
       serviceWorker.getWorkerClient().waitAllRequests();
+      LOG.info("[[TESTING]] " + vertexId + ": done flush");
     }
   }
 
@@ -284,13 +310,21 @@ public class PhilosophersTable<I extends WritableComparable,
       getWorkerInfo().getTaskId();
 
     if (serviceWorker.getWorkerInfo().getTaskId() == dstTaskId) {
+      LOG.info("[[TESTING]] " + senderId +
+               ": send local token to " + receiverId);
       // handle request locally
       receiveToken(senderId, receiverId);
+      LOG.info("[[TESTING]] " + senderId +
+               ": SENT local token to " + receiverId);
       return false;
     } else {
+      LOG.info("[[TESTING]] " + senderId +
+               ": send remote token to " + receiverId);
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
         new SendDistributedLockingTokenRequest(senderId, receiverId, conf));
+      LOG.info("[[TESTING]] " + senderId +
+               ": SENT remote token to " + receiverId);
       return true;
     }
   }
@@ -307,13 +341,21 @@ public class PhilosophersTable<I extends WritableComparable,
       getWorkerInfo().getTaskId();
 
     if (serviceWorker.getWorkerInfo().getTaskId() == dstTaskId) {
+      LOG.info("[[TESTING]] " + senderId +
+               ": send local fork to " + receiverId);
       // handle request locally
       receiveFork(senderId, receiverId);
+      LOG.info("[[TESTING]] " + senderId +
+               ": SENT local fork to " + receiverId);
       return false;
     } else {
+      LOG.info("[[TESTING]] " + senderId +
+               ": send remote fork to " + receiverId);
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
         new SendDistributedLockingForkRequest(senderId, receiverId, conf));
+      LOG.info("[[TESTING]] " + senderId +
+               ": SENT remote fork to " + receiverId);
       return true;
     }
   }
@@ -336,6 +378,8 @@ public class PhilosophersTable<I extends WritableComparable,
 
       // fork requests are always sent with a token
       forkInfo |= MASK_HAVE_TOKEN;
+      LOG.info("[[TESTING]] " + receiverId + ": got token from " +
+               senderId  + " " + toString(forkInfo));
 
       // If fork is dirty, we can immediately send it.
       // Otherwise, return---fork holder will eventually see
@@ -349,12 +393,17 @@ public class PhilosophersTable<I extends WritableComparable,
       neighbours.put(neighbourId, forkInfo);
     }
 
-    // TODO-YH: this causes deadlock.. can't ACK??
-    //if (needFlush) {
-    //  LOG.info("[[TESTING]] " + receiverId + ": flushing");
-    //  serviceWorker.getWorkerClient().waitAllRequests();
-    //  LOG.info("[[TESTING]] " + receiverId + ": done flush");
-    //}
+    // TODO-YH: w/o async thread, this causes deadlock
+    if (needFlush) {
+      new Thread(new Runnable() {
+          @Override
+          public void run() {
+            LOG.info("[[TESTING]] flushing on separate thread");
+            serviceWorker.getWorkerClient().waitAllRequests();
+            LOG.info("[[TESTING]] done flush on separate thread");
+          }
+        }).start();
+    }
   }
 
   /**
@@ -372,12 +421,15 @@ public class PhilosophersTable<I extends WritableComparable,
       byte forkInfo = neighbours.get(neighbourId);
       forkInfo |= MASK_HAVE_FORK;
       neighbours.put(neighbourId, forkInfo);
+      LOG.info("[[TESTING]] " + receiverId + ": got fork from " +
+               senderId + " " + toString(forkInfo));
     }
 
     // signal fork arrival
     cvLock.lock();
     getFork.signalAll();
     cvLock.unlock();
+    LOG.info("[[TESTING]] " + receiverId + ": SENT signal");
   }
 
   /**
