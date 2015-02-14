@@ -70,7 +70,13 @@ public enum RequestType {
   /** Send aggregators from worker owner to other workers */
   SEND_AGGREGATORS_TO_WORKER_REQUEST(SendAggregatorsToWorkerRequest.class),
   /** YH: Send global token to a worker */
-  SEND_GLOBAL_TOKEN_REQUEST(SendGlobalTokenRequest.class);
+  SEND_GLOBAL_TOKEN_REQUEST(SendGlobalTokenRequest.class),
+  /** YH: Send distributed locking token to a worker */
+  SEND_DISTRIBUTED_LOCKING_TOKEN_REQUEST(
+    SendDistributedLockingTokenRequest.class),
+  /** YH: Send distributed locking fork to a worker */
+  SEND_DISTRIBUTED_LOCKING_FORK_REQUEST(
+    SendDistributedLockingForkRequest.class);
 
   /** Class of request which this type corresponds to */
   private final Class<? extends WritableRequest> requestClass;

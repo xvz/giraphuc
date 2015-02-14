@@ -18,62 +18,63 @@
 
 package org.apache.giraph.comm.requests;
 
-import org.apache.giraph.bsp.BspService;
 import org.apache.giraph.comm.ServerData;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
-import org.apache.log4j.Logger;
+import org.apache.hadoop.io.WritableUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
 /**
- * YH: Send the global token to another worker.
+ * YH: Send a token (fork request) to another worker.
  *
  * @param <I> Vertex id
  * @param <V> Vertex data
  * @param <E> Edge data
  */
-public class SendGlobalTokenRequest<I extends WritableComparable,
+public class SendDistributedLockingTokenRequest<I extends WritableComparable,
     V extends Writable, E extends Writable> extends
     WritableRequest<I, V, E> implements WorkerRequest<I, V, E> {
-  /** Class logger */
-  private static final Logger LOG =
-      Logger.getLogger(SendGlobalTokenRequest.class);
+
+  /** Sender vertex id */
+  private I senderId;
+  /** Receiver vertex id */
+  private I receiverId;
 
   /**
-   * Default constructor.
+   * Constructor.
+   *
+   * @param senderId Sender vertex id
+   * @param receiverId Receiver vertex id
    */
-  public SendGlobalTokenRequest() { }
+  public SendDistributedLockingTokenRequest(I senderId, I receiverId) {
+    this.senderId = WritableUtils.clone(senderId, getConf());
+    this.receiverId = WritableUtils.clone(receiverId, getConf());
+  }
 
   @Override
   public void readFieldsRequest(DataInput input) throws IOException {
+    senderId.readFields(input);
+    receiverId.readFields(input);
   }
 
   @Override
   public void writeRequest(DataOutput output) throws IOException {
+    senderId.write(output);
+    receiverId.write(output);
   }
 
   @Override
   public RequestType getType() {
-    return RequestType.SEND_GLOBAL_TOKEN_REQUEST;
+    return RequestType.SEND_DISTRIBUTED_LOCKING_TOKEN_REQUEST;
   }
 
   @Override
   public void doRequest(ServerData<I, V, E> serverData) {
-    // YH: server handler instantiates received requests using
-    // ReflectionUtils(class, config), which will set conf properly
-    // since WritableRequest is configurable (see RequestDecoder)
-    getConf().getAsyncConf().getGlobalToken();
-    LOG.info("[[TESTING]] got global token: " +
-             serverData.getServiceWorker().getWorkerInfo().getTaskId());
-
-    // signal worker if needed
-    if (getConf().getAsyncConf().disableBarriers()) {
-      ((BspService) serverData.getServiceWorker()).
-        getSuperstepReadyToFinishEvent().signal();
-    }
+    serverData.getServiceWorker().getPhilosophersTable().
+      receiveToken(senderId, receiverId);
   }
 
   @Override
@@ -81,5 +82,9 @@ public class SendGlobalTokenRequest<I extends WritableComparable,
     throw new RuntimeException("This is NEVER a local request!");
   }
 
-  // this request has no data, so use super.getSerializedSize()
+  @Override
+  public int getSerializedSize() {
+    // ids are not serialized beforehand, so can't determine size
+    return WritableRequest.UNKNOWN_SIZE;
+  }
 }

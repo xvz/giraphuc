@@ -29,7 +29,8 @@ import org.apache.giraph.metrics.GiraphTimerContext;
 import org.apache.giraph.partition.PartitionOwner;
 import org.apache.giraph.partition.PartitionStats;
 import org.apache.giraph.partition.PartitionStore;
-import org.apache.giraph.partition.VertexType;
+import org.apache.giraph.partition.PhilosophersTable;
+import org.apache.giraph.partition.VertexTypeStore;
 import org.apache.giraph.worker.WorkerAggregatorHandler;
 import org.apache.giraph.worker.WorkerContext;
 import org.apache.giraph.worker.WorkerInfo;
@@ -148,37 +149,6 @@ public interface CentralizedServiceWorker<I extends WritableComparable,
   int getPartitionId(I vertexId);
 
   /**
-   * YH: Whether a vertex id belongs to a particular vertex type.
-   *
-   * Thread-safe for concurrent is/getVertexType() calls ONLY.
-   * This is NOT thread-safe with concurrent setVertexType() calls!
-   *
-   * @param vertexId Vertex id
-   * @param type Vertex type
-   * @return True if vertexId has a matching vertex type
-   */
-  boolean isVertexType(I vertexId, VertexType type);
-
-  /**
-   * YH: Get vertex type for specified vertex id.
-   *
-   * Thread-safe for concurrent is/getVertexType() calls ONLY.
-   * This is NOT thread-safe with concurrent setVertexType() calls!
-   *
-   * @param vertexId Vertex id
-   * @return Type of vertex
-   */
-  VertexType getVertexType(I vertexId);
-
-  /**
-   * YH: Set/tag a vertex id with the specified type.
-   *
-   * @param vertexId Vertex id
-   * @param type Vertex type
-   */
-  void setVertexType(I vertexId, VertexType type);
-
-  /**
    * Whether a partition with given id exists on this worker.
    *
    * @param partitionId Partition id
@@ -259,6 +229,20 @@ public interface CentralizedServiceWorker<I extends WritableComparable,
    * @return SuperstepOutput
    */
   SuperstepOutput<I, V, E> getSuperstepOutput();
+
+  /**
+   * YH: Get the vertex type store. For token passing.
+   *
+   * @return Vertex type store
+   */
+  VertexTypeStore<I> getVertexTypeStore();
+
+  /**
+   * YH: Get the philosophers table. For distributed locking.
+   *
+   * @return Philosophers table
+   */
+  PhilosophersTable<I, V, E> getPhilosophersTable();
 
   /**
    * Clean up the service (no calls may be issued after this)

@@ -18,7 +18,6 @@
 
 package org.apache.giraph.partition;
 
-import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 
@@ -37,15 +36,6 @@ public class HashRangeWorkerPartitioner<I extends WritableComparable,
     extends HashWorkerPartitioner<I, V, E> {
   /** A transformed hashCode() must be strictly smaller than this. */
   private static final long HASH_LIMIT = 2L * Integer.MAX_VALUE + 2L;
-
-  /**
-   * YH: Constructor.
-   *
-   * @param conf Configuration used.
-   */
-  public HashRangeWorkerPartitioner(ImmutableClassesGiraphConfiguration conf) {
-    super(conf);
-  }
 
   @Override
   public PartitionOwner getPartitionOwner(I vertexId) {

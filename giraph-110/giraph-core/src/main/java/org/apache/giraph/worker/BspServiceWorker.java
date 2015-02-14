@@ -62,9 +62,9 @@ import org.apache.giraph.partition.PartitionExchange;
 import org.apache.giraph.partition.PartitionOwner;
 import org.apache.giraph.partition.PartitionStats;
 import org.apache.giraph.partition.PartitionStore;
-import org.apache.giraph.partition.HashWorkerPartitioner;
+import org.apache.giraph.partition.PhilosophersTable;
 import org.apache.giraph.partition.WorkerGraphPartitioner;
-import org.apache.giraph.partition.VertexType;
+import org.apache.giraph.partition.VertexTypeStore;
 import org.apache.giraph.utils.CallableFactory;
 import org.apache.giraph.utils.JMapHistoDumper;
 import org.apache.giraph.utils.LoggerUtils;
@@ -182,6 +182,11 @@ public class BspServiceWorker<I extends WritableComparable,
    */
   private int superstepsUntilTokenRevoke;
 
+  /** YH: Vertex type store/tracker for token serializability */
+  private VertexTypeStore<I> vertexTypeStore;
+  /** YH: Philosophers table for distributed locking serializability */
+  private PhilosophersTable<I, V, E> pTable;
+
   // Per-Superstep Metrics
   /** Timer for WorkerContext#postSuperstep */
   private GiraphTimer wcPostSuperstepTimer;
@@ -239,6 +244,12 @@ public class BspServiceWorker<I extends WritableComparable,
     GiraphMetrics.get().addSuperstepResetObserver(this);
 
     asyncConf = conf.getAsyncConf();
+
+    if (asyncConf.tokenSerialized()) {
+      vertexTypeStore = new VertexTypeStore<I>(conf);
+    } else if (asyncConf.lockSerialized()) {
+      pTable = new PhilosophersTable<I, V, E>(conf, this);
+    }
   }
 
   @Override
@@ -821,12 +832,9 @@ public class BspServiceWorker<I extends WritableComparable,
         partitionIds.append(i + ",");
       }
 
-      int numInternal = ((HashWorkerPartitioner) workerGraphPartitioner).
-        numInternalVertices();
-      int numLocalBoundary = ((HashWorkerPartitioner) workerGraphPartitioner).
-        numLocalBoundaryVertices();
-      int numRemoteBoundary = ((HashWorkerPartitioner) workerGraphPartitioner).
-        numRemoteBoundaryVertices();
+      int numInternal = vertexTypeStore.numInternalVertices();
+      int numLocalBoundary = vertexTypeStore.numLocalBoundaryVertices();
+      int numRemoteBoundary = vertexTypeStore.numRemoteBoundaryVertices();
       int numBothBoundary = numVertices - numInternal -
         numLocalBoundary - numRemoteBoundary;
 
@@ -2457,24 +2465,6 @@ else[HADOOP_NON_SECURE]*/
   }
 
   @Override
-  public boolean isVertexType(I vertexId, VertexType type) {
-    return ((HashWorkerPartitioner) workerGraphPartitioner).
-      isVertexType(vertexId, type);
-  }
-
-  @Override
-  public VertexType getVertexType(I vertexId) {
-    return ((HashWorkerPartitioner) workerGraphPartitioner).
-      getVertexType(vertexId);
-  }
-
-  @Override
-  public void setVertexType(I vertexId, VertexType type) {
-    ((HashWorkerPartitioner) workerGraphPartitioner).
-      setVertexType(vertexId, type);
-  }
-
-  @Override
   public boolean hasPartition(Integer partitionId) {
     return getPartitionStore().hasPartition(partitionId);
   }
@@ -2501,5 +2491,15 @@ else[HADOOP_NON_SECURE]*/
   @Override
   public SuperstepOutput<I, V, E> getSuperstepOutput() {
     return superstepOutput;
+  }
+
+  @Override
+  public VertexTypeStore<I> getVertexTypeStore() {
+    return vertexTypeStore;
+  }
+
+  @Override
+  public PhilosophersTable<I, V, E> getPhilosophersTable() {
+    return pTable;
   }
 }

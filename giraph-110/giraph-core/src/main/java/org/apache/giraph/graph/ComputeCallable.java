@@ -30,6 +30,7 @@ import org.apache.giraph.metrics.MetricNames;
 import org.apache.giraph.metrics.SuperstepMetricsRegistry;
 import org.apache.giraph.partition.Partition;
 import org.apache.giraph.partition.PartitionStats;
+import org.apache.giraph.partition.PhilosophersTable;
 import org.apache.giraph.time.SystemTime;
 import org.apache.giraph.time.Time;
 import org.apache.giraph.time.Times;
@@ -254,29 +255,32 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
     // Make sure this is thread-safe across runs
     synchronized (partition) {
       for (Vertex<I, V, E> vertex : partition) {
+        I vertexId = vertex.getId();
+
         // YH: first superstep must allow ALL vertices to execute
         // as it can involve initialization that MUST be done
         if (asyncConf.tokenSerialized() &&
             serviceWorker.getLogicalSuperstep() > 0) {
           // internal vertices can always execute
           // boundary vertices need token to execute
-          switch (serviceWorker.getVertexType(vertex.getId())) {
+          switch (serviceWorker.getVertexTypeStore().
+                  getVertexType(vertexId)) {
           case INTERNAL:
             computeVertex(computation, partition, vertex,
-                          getLocalMessages(vertex.getId()));
+                          getLocalMessages(vertexId));
             break;
           case LOCAL_BOUNDARY:
             // local-only boundary only needs local token
             if (asyncConf.haveLocalToken(partition.getId())) {
               computeVertex(computation, partition, vertex,
-                            getLocalMessages(vertex.getId()));
+                            getLocalMessages(vertexId));
             }
             break;
           case REMOTE_BOUNDARY:
             // remote-only boundary only needs global token
             if (asyncConf.haveGlobalToken()) {
               computeVertex(computation, partition, vertex,
-                            getAllMessages(vertex.getId()));
+                            getAllMessages(vertexId));
             }
             break;
           case BOTH_BOUNDARY:
@@ -284,7 +288,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
             if (asyncConf.haveGlobalToken() &&
                 asyncConf.haveLocalToken(partition.getId())) {
               computeVertex(computation, partition, vertex,
-                            getAllMessages(vertex.getId()));
+                            getAllMessages(vertexId));
             }
             break;
           default:
@@ -293,13 +297,21 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
 
         } else if (asyncConf.lockSerialized() &&
                    serviceWorker.getLogicalSuperstep() > 0) {
-          // TODO-YH: stuff
-          continue;
+          PhilosophersTable pTable = serviceWorker.getPhilosophersTable();
+          if (pTable.isBoundaryVertex(vertexId)) {
+            pTable.acquireForks(vertexId);
+            computeVertex(computation, partition, vertex,
+                          getAllMessages(vertexId));
+            pTable.releaseForks(vertexId);
+          } else {
+            computeVertex(computation, partition, vertex,
+                          getLocalMessages(vertexId));
+          }
 
         } else {
           // regular non-serializable execution
           computeVertex(computation, partition, vertex,
-                        getAllMessages(vertex.getId()));
+                        getAllMessages(vertexId));
         }
 
         if (vertex.isHalted()) {

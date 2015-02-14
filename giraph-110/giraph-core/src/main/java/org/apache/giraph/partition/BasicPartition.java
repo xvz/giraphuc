@@ -22,6 +22,7 @@ import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.edge.Edge;
 import org.apache.giraph.graph.Vertex;
 import org.apache.giraph.graph.VertexValueCombiner;
+import org.apache.giraph.partition.VertexTypeStore.VertexType;
 import org.apache.giraph.utils.VertexIterator;
 import org.apache.giraph.worker.WorkerInfo;
 import org.apache.hadoop.io.Writable;
@@ -117,6 +118,8 @@ public abstract class BasicPartition<I extends WritableComparable,
         boolean isLocalBoundary = false;
 
         WorkerInfo myWorker = getConf().getServiceWorker().getWorkerInfo();
+        VertexTypeStore vtStore =
+          getConf().getServiceWorker().getVertexTypeStore();
 
         // TODO-YH: assumes undirected graph... for directed graph,
         // need do broadcast to all neighbours
@@ -145,17 +148,28 @@ public abstract class BasicPartition<I extends WritableComparable,
         }
 
         if (!isRemoteBoundary && !isLocalBoundary) {
-          getConf().getServiceWorker().
-            setVertexType(vertex.getId(), VertexType.INTERNAL);
+          vtStore.setVertexType(vertex.getId(), VertexType.INTERNAL);
         } else if (!isRemoteBoundary && isLocalBoundary) {
-          getConf().getServiceWorker().
-            setVertexType(vertex.getId(), VertexType.LOCAL_BOUNDARY);
+          vtStore.setVertexType(vertex.getId(), VertexType.LOCAL_BOUNDARY);
         } else if (isRemoteBoundary && !isLocalBoundary) {
-          getConf().getServiceWorker().
-            setVertexType(vertex.getId(), VertexType.REMOTE_BOUNDARY);
+          vtStore.setVertexType(vertex.getId(), VertexType.REMOTE_BOUNDARY);
         } else {
-          getConf().getServiceWorker().
-            setVertexType(vertex.getId(), VertexType.BOTH_BOUNDARY);
+          // not actually necessary
+          vtStore.setVertexType(vertex.getId(), VertexType.BOTH_BOUNDARY);
+        }
+
+      } else if (getConf().getAsyncConf().lockSerialized()) {
+        // TODO-YH: assumes undirected graph... for directed graph,
+        // need do broadcast to all neighbours
+        for (Edge<I, E> e : vertex.getEdges()) {
+          int dstPartitionId = getConf().getServiceWorker().
+            getVertexPartitionOwner(e.getTargetVertexId()).getPartitionId();
+
+          if (dstPartitionId != id) {
+            getConf().getServiceWorker().getPhilosophersTable().
+              addBoundaryVertex(vertex);
+            break;
+          }
         }
       }
 

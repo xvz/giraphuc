@@ -48,7 +48,6 @@ public class HashPartitionerFactory<I extends WritableComparable,
 
   @Override
   public WorkerGraphPartitioner<I, V, E> createWorkerGraphPartitioner() {
-    // YH: pass in configuration
-    return new HashWorkerPartitioner<I, V, E>(getConf());
+    return new HashWorkerPartitioner<I, V, E>();
   }
 }
