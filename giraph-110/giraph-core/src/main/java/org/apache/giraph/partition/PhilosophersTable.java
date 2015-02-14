@@ -109,9 +109,12 @@ public class PhilosophersTable<I extends WritableComparable,
       long neighbourId = ((LongWritable) e.getTargetVertexId()).get();
       byte forkInfo = 0;
 
-      // for acyclic precedence graph, always initialize
-      // tokens at smaller id and dirty fork at larger id
-      if (neighbourId < pId) {
+      // For acyclic precedence graph, always initialize
+      // tokens at smaller id and dirty fork at larger id.
+      // Skip self-loops (saves a bit of space).
+      if (neighbourId == pId) {
+        continue;
+      } else if (neighbourId < pId) {
         forkInfo |= MASK_HAVE_TOKEN;
       } else {
         forkInfo |= MASK_HAVE_FORK;
