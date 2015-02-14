@@ -27,6 +27,7 @@ import org.apache.giraph.graph.Vertex;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
+import org.apache.log4j.Logger;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ByteMap;
@@ -46,6 +47,9 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class PhilosophersTable<I extends WritableComparable,
     V extends Writable, E extends Writable> {
+  /** Class logger */
+  private static final Logger LOG = Logger.getLogger(PhilosophersTable.class);
+
   /** Mask for have-token bit */
   private static final byte MASK_HAVE_TOKEN = 0x1;
   /** Mask for have-fork bit */
@@ -115,10 +119,11 @@ public class PhilosophersTable<I extends WritableComparable,
       if (neighbourId == pId) {
         continue;
       } else if (neighbourId < pId) {
-        forkInfo |= MASK_HAVE_TOKEN;
-      } else {
+        // I am larger id, so I hold dirty fork
         forkInfo |= MASK_HAVE_FORK;
         forkInfo |= MASK_IS_DIRTY;
+      } else {
+        forkInfo |= MASK_HAVE_TOKEN;
       }
 
       neighbours.put(neighbourId, forkInfo);
@@ -167,14 +172,15 @@ public class PhilosophersTable<I extends WritableComparable,
         byte forkInfo = e.getByteValue();
 
         if (haveToken(forkInfo) && !haveFork(forkInfo)) {
+          forkInfo &= ~MASK_HAVE_TOKEN;
+          needForks = true;
           dstId.set(neighbourId);
           needRemoteFork |= sendToken(vertexId, (I) dstId);
-          needForks = true;
         } else if (!haveToken(forkInfo) &&
                    haveFork(forkInfo) && isDirty(forkInfo)) {
-          // TODO-YH: is this really safe?? will this cause deadlock?
-          // this would be unfair, but useful b/c of stragglers
           forkInfo &= ~MASK_IS_DIRTY;
+        } else {
+          new RuntimeException("Unexpected philosopher state!");
         }
 
         neighbours.put(neighbourId, forkInfo);
@@ -185,19 +191,17 @@ public class PhilosophersTable<I extends WritableComparable,
       serviceWorker.getWorkerClient().waitAllRequests();
     }
 
-    while (needForks) {
-      cvLock.lock();
-      try {
-        // wait for signal
-        getFork.await();
-      } catch (InterruptedException e) {
-        // TODO-YH: blow up?
-        throw new RuntimeException("Got interrupted!");
-      } finally {
-        cvLock.unlock();
-      }
+    if (!needForks) {
+      return;
+    }
 
-      // signalled; recheck forks
+    while (true) {
+      // must lock entire inner loop so we never miss signals
+      cvLock.lock();
+
+      // TODO-YH: use a id -> num-forks-got map, will make check faster
+      // should recheck forks right away, since some if not all
+      // forks may have already arrived (due to waitAllRequests)
       needForks = false;
       synchronized (neighbours) {
         ObjectIterator<Long2ByteMap.Entry> itr =
@@ -209,6 +213,19 @@ public class PhilosophersTable<I extends WritableComparable,
             break;
           }
         }
+      }
+
+      if (!needForks) {
+        cvLock.unlock();
+        break;
+      }
+
+      try {
+        getFork.await();  // wait for signal
+      } catch (InterruptedException e) {
+        throw new RuntimeException("Got interrupted!");  // blow up
+      } finally {
+        cvLock.unlock();
       }
     }
   }
@@ -237,9 +254,9 @@ public class PhilosophersTable<I extends WritableComparable,
 
         if (haveToken(forkInfo)) {
           // send fork if our philosopher pair has requested it
+          forkInfo &= ~MASK_HAVE_FORK;
           dstId.set(neighbourId);
           needFlush |= sendFork(vertexId, (I) dstId);
-          forkInfo &= ~MASK_HAVE_FORK;
         } else {
           // otherwise, explicitly dirty the fork
           // (so that fork is released immediately on token receipt)
@@ -273,7 +290,7 @@ public class PhilosophersTable<I extends WritableComparable,
     } else {
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
-        new SendDistributedLockingTokenRequest(senderId, receiverId));
+        new SendDistributedLockingTokenRequest(senderId, receiverId, conf));
       return true;
     }
   }
@@ -296,7 +313,7 @@ public class PhilosophersTable<I extends WritableComparable,
     } else {
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
-        new SendDistributedLockingForkRequest(senderId, receiverId));
+        new SendDistributedLockingForkRequest(senderId, receiverId, conf));
       return true;
     }
   }
@@ -324,17 +341,20 @@ public class PhilosophersTable<I extends WritableComparable,
       // Otherwise, return---fork holder will eventually see
       // token when it dirties the fork.
       if (isDirty(forkInfo)) {
-        needFlush |= sendFork(receiverId, senderId);
         forkInfo &= ~MASK_HAVE_FORK;  // fork sent
         forkInfo &= ~MASK_IS_DIRTY;   // no longer dirty
+        needFlush |= sendFork(receiverId, senderId);
       }
 
       neighbours.put(neighbourId, forkInfo);
     }
 
-    if (needFlush) {
-      serviceWorker.getWorkerClient().waitAllRequests();
-    }
+    // TODO-YH: this causes deadlock.. can't ACK??
+    //if (needFlush) {
+    //  LOG.info("[[TESTING]] " + receiverId + ": flushing");
+    //  serviceWorker.getWorkerClient().waitAllRequests();
+    //  LOG.info("[[TESTING]] " + receiverId + ": done flush");
+    //}
   }
 
   /**
@@ -356,7 +376,7 @@ public class PhilosophersTable<I extends WritableComparable,
 
     // signal fork arrival
     cvLock.lock();
-    getFork.signal();
+    getFork.signalAll();
     cvLock.unlock();
   }
 
@@ -382,5 +402,15 @@ public class PhilosophersTable<I extends WritableComparable,
    */
   private boolean isDirty(byte forkInfo) {
     return (forkInfo & MASK_IS_DIRTY) != 0;
+  }
+
+  /**
+   * @param forkInfo Philosopher's state
+   * @return String
+   */
+  private String toString(byte forkInfo) {
+    return "(" + ((forkInfo & 0x4) >>> 2) +
+      "," + ((forkInfo & 0x2) >>> 1) +
+      "," + (forkInfo & 0x1) + ")";
   }
 }
