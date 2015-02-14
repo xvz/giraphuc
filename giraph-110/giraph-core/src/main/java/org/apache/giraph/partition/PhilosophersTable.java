@@ -98,41 +98,58 @@ public class PhilosophersTable<I extends WritableComparable,
   }
 
   /**
-   * Add and initialize a boundary vertex (philosopher).
+   * Add and initialize a vertex as a philosopher if it's a boundary vertex.
    * Must not be called/used when compute threads are executing.
    *
    * @param vertex Vertex to be added
    */
-  public void addBoundaryVertex(Vertex<I, V, E> vertex) {
-    // TODO-YH: assumes undirected graph
-    Long2ByteOpenHashMap neighbours =
-      new Long2ByteOpenHashMap(vertex.getNumEdges());
-    long pId = ((LongWritable) vertex.getId()).get();
+  public void addVertexIfBoundary(Vertex<I, V, E> vertex) {
+    Long2ByteOpenHashMap neighbours = null;
 
+    int partitionId = serviceWorker.
+      getVertexPartitionOwner(vertex.getId()).getPartitionId();
+    long pId = ((LongWritable) vertex.getId()).get();  // "philosopher" id
+
+    // TODO-YH: assumes undirected graph... for directed graph,
+    // need do broadcast to all neighbours
     for (Edge<I, E> e : vertex.getEdges()) {
+      int dstPartitionId = serviceWorker.
+        getVertexPartitionOwner(e.getTargetVertexId()).getPartitionId();
       long neighbourId = ((LongWritable) e.getTargetVertexId()).get();
       byte forkInfo = 0;
 
-      // For acyclic precedence graph, always initialize
-      // tokens at smaller id and dirty fork at larger id.
-      // Skip self-loops (saves a bit of space).
-      if (neighbourId == pId) {
-        continue;
-      } else if (neighbourId < pId) {
-        // I am larger id, so I hold dirty fork
-        forkInfo |= MASK_HAVE_FORK;
-        forkInfo |= MASK_IS_DIRTY;
-      } else {
-        forkInfo |= MASK_HAVE_TOKEN;
-      }
+      // Determine if neighbour is on different partition.
+      // This does two things:
+      // - if vertex is internal, skips creating "neighbours" altogether
+      // - if vertex is boundary, skips tracking internal neighbours
+      //   (same partition = executed by single thread = no forks needed)
+      if (dstPartitionId != partitionId) {
+        if (neighbours == null) {
+          neighbours = new Long2ByteOpenHashMap(vertex.getNumEdges());
+        }
 
-      neighbours.put(neighbourId, forkInfo);
+        // For acyclic precedence graph, always initialize
+        // tokens at smaller id and dirty fork at larger id.
+        // Skip self-loops (saves a bit of space).
+        if (neighbourId == pId) {
+          continue;
+        } else if (neighbourId < pId) {
+          // I am larger id, so I hold dirty fork
+          forkInfo |= MASK_HAVE_FORK;
+          forkInfo |= MASK_IS_DIRTY;
+        } else {
+          forkInfo |= MASK_HAVE_TOKEN;
+        }
+        neighbours.put(neighbourId, forkInfo);
+      }
     }
 
-    synchronized (pMap) {
-      Long2ByteOpenHashMap ret = pMap.put(pId, neighbours);
-      if (ret != null) {
-        throw new RuntimeException("Duplicate neighbours!");
+    if (neighbours != null) {
+      synchronized (pMap) {
+        Long2ByteOpenHashMap ret = pMap.put(pId, neighbours);
+        if (ret != null) {
+          throw new RuntimeException("Duplicate neighbours!");
+        }
       }
     }
   }
@@ -426,6 +443,7 @@ public class PhilosophersTable<I extends WritableComparable,
     }
 
     // signal fork arrival
+    // TODO-YH: skip for local???
     cvLock.lock();
     getFork.signalAll();
     cvLock.unlock();

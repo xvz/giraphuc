@@ -19,8 +19,12 @@
 package org.apache.giraph.partition;
 
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
+import org.apache.giraph.edge.Edge;
+import org.apache.giraph.graph.Vertex;
+import org.apache.giraph.worker.WorkerInfo;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableUtils;
 
@@ -33,9 +37,12 @@ import java.util.Set;
 /**
  * YH: Stores and tracks vertex types according to vertex id.
  *
- * @param <I> Vertex index value
+ * @param <I> Vertex id
+ * @param <V> Vertex value
+ * @param <E> Edge value
  */
-public class VertexTypeStore<I extends WritableComparable> {
+public class VertexTypeStore<I extends WritableComparable,
+    V extends Writable, E extends Writable> {
   /**
    * The possible types of vertices. Used for token serializability.
    */
@@ -90,6 +97,80 @@ public class VertexTypeStore<I extends WritableComparable> {
   }
 
   /**
+   * Add/track a vertex and its type.
+   *
+   * @param vertex Vertex to add
+   */
+  public void addVertex(Vertex<I, V, E> vertex) {
+    boolean isRemoteBoundary = false;
+    boolean isLocalBoundary = false;
+
+    int partitionId = conf.getServiceWorker().
+      getVertexPartitionOwner(vertex.getId()).getPartitionId();
+    WorkerInfo myWorker = conf.getServiceWorker().getWorkerInfo();
+
+    // TODO-YH: assumes undirected graph... for directed graph,
+    // need do broadcast to all neighbours
+    for (Edge<I, E> e : vertex.getEdges()) {
+      PartitionOwner dstOwner = conf.getServiceWorker().
+        getVertexPartitionOwner(e.getTargetVertexId());
+      int dstPartitionId = dstOwner.getPartitionId();
+      WorkerInfo dstWorker = dstOwner.getWorkerInfo();
+
+      // check if neighbour is remote; if not,
+      // check if neighbour is in another local partition
+      // id is this (vertex's) partition id
+      if (!myWorker.equals(dstWorker)) {
+        isRemoteBoundary = true;
+      } else if (dstPartitionId != partitionId) {
+        isLocalBoundary = true;
+      }
+
+      // need to check all edges before concluding vertex
+      // is ONLY local or remote boundary, but if it's
+      // already both, we can quit early
+      if (isRemoteBoundary && isLocalBoundary) {
+        break;
+      }
+    }
+
+    if (!isRemoteBoundary && !isLocalBoundary) {
+      setVertexType(vertex.getId(), VertexType.INTERNAL);
+    } else if (!isRemoteBoundary && isLocalBoundary) {
+      setVertexType(vertex.getId(), VertexType.LOCAL_BOUNDARY);
+    } else if (isRemoteBoundary && !isLocalBoundary) {
+      setVertexType(vertex.getId(), VertexType.REMOTE_BOUNDARY);
+    }
+    // else BOTH_BOUNDARY is implicit
+  }
+
+  /**
+   * Set/tag a vertex id with the specified type.
+   *
+   * @param vertexId Vertex id
+   * @param type Vertex type
+   */
+  public void setVertexType(I vertexId, VertexType type) {
+    switch (type) {
+    case INTERNAL:
+      synchronizedAdd(internalVertices, vertexId);
+      return;
+    case LOCAL_BOUNDARY:
+      synchronizedAdd(localBoundaryVertices, vertexId);
+      return;
+    case REMOTE_BOUNDARY:
+      synchronizedAdd(remoteBoundaryVertices, vertexId);
+      return;
+    case BOTH_BOUNDARY:
+      // local+remote boundary will not be on any of the sets
+      // (i.e., absence on all sets indicates this)
+      return;
+    default:
+      throw new RuntimeException("Invalid vertex type!");
+    }
+  }
+
+  /**
    * Whether a vertex id belongs to a particular vertex type.
    *
    * Thread-safe for concurrent is/getVertexType() calls ONLY.
@@ -138,32 +219,6 @@ public class VertexTypeStore<I extends WritableComparable> {
       return VertexType.REMOTE_BOUNDARY;
     } else {
       return VertexType.BOTH_BOUNDARY;
-    }
-  }
-
-  /**
-   * Set/tag a vertex id with the specified type.
-   *
-   * @param vertexId Vertex id
-   * @param type Vertex type
-   */
-  public void setVertexType(I vertexId, VertexType type) {
-    switch (type) {
-    case INTERNAL:
-      synchronizedAdd(internalVertices, vertexId);
-      return;
-    case LOCAL_BOUNDARY:
-      synchronizedAdd(localBoundaryVertices, vertexId);
-      return;
-    case REMOTE_BOUNDARY:
-      synchronizedAdd(remoteBoundaryVertices, vertexId);
-      return;
-    case BOTH_BOUNDARY:
-      // local+remote boundary will not be on any of the sets
-      // (i.e., absence on all sets indicates this)
-      return;
-    default:
-      throw new RuntimeException("Invalid vertex type!");
     }
   }
 

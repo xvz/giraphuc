@@ -183,7 +183,7 @@ public class BspServiceWorker<I extends WritableComparable,
   private int superstepsUntilTokenRevoke;
 
   /** YH: Vertex type store/tracker for token serializability */
-  private VertexTypeStore<I> vertexTypeStore;
+  private VertexTypeStore<I, V, E> vertexTypeStore;
   /** YH: Philosophers table for distributed locking serializability */
   private PhilosophersTable<I, V, E> pTable;
 
@@ -246,7 +246,7 @@ public class BspServiceWorker<I extends WritableComparable,
     asyncConf = conf.getAsyncConf();
 
     if (asyncConf.tokenSerialized()) {
-      vertexTypeStore = new VertexTypeStore<I>(conf);
+      vertexTypeStore = new VertexTypeStore<I, V, E>(conf);
     } else if (asyncConf.lockSerialized()) {
       pTable = new PhilosophersTable<I, V, E>(conf, this);
     }
@@ -2494,7 +2494,7 @@ else[HADOOP_NON_SECURE]*/
   }
 
   @Override
-  public VertexTypeStore<I> getVertexTypeStore() {
+  public VertexTypeStore<I, V, E> getVertexTypeStore() {
     return vertexTypeStore;
   }
 

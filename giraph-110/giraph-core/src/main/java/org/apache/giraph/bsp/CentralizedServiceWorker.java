@@ -235,7 +235,7 @@ public interface CentralizedServiceWorker<I extends WritableComparable,
    *
    * @return Vertex type store
    */
-  VertexTypeStore<I> getVertexTypeStore();
+  VertexTypeStore<I, V, E> getVertexTypeStore();
 
   /**
    * YH: Get the philosophers table. For distributed locking.

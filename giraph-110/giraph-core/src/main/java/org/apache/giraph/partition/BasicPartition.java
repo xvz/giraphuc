@@ -19,12 +19,9 @@
 package org.apache.giraph.partition;
 
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
-import org.apache.giraph.edge.Edge;
 import org.apache.giraph.graph.Vertex;
 import org.apache.giraph.graph.VertexValueCombiner;
-import org.apache.giraph.partition.VertexTypeStore.VertexType;
 import org.apache.giraph.utils.VertexIterator;
-import org.apache.giraph.worker.WorkerInfo;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.util.Progressable;
@@ -114,63 +111,11 @@ public abstract class BasicPartition<I extends WritableComparable,
       // functions with "is-boundary?" rechecks. (If boolean is added
       // to Vertex, need to modify WritableUtils as well.)
       if (getConf().getAsyncConf().tokenSerialized()) {
-        boolean isRemoteBoundary = false;
-        boolean isLocalBoundary = false;
-
-        WorkerInfo myWorker = getConf().getServiceWorker().getWorkerInfo();
-        VertexTypeStore vtStore =
-          getConf().getServiceWorker().getVertexTypeStore();
-
-        // TODO-YH: assumes undirected graph... for directed graph,
-        // need do broadcast to all neighbours
-        for (Edge<I, E> e : vertex.getEdges()) {
-          PartitionOwner dstOwner = getConf().getServiceWorker().
-            getVertexPartitionOwner(e.getTargetVertexId());
-
-          int dstPartitionId = dstOwner.getPartitionId();
-          WorkerInfo dstWorker = dstOwner.getWorkerInfo();
-
-          // check if neighbour is remote; if not,
-          // check if neighbour is in another local partition
-          // id is this (vertex's) partition id
-          if (!myWorker.equals(dstWorker)) {
-            isRemoteBoundary = true;
-          } else if (dstPartitionId != id) {
-            isLocalBoundary = true;
-          }
-
-          // need to check all edges before concluding vertex
-          // is ONLY local or remote boundary, but if it's
-          // already both, we can quit early
-          if (isRemoteBoundary && isLocalBoundary) {
-            break;
-          }
-        }
-
-        if (!isRemoteBoundary && !isLocalBoundary) {
-          vtStore.setVertexType(vertex.getId(), VertexType.INTERNAL);
-        } else if (!isRemoteBoundary && isLocalBoundary) {
-          vtStore.setVertexType(vertex.getId(), VertexType.LOCAL_BOUNDARY);
-        } else if (isRemoteBoundary && !isLocalBoundary) {
-          vtStore.setVertexType(vertex.getId(), VertexType.REMOTE_BOUNDARY);
-        } else {
-          // not actually necessary
-          vtStore.setVertexType(vertex.getId(), VertexType.BOTH_BOUNDARY);
-        }
-
+        getConf().getServiceWorker().getVertexTypeStore().
+          addVertex(vertex);
       } else if (getConf().getAsyncConf().lockSerialized()) {
-        // TODO-YH: assumes undirected graph... for directed graph,
-        // need do broadcast to all neighbours
-        for (Edge<I, E> e : vertex.getEdges()) {
-          int dstPartitionId = getConf().getServiceWorker().
-            getVertexPartitionOwner(e.getTargetVertexId()).getPartitionId();
-
-          if (dstPartitionId != id) {
-            getConf().getServiceWorker().getPhilosophersTable().
-              addBoundaryVertex(vertex);
-            break;
-          }
-        }
+        getConf().getServiceWorker().getPhilosophersTable().
+          addVertexIfBoundary(vertex);
       }
 
       // Release the vertex if it was put, otherwise reuse as an optimization
