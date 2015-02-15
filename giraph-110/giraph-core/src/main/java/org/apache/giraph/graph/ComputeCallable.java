@@ -299,10 +299,17 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
                    serviceWorker.getLogicalSuperstep() > 0) {
           PhilosophersTable pTable = serviceWorker.getPhilosophersTable();
           if (pTable.isBoundaryVertex(vertexId)) {
-            pTable.acquireForks(vertexId);
-            computeVertex(computation, partition, vertex,
-                          getAllMessages(vertexId));
-            pTable.releaseForks(vertexId);
+            // if acquiring fork fails, skip this vertex and
+            // process it in next (logical) superstep
+            //
+            // note that we must acquire forks for EVERY boundary vertex,
+            // even if it's inactive; otherwise forks won't be released
+            if (pTable.acquireForks(vertexId)) {
+              computeVertex(computation, partition, vertex,
+                            getAllMessages(vertexId));
+              // can release iff all forks were acquired
+              pTable.releaseForks(vertexId);
+            }
           } else {
             computeVertex(computation, partition, vertex,
                           getLocalMessages(vertexId));

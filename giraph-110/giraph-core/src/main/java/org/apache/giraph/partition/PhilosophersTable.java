@@ -30,9 +30,8 @@ import org.apache.hadoop.io.WritableComparable;
 import org.apache.log4j.Logger;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-import it.unimi.dsi.fastutil.longs.Long2ByteMap;
 import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
-import it.unimi.dsi.fastutil.objects.ObjectIterator;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
@@ -56,6 +55,8 @@ public class PhilosophersTable<I extends WritableComparable,
   private static final byte MASK_HAVE_FORK = 0x2;
   /** Mask for is-dirty bit */
   private static final byte MASK_IS_DIRTY = 0x4;
+  /** Mask for is-hungry bit */
+  private static final byte MASK_IS_HUNGRY = 0x8;
 
   /** Provided configuration */
   private final ImmutableClassesGiraphConfiguration<I, V, E> conf;
@@ -75,6 +76,8 @@ public class PhilosophersTable<I extends WritableComparable,
    * who are sitting at a distributed table, that are local to this worker.
    */
   private Long2ObjectOpenHashMap<Long2ByteOpenHashMap> pMap;
+  /** Set of vertices (philosophers) that are hungry (acquiring forks) */
+  private LongOpenHashSet pHungry;
 
   /**
    * Constructor
@@ -95,6 +98,13 @@ public class PhilosophersTable<I extends WritableComparable,
     this.conf = conf;
     this.serviceWorker = serviceWorker;
     this.pMap = new Long2ObjectOpenHashMap<Long2ByteOpenHashMap>();
+    this.pHungry = new LongOpenHashSet(
+      Math.min(conf.getNumComputeThreads(),
+               serviceWorker.getPartitionStore().getNumPartitions()));
+
+    LOG.info("[[TESTING]] ========================================");
+    LOG.info("[[TESTING]] I am worker: " +
+             serviceWorker.getWorkerInfo().getTaskId());
   }
 
   /**
@@ -121,7 +131,7 @@ public class PhilosophersTable<I extends WritableComparable,
       // Determine if neighbour is on different partition.
       // This does two things:
       // - if vertex is internal, skips creating "neighbours" altogether
-      // - if vertex is boundary, skips tracking internal neighbours
+      // - if vertex is boundary, skips tracking neighbours on same partition
       //   (same partition = executed by single thread = no forks needed)
       if (dstPartitionId != partitionId) {
         if (neighbours == null) {
@@ -171,8 +181,9 @@ public class PhilosophersTable<I extends WritableComparable,
    * the philosopher is ready to eat. Equivalent to "start eating".
    *
    * @param vertexId Vertex id (philosopher) to acquire forks for
+   * @return True if forks acquired, false otherwise
    */
-  public void acquireForks(I vertexId) {
+  public boolean acquireForks(I vertexId) {
     LOG.info("[[TESTING]] " + vertexId + ": acquiring forks");
     boolean needRemoteFork = false;
     boolean needForks = false;
@@ -180,35 +191,71 @@ public class PhilosophersTable<I extends WritableComparable,
 
     long pId = ((LongWritable) vertexId).get();
     Long2ByteOpenHashMap neighbours = pMap.get(pId);
+    byte oldForkInfo;
 
-    synchronized (neighbours) {
-      ObjectIterator<Long2ByteMap.Entry> itr =
-        neighbours.long2ByteEntrySet().fastIterator();
-      while (itr.hasNext()) {
-        Long2ByteMap.Entry e = itr.next();
-        long neighbourId = e.getLongKey();
-        byte forkInfo = e.getByteValue();
+    // acquiring fork = hungry philosopher
+    synchronized (pHungry) {
+      pHungry.add(pId);
+    }
+
+    // for loop NOT synchronized b/c mutations must never occur
+    // while compute threads are running, so keyset is fixed
+    for (long neighbourId : neighbours.keySet()) {
+      synchronized (neighbours) {
+        byte forkInfo = neighbours.get(neighbourId);
+        oldForkInfo = forkInfo;
 
         if (haveToken(forkInfo) && !haveFork(forkInfo)) {
           forkInfo &= ~MASK_HAVE_TOKEN;
-          // must apply updates BEFORE sending token requests,
-          // as local requests that are satisified imimdeatily
-          // WILL modify forkInfo!!
-          neighbours.put(neighbourId, forkInfo);
           needForks = true;
           LOG.info("[[TESTING]] " + vertexId + ":   missing fork " +
                    neighbourId + " " + toString(forkInfo));
-          dstId.set(neighbourId);
-          needRemoteFork |= sendToken(vertexId, (I) dstId);
-        } else if (!haveToken(forkInfo) &&
-                   haveFork(forkInfo) && isDirty(forkInfo)) {
+        } else if (haveFork(forkInfo) && isDirty(forkInfo)) {
+          // This scenario isn't detailed in original Chandy-Misra alg.
+          //
+          // For our usage, dirty fork will remain dirty UNTIL partner vertex
+          // tries to acquire it by executing. However, if worker is done,
+          // such vertices will never execute! We can either wake worker up
+          // and force it to do dummy round of fork acquisition + release,
+          // or we can send our dirty for to our partner and let them decide
+          // whether they want to give a clean one back to us.
+          //
+          // We use latter sln, b/c former sln uses a lot more messages.
+          // This is what pHungry is used for: if philosopher isn't hungry,
+          // it will send back clean fork; else it will hold on to fork,
+          // equivalent to if we sent a token to try and request fork.
+          //
+          // Note that we CANNOT clean our own fork directly (i.e., w/o
+          // consulting our partner) b/c it can result in cyclic precedence
+          // graph (=> deadlock).
           forkInfo &= ~MASK_IS_DIRTY;
-          neighbours.put(neighbourId, forkInfo);
-          LOG.info("[[TESTING]] " + vertexId + ":   have fork " +
+          forkInfo &= ~MASK_HAVE_FORK;
+          needForks = true;
+          LOG.info("[[TESTING]] " + vertexId + ":   dirty fork " +
                    neighbourId + " " + toString(forkInfo));
         } else {
-          new RuntimeException("Unexpected philosopher state!");
+          LOG.info("[[TESTING]] " + vertexId + ":   have clean fork " +
+                   neighbourId + " " + toString(forkInfo));
         }
+
+        neighbours.put(neighbourId, forkInfo);
+      }
+
+      // We're working with stale forkInfo here, so that request can
+      // be sent outside of synchronization block. This has to be
+      // done to avoid deadlocks due to:
+      // - remote sendToken getting blocked due to message flushing
+      // - local sendToken getting blocked due to local conflicts
+      //
+      // Also note that we've applied forkInfo update before sending.
+      // Important b/c local requests will immediately modify forkInfo.
+      if (haveToken(oldForkInfo) && !haveFork(oldForkInfo)) {
+        dstId.set(neighbourId);
+        needRemoteFork |= sendToken(vertexId, (I) dstId);
+      } else if (haveFork(oldForkInfo) && isDirty(oldForkInfo)) {
+        // send dirty fork and see if we get it back
+        dstId.set(neighbourId);
+        needRemoteFork |= sendFork(vertexId, (I) dstId);
       }
     }
 
@@ -220,50 +267,30 @@ public class PhilosophersTable<I extends WritableComparable,
 
     if (!needForks) {
       LOG.info("[[TESTING]] " + vertexId + ": got all forks");
-      return;
-    }
-
-    while (true) {
-      LOG.info("[[TESTING]] " + vertexId + ":   trying to get lock");
-      // must lock entire inner loop so we never miss signals
-      cvLock.lock();
-      LOG.info("[[TESTING]] " + vertexId + ":   got lock");
-
-      // TODO-YH: use a id -> num-forks-got map, will make check faster
-      // should recheck forks right away, since some if not all
-      // forks may have already arrived (due to waitAllRequests)
-      needForks = false;
-      synchronized (neighbours) {
-        ObjectIterator<Long2ByteMap.Entry> itr =
-          neighbours.long2ByteEntrySet().fastIterator();
-        while (itr.hasNext()) {
-          // TODO-YH: compact this
-          Long2ByteMap.Entry e = itr.next();
-          byte forkInfo = e.getByteValue();
+      return true;
+    } else {
+      // If our requests have been delivered but our forks still
+      // haven't all arrived, then they are in use (forks have
+      // guaranteed delivery b/c we flush all messages).
+      //
+      // For efficiency, don't block---just give up and execute
+      // other vertices. Revisit on next (logical) superstep.
+      for (long neighbourId : neighbours.keySet()) {
+        synchronized (neighbours) {
+          byte forkInfo = neighbours.get(neighbourId);
           if (!haveFork(forkInfo)) {
-            LOG.info("[[TESTING]] " + vertexId + ":  still need fork " +
-                     e.getLongKey());
-            needForks = true;
-            break;
+            LOG.info("[[TESTING]] " + vertexId + ": no go, missing fork " +
+                     neighbourId + " " + toString(forkInfo));
+            synchronized (pHungry) {
+              pHungry.remove(pId);   // no longer hungry
+            }
+            return false;
           }
         }
       }
-
-      if (!needForks) {
-        cvLock.unlock();
-        LOG.info("[[TESTING]] " + vertexId + ": got all forks");
-        break;
-      }
-
-      try {
-        getFork.await();  // wait for signal
-        LOG.info("[[TESTING]] " + vertexId + ":  signalled");
-      } catch (InterruptedException e) {
-        throw new RuntimeException("Got interrupted!");  // blow up
-      } finally {
-        cvLock.unlock();
-      }
     }
+    LOG.info("[[TESTING]] " + vertexId + ": got all forks");
+    return true;
   }
 
   /**
@@ -279,32 +306,39 @@ public class PhilosophersTable<I extends WritableComparable,
 
     long pId = ((LongWritable) vertexId).get();
     Long2ByteOpenHashMap neighbours = pMap.get(pId);
+    byte oldForkInfo;
+
+    // done eating, no longer hungry
+    synchronized (pHungry) {
+      pHungry.remove(pId);
+    }
 
     // all held forks are (implicitly) dirty
-    synchronized (neighbours) {
-      ObjectIterator<Long2ByteMap.Entry> itr =
-        neighbours.long2ByteEntrySet().fastIterator();
-      while (itr.hasNext()) {
-        Long2ByteMap.Entry e = itr.next();
-        long neighbourId = e.getLongKey();
-        byte forkInfo = e.getByteValue();
+    for (long neighbourId : neighbours.keySet()) {
+      // must synchronize since we may receive token
+      synchronized (neighbours) {
+        byte forkInfo = neighbours.get(neighbourId);
+        oldForkInfo = forkInfo;
 
         if (haveToken(forkInfo)) {
-          // send fork if our philosopher pair has requested it
+          // fork will be sent outside of sync block
           forkInfo &= ~MASK_HAVE_FORK;
-          neighbours.put(neighbourId, forkInfo);
           LOG.info("[[TESTING]] " + vertexId + ": sending clean fork to " +
                    neighbourId + " " + toString(forkInfo));
-          dstId.set(neighbourId);
-          needFlush |= sendFork(vertexId, (I) dstId);
         } else {
           // otherwise, explicitly dirty the fork
           // (so that fork is released immediately on token receipt)
           forkInfo |= MASK_IS_DIRTY;
-          neighbours.put(neighbourId, forkInfo);
           LOG.info("[[TESTING]] " + vertexId + ": dirty fork " +
                    neighbourId + " " + toString(forkInfo));
         }
+
+        neighbours.put(neighbourId, forkInfo);
+      }
+
+      if (haveToken(oldForkInfo)) {
+        dstId.set(neighbourId);
+        needFlush |= sendFork(vertexId, (I) dstId);
       }
     }
 
@@ -387,39 +421,48 @@ public class PhilosophersTable<I extends WritableComparable,
     boolean needFlush = false;
 
     long pId = ((LongWritable) receiverId).get();
+    long neighbourId = ((LongWritable) senderId).get();
+
     Long2ByteOpenHashMap neighbours = pMap.get(pId);
+    byte oldForkInfo;
 
     synchronized (neighbours) {
-      long neighbourId = ((LongWritable) senderId).get();
       byte forkInfo = neighbours.get(neighbourId);
+      oldForkInfo = forkInfo;
 
-      // fork requests are always sent with a token
-      forkInfo |= MASK_HAVE_TOKEN;
       LOG.info("[[TESTING]] " + receiverId + ": got token from " +
                senderId  + " " + toString(forkInfo));
 
-      // If fork is dirty, we can immediately send it.
-      // Otherwise, return---fork holder will eventually see
-      // token when it dirties the fork.
+      // fork requests are always sent with a token
+      forkInfo |= MASK_HAVE_TOKEN;
+
+      // If fork is dirty, send outside of sync block.
+      // Else, return---fork holder will see token when it dirties fork.
       if (isDirty(forkInfo)) {
-        forkInfo &= ~MASK_HAVE_FORK;  // fork sent
-        forkInfo &= ~MASK_IS_DIRTY;   // no longer dirty
-        needFlush |= sendFork(receiverId, senderId);
+        forkInfo &= ~MASK_IS_DIRTY;
+        forkInfo &= ~MASK_HAVE_FORK;
       }
 
       neighbours.put(neighbourId, forkInfo);
     }
 
-    // TODO-YH: w/o async thread, this causes deadlock
+    if (isDirty(oldForkInfo)) {
+      needFlush |= sendFork(receiverId, senderId);
+    }
+
+    // TODO-YH: no longer deadlocks?
     if (needFlush) {
-      new Thread(new Runnable() {
-          @Override
-          public void run() {
-            LOG.info("[[TESTING]] flushing on separate thread");
-            serviceWorker.getWorkerClient().waitAllRequests();
-            LOG.info("[[TESTING]] done flush on separate thread");
-          }
-        }).start();
+      LOG.info("[[TESTING]] " + receiverId + ": flushing");
+      serviceWorker.getWorkerClient().waitAllRequests();
+      LOG.info("[[TESTING]] " + receiverId + ": done flush");
+      //new Thread(new Runnable() {
+      //    @Override
+      //    public void run() {
+      //      LOG.info("[[TESTING]] flushing on separate thread");
+      //      serviceWorker.getWorkerClient().waitAllRequests();
+      //      LOG.info("[[TESTING]] done flush on separate thread");
+      //    }
+      //  }).start();
     }
   }
 
@@ -431,23 +474,38 @@ public class PhilosophersTable<I extends WritableComparable,
    */
   public void receiveFork(I senderId, I receiverId) {
     long pId = ((LongWritable) receiverId).get();
+    long neighbourId = ((LongWritable) senderId).get();
+
     Long2ByteOpenHashMap neighbours = pMap.get(pId);
+    byte oldForkInfo;
+
+    boolean isReceiverHungry;
+    synchronized (pHungry) {
+      isReceiverHungry = pHungry.contains(pId);
+    }
 
     synchronized (neighbours) {
-      long neighbourId = ((LongWritable) senderId).get();
       byte forkInfo = neighbours.get(neighbourId);
-      forkInfo |= MASK_HAVE_FORK;
-      neighbours.put(neighbourId, forkInfo);
+      oldForkInfo = forkInfo;
+
+      // If fork is received and we didn't send token for it,
+      // then sender is asking us if it's okay to reuse fork
+      // without waiting for us (receiver) to eat. If we're
+      // not hungry, let them have clean fork.
+      // (this is not part of original Chandy-Misra alg)
+      if (isReceiverHungry || !haveToken(forkInfo)) {
+        forkInfo |= MASK_HAVE_FORK;
+        neighbours.put(neighbourId, forkInfo);
+      }
       LOG.info("[[TESTING]] " + receiverId + ": got fork from " +
                senderId + " " + toString(forkInfo));
     }
 
-    // signal fork arrival
-    // TODO-YH: skip for local???
-    cvLock.lock();
-    getFork.signalAll();
-    cvLock.unlock();
-    LOG.info("[[TESTING]] " + receiverId + ": SENT signal");
+    if (!isReceiverHungry && haveToken(oldForkInfo)) {
+      LOG.info("[[TESTING]] " + receiverId + ": returning clean fork to " +
+               senderId + " " + toString(oldForkInfo));
+      sendFork(receiverId, senderId);
+    }
   }
 
   /**

@@ -1234,15 +1234,17 @@ public class BspServiceWorker<I extends WritableComparable,
       boolean haveLocalWork;
       boolean haveRemoteWork;
 
-      if (asyncConf.isMultiPhase() || asyncConf.tokenSerialized()) {
+      if (asyncConf.isMultiPhase() || asyncConf.tokenSerialized() ||
+          asyncConf.lockSerialized()) {
         // For multi-phase computation, we must check only the message stores
         // for the current phase. Hence, we can't use workerSentMessages, since
         // that also captures messages sent for the next phase.
         //
         // For serialized computations, local messages for local boundary
-        // vertices do not get processed right away (needs local token),
-        // so workerSentMessages will mmiss these messages. There's more
-        // local worker to do, b/c more LSSes will pass local token around.
+        // vertices do not get processed right away (needs local token or
+        // skipped due to not getting forks), so workerSentMessages will
+        // miss these messages. There's more local worker to do, b/c more
+        // LSSes will pass local token (or forks) around.
         haveLocalWork = getServerData().getLocalMessageStore().hasMessages();
       } else {
         // For single-phase algs (non-serializable), workerSentMessages is
