@@ -662,6 +662,19 @@ public class NettyClient {
    */
   public void sendWritableRequest(Integer destTaskId,
       WritableRequest request) {
+    sendWritableReqest(destTaskId, request, false);
+  }
+
+  /**
+   * Send a request to a remote server (should be already connected),
+   * and possibly ignore open request limits.
+   *
+   * @param destTaskId Destination task id
+   * @param request Request to send
+   * @param ignoreLimit True to ignore open request limit
+   */
+  public void sendWritableRequest(Integer destTaskId,
+      WritableRequest request, boolean ignoreLimit) {
     InetSocketAddress remoteServer = taskIdAddressMap.get(destTaskId);
     if (clientRequestIdRequestInfoMap.isEmpty()) {
       inboundByteCounter.resetAll();
@@ -692,6 +705,10 @@ public class NettyClient {
     }
     ChannelFuture writeFuture = channel.write(request);
     newRequestInfo.setWriteFuture(writeFuture);
+
+    if (ignoreLimit) {
+      return;
+    }
 
     // YH: disable request limit on new phase (b/c it's followed by global SS)
     if (!(conf.getAsyncConf().isMultiPhase() &&

@@ -33,7 +33,6 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 
-import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -63,10 +62,10 @@ public class PhilosophersTable<I extends WritableComparable,
   /** Service worker */
   private final CentralizedServiceWorker<I, V, E> serviceWorker;
 
-  /** Lock for condition var */
-  private final Lock cvLock = new ReentrantLock();
-  /** Condition var indicating arrival of fork */
-  private final Condition getFork = cvLock.newCondition();
+  /** Runnable for waiting on requests asynchronously */
+  private final Runnable waitAllRunnable;
+  /** Lock for accessing wait thread */
+  private final Lock waitLock = new ReentrantLock();
 
   /**
    * Map of vertex id (philosopher) to vertex ids (vertex's neighbours)
@@ -78,6 +77,9 @@ public class PhilosophersTable<I extends WritableComparable,
   private Long2ObjectOpenHashMap<Long2ByteOpenHashMap> pMap;
   /** Set of vertices (philosophers) that are hungry (acquiring forks) */
   private LongOpenHashSet pHungry;
+
+  /** Thread for waiting on requests asynchronously */
+  private Thread waitThread;
 
   /**
    * Constructor
@@ -101,6 +103,14 @@ public class PhilosophersTable<I extends WritableComparable,
     this.pHungry = new LongOpenHashSet(
       Math.min(conf.getNumComputeThreads(),
                serviceWorker.getPartitionStore().getNumPartitions()));
+
+    this.waitAllRunnable = new Runnable() {
+        @Override
+        public void run() {
+          PhilosophersTable.this.serviceWorker.
+            getWorkerClient().waitAllRequests();
+        }
+      };
 
     LOG.info("[[TESTING]] ========================================");
     LOG.info("[[TESTING]] I am worker: " +
@@ -373,7 +383,8 @@ public class PhilosophersTable<I extends WritableComparable,
                ": send remote token to " + receiverId);
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
-        new SendDistributedLockingTokenRequest(senderId, receiverId, conf));
+        new SendDistributedLockingTokenRequest(senderId, receiverId, conf),
+        true);
       LOG.info("[[TESTING]] " + senderId +
                ": SENT remote token to " + receiverId);
       return true;
@@ -404,7 +415,8 @@ public class PhilosophersTable<I extends WritableComparable,
                ": send remote fork to " + receiverId);
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
-        new SendDistributedLockingForkRequest(senderId, receiverId, conf));
+        new SendDistributedLockingForkRequest(senderId, receiverId, conf),
+        true);
       LOG.info("[[TESTING]] " + senderId +
                ": SENT remote fork to " + receiverId);
       return true;
@@ -450,19 +462,15 @@ public class PhilosophersTable<I extends WritableComparable,
       needFlush |= sendFork(receiverId, senderId);
     }
 
-    // TODO-YH: no longer deadlocks?
+    // TODO-YH: still need async thread... why??
     if (needFlush) {
-      LOG.info("[[TESTING]] " + receiverId + ": flushing");
-      serviceWorker.getWorkerClient().waitAllRequests();
-      LOG.info("[[TESTING]] " + receiverId + ": done flush");
-      //new Thread(new Runnable() {
-      //    @Override
-      //    public void run() {
-      //      LOG.info("[[TESTING]] flushing on separate thread");
-      //      serviceWorker.getWorkerClient().waitAllRequests();
-      //      LOG.info("[[TESTING]] done flush on separate thread");
-      //    }
-      //  }).start();
+      // can't use synchronized block b/c ref is changing
+      waitLock.lock();
+      if (waitThread == null || !waitThread.isAlive()) {
+        waitThread = new Thread(waitAllRunnable);
+        waitThread.start();
+      }
+      waitLock.unlock();
     }
   }
 
