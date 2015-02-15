@@ -383,8 +383,7 @@ public class PhilosophersTable<I extends WritableComparable,
                ": send remote token to " + receiverId);
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
-        new SendDistributedLockingTokenRequest(senderId, receiverId, conf),
-        true);
+        new SendDistributedLockingTokenRequest(senderId, receiverId, conf));
       LOG.info("[[TESTING]] " + senderId +
                ": SENT remote token to " + receiverId);
       return true;
@@ -415,8 +414,7 @@ public class PhilosophersTable<I extends WritableComparable,
                ": send remote fork to " + receiverId);
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
-        new SendDistributedLockingForkRequest(senderId, receiverId, conf),
-        true);
+        new SendDistributedLockingForkRequest(senderId, receiverId, conf));
       LOG.info("[[TESTING]] " + senderId +
                ": SENT remote fork to " + receiverId);
       return true;

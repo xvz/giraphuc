@@ -26,6 +26,8 @@ import org.apache.giraph.comm.netty.handler.RequestServerHandler;
 import org.apache.giraph.comm.netty.handler.ResponseClientHandler;
 /*if_not[HADOOP_NON_SECURE]*/
 import org.apache.giraph.comm.netty.handler.SaslClientHandler;
+import org.apache.giraph.comm.requests.SendDistributedLockingForkRequest;
+import org.apache.giraph.comm.requests.SendDistributedLockingTokenRequest;
 import org.apache.giraph.comm.requests.RequestType;
 import org.apache.giraph.comm.requests.SaslTokenMessageRequest;
 /*end[HADOOP_NON_SECURE]*/
@@ -662,19 +664,6 @@ public class NettyClient {
    */
   public void sendWritableRequest(Integer destTaskId,
       WritableRequest request) {
-    sendWritableReqest(destTaskId, request, false);
-  }
-
-  /**
-   * Send a request to a remote server (should be already connected),
-   * and possibly ignore open request limits.
-   *
-   * @param destTaskId Destination task id
-   * @param request Request to send
-   * @param ignoreLimit True to ignore open request limit
-   */
-  public void sendWritableRequest(Integer destTaskId,
-      WritableRequest request, boolean ignoreLimit) {
     InetSocketAddress remoteServer = taskIdAddressMap.get(destTaskId);
     if (clientRequestIdRequestInfoMap.isEmpty()) {
       inboundByteCounter.resetAll();
@@ -706,7 +695,10 @@ public class NettyClient {
     ChannelFuture writeFuture = channel.write(request);
     newRequestInfo.setWriteFuture(writeFuture);
 
-    if (ignoreLimit) {
+    // don't block fork/token requests
+    if (conf.getAsyncConf().lockSerialized() &&
+        (request instanceof SendDistributedLockingForkRequest ||
+         request instanceof SendDistributedLockingTokenRequest)) {
       return;
     }
 
