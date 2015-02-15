@@ -823,28 +823,28 @@ public class BspServiceWorker<I extends WritableComparable,
     }
 
     // TODO-YH: delete this
-    if (asyncConf.tokenSerialized() && getLogicalSuperstep() == 0) {
-      StringBuilder partitionIds = new StringBuilder();
-      int numVertices = 0;
-      for (int i : getServerData().getPartitionStore().getPartitionIds()) {
-        numVertices += getServerData().getPartitionStore().
-          getOrCreatePartition(i).getVertexCount();
-        partitionIds.append(i + ",");
-      }
-
-      int numInternal = vertexTypeStore.numInternalVertices();
-      int numLocalBoundary = vertexTypeStore.numLocalBoundaryVertices();
-      int numRemoteBoundary = vertexTypeStore.numRemoteBoundaryVertices();
-      int numBothBoundary = numVertices - numInternal -
-        numLocalBoundary - numRemoteBoundary;
-
-      LOG.info("[[TESTING]] task-id: " + workerInfo.getTaskId());
-      LOG.info("[[TESTING]] partition-ids: (" + partitionIds + ")");
-      LOG.info("[[TESTING]] worker-only (int, lbv, rbv, bbv): (" +
-               numInternal + "," + numLocalBoundary + "," +
-               numRemoteBoundary + "," + numBothBoundary + ")" +
-               " -- numTot: " + numVertices);
-    }
+    //if (asyncConf.tokenSerialized() && getLogicalSuperstep() == 0) {
+    //  StringBuilder partitionIds = new StringBuilder();
+    //  int numVertices = 0;
+    //  for (int i : getServerData().getPartitionStore().getPartitionIds()) {
+    //    numVertices += getServerData().getPartitionStore().
+    //      getOrCreatePartition(i).getVertexCount();
+    //    partitionIds.append(i + ",");
+    //  }
+    //
+    //  int numInternal = vertexTypeStore.numInternalVertices();
+    //  int numLocalBoundary = vertexTypeStore.numLocalBoundaryVertices();
+    //  int numRemoteBoundary = vertexTypeStore.numRemoteBoundaryVertices();
+    //  int numBothBoundary = numVertices - numInternal -
+    //    numLocalBoundary - numRemoteBoundary;
+    //
+    //  LOG.info("[[TESTING]] task-id: " + workerInfo.getTaskId());
+    //  LOG.info("[[TESTING]] partition-ids: (" + partitionIds + ")");
+    //  LOG.info("[[TESTING]] worker-only (int, lbv, rbv, bbv): (" +
+    //           numInternal + "," + numLocalBoundary + "," +
+    //           numRemoteBoundary + "," + numBothBoundary + ")" +
+    //           " -- numTot: " + numVertices);
+    //}
 
     //LOG.info("[[MST-internal]] ##START##: ss=" + getSuperstep() +
     //         ", lss=" + getLogicalSuperstep() +
@@ -1065,19 +1065,15 @@ public class BspServiceWorker<I extends WritableComparable,
       //     => this must be before post-superstep/aggregator finish, etc.
       if (asyncConf.disableBarriers() &&
           getLogicalSuperstep() > INPUT_SUPERSTEP) {
-        LOG.info("[[TESTING]] block on ltw barrier");
         // if global tokens are needed, block on lightweight
         // barrier WITHOUT doing ZK stuff
         if (asyncConf.tokenSerialized() &&
             needGlobalToken(localVertices, doneVertices)) {
-          LOG.info("[[TESTING]]   waiting for token...");
           waitForGlobalToken();
           asyncConf.setNeedBarrier(false);
         } else if (!waitForWorkersOrMessages(workerSentMessageBytes)) {
           asyncConf.setNeedBarrier(false);
         }
-        LOG.info("[[TESTING]] done ltw barrier, needBarrier: " +
-                 asyncConf.needBarrier());
 
         // this captures how long worker is blocked without work to do
         // (BAP only), after resolving all open requests
@@ -1333,12 +1329,10 @@ public class BspServiceWorker<I extends WritableComparable,
   private void roundRobinTokens() {
     if (getLogicalSuperstep() == INPUT_SUPERSTEP) {
       // special case for initializing tokens
-      LOG.info("[[TESTING]] ===========================================");
       WorkerInfo firstWorker = workerGraphPartitioner.getPartitionOwners().
         iterator().next().getWorkerInfo();
       if (workerInfo.equals(firstWorker)) {
         asyncConf.getGlobalToken();
-        LOG.info("[[TESTING]] init global token: " + workerInfo.getTaskId());
       }
       // revoke global token after num-partition supersteps
       // (+1 to avoid off-by-one, since decrment is in startSuperstep())
@@ -1348,7 +1342,6 @@ public class BspServiceWorker<I extends WritableComparable,
       int firstPartitionId = getServerData().getPartitionStore().
         getPartitionIds().iterator().next();
       asyncConf.setLocalTokenHolder(firstPartitionId);
-      LOG.info("[[TESTING]] init local token: " + firstPartitionId);
 
     } else {
       // Pass global token only after holding for some number of supersteps,
@@ -1384,8 +1377,6 @@ public class BspServiceWorker<I extends WritableComparable,
 
         asyncConf.revokeGlobalToken();
         sendGlobalToken(nextWorker);
-        LOG.info("[[TESTING]] sent global token to: " +
-                 nextWorker.getTaskId());
 
         // wait for all messages, including token hand-over, to send
         // (this ensures serializability)
@@ -1551,7 +1542,6 @@ public class BspServiceWorker<I extends WritableComparable,
         // workers but does not affect correctness, since workers
         // that need the token will block in a different manner.)
         if (asyncConf.tokenSerialized() && asyncConf.haveGlobalToken()) {
-          LOG.info("[[TESTING]] unblock to pass along token");
           roundRobinTokens();
           // do not return, b/c we have no new work to do
         }
@@ -1588,8 +1578,8 @@ public class BspServiceWorker<I extends WritableComparable,
       while (getZkExt().exists(superstepReadyToFinishNode, true) == null) {
         getSuperstepReadyToFinishEvent().waitForever();
 
+        // unblock if global token is received
         if (asyncConf.haveGlobalToken()) {
-          LOG.info("[[TESTING]] unblock b/c got token");
           return;
         }
 
