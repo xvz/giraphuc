@@ -466,6 +466,7 @@ public class PhilosophersTable<I extends WritableComparable,
     if (!isHungry && !isEating && isDirty(oldForkInfo)) {
       needFlush |= sendFork(receiverId, senderId);
     } else if (isHungry && isDirty(oldForkInfo)) {
+      // TODO-YH: consolidate??
       needFlush |= sendFork(receiverId, senderId);
       needFlush |= sendToken(receiverId, senderId);
     }

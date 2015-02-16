@@ -1506,20 +1506,31 @@ public class BspServiceWorker<I extends WritableComparable,
       while (getZkExt().exists(superstepReadyToFinishNode, true) == null) {
         // signalled in BspService#process OR upon message arrival
         getSuperstepReadyToFinishEvent().waitForever();
+        // reset immediately, so we can capture any other events
+        getSuperstepReadyToFinishEvent().reset();
 
-        // check if signal was due to message arrival, by checking if
-        // in-flight bytes has decreased
+        // Check if signal was due to message arrival, by checking if
+        // in-flight bytes has decreased.
         // (it will never increase, b/c we're not sending any messages)
         //
         // If doing multi-phase computation, return ONLY if message is
         // for current phase. Do not return if it is for the next phase.
         if (asyncConf.getInFlightBytes() < prevInFlightBytes &&
-             (!asyncConf.isMultiPhase() ||
-              getServerData().getRemoteMessageStore().hasMessages())) {
+            (!asyncConf.isMultiPhase() ||
+             getServerData().getRemoteMessageStore().hasMessages())) {
           try {
             // YH: "true" for recursive not really needed but false
             // won't make it any faster, so leave it to be safe
             getZkExt().deleteExt(finishedWorkerPath, -1, true);
+
+            // We are in this function because we don't need global
+            // token. BUT, we just received remote message, so we
+            // DO need global token now. Immediately block for
+            // global token, since there is no local work to do.
+            if (asyncConf.tokenSerialized() && !asyncConf.haveGlobalToken()) {
+              waitForGlobalToken();
+            }
+
             return false;
 
           } catch (KeeperException e) {
@@ -1531,8 +1542,8 @@ public class BspServiceWorker<I extends WritableComparable,
           }
         }
 
-        // If doing serialized computation, unblock on global token
-        // to pass it along (since this worker doesn't need it).
+        // We are here because we don't need global token, so
+        // unblock only to pass global token along.
         //
         // TODO-YH: For termination, workers will keep passing the
         // token around. The current naive approach relies on race
@@ -1545,9 +1556,6 @@ public class BspServiceWorker<I extends WritableComparable,
           roundRobinTokens();
           // do not return, b/c we have no new work to do
         }
-
-        // not a message; reset condition var
-        getSuperstepReadyToFinishEvent().reset();
       }
 
       return true;
@@ -1577,14 +1585,12 @@ public class BspServiceWorker<I extends WritableComparable,
       // an indefinite block until we get the global token.
       while (getZkExt().exists(superstepReadyToFinishNode, true) == null) {
         getSuperstepReadyToFinishEvent().waitForever();
+        getSuperstepReadyToFinishEvent().reset();
 
         // unblock if global token is received
         if (asyncConf.haveGlobalToken()) {
           return;
         }
-
-        // not global token; reset condition var
-        getSuperstepReadyToFinishEvent().reset();
       }
     } catch (KeeperException e) {
       throw new IllegalStateException(

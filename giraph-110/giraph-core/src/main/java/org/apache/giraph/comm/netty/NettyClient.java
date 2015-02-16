@@ -695,6 +695,7 @@ public class NettyClient {
     ChannelFuture writeFuture = channel.write(request);
     newRequestInfo.setWriteFuture(writeFuture);
 
+    // TODO-YH: make this cleaner (don't use instanceof)
     // don't block fork/token requests
     if (conf.getAsyncConf().lockSerialized() &&
         (request instanceof SendDistributedLockingForkRequest ||
