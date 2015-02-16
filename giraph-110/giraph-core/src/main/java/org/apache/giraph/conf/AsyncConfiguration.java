@@ -18,6 +18,7 @@
 
 package org.apache.giraph.conf;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.log4j.Logger;
 
@@ -32,7 +33,7 @@ public class AsyncConfiguration {
    * Whether or not to do async execution. That is, whether or not to
    * read most recently available local and remote values.
    */
-  private boolean isAsync;
+  private final boolean isAsync;
   /**
    * Whether algorithm (or phase) needs every vertex to have all messages
    * from all its neighbours for every superstep (aka, "stationary").
@@ -45,19 +46,19 @@ public class AsyncConfiguration {
   /** Counter for current phase; wraps around under overflow */
   private int currentPhase;
   /** Does the computation have multiple phases? */
-  private boolean isMultiPhase;
+  private final boolean isMultiPhase;
 
   /** Whether or not to disable BSP barriers for async execution */
-  private boolean disableBarriers;
+  private final boolean disableBarriers;
   /** Is a global barrier needed? */
   private boolean needBarrier;
   /** Local in-flight message bytes */
-  private AtomicLong inFlightBytes;
+  private final AtomicLong inFlightBytes = new AtomicLong();
 
   /** Whether algorithm requires a serializable execution, via tokens. */
-  private boolean tokenSerialized;
+  private final boolean tokenSerialized;
   /** Whether worker has global token. */
-  private boolean haveGlobalToken;
+  private final AtomicBoolean haveGlobalToken = new AtomicBoolean();
   /** Id of partition holding local token. */
   private int localTokenId;
 
@@ -65,10 +66,10 @@ public class AsyncConfiguration {
    * Whether algorithm requires a serializable execution,
    * via distributed locking
    */
-  private boolean lockSerialized;
+  private final boolean lockSerialized;
 
   /** Whether or not to print out timing information */
-  private boolean printTiming;
+  private final boolean printTiming;
 
   // YH: inFlightBytes tracks the number of bytes this worker has sent
   // to remote workers MINUS the bytes this worker has received from
@@ -101,11 +102,9 @@ public class AsyncConfiguration {
 
     // special case: first superstep always needs barrier after
     needBarrier = true;
-    inFlightBytes = new AtomicLong();
 
-    // these have to be initialized/set properly elsewhere,
+    // this & haveGlobalToken need to be initialized properly elsewhere,
     // since BspServiceWorker doesn't exist when this is created
-    haveGlobalToken = false;
     localTokenId = -1;
   }
 
@@ -268,14 +267,14 @@ public class AsyncConfiguration {
    * Receive global token. Worker now holds token.
    */
   public void getGlobalToken() {
-    haveGlobalToken = true;
+    haveGlobalToken.set(true);
   }
 
   /**
    * Revoke global token. Worker no longer has token.
    */
   public void revokeGlobalToken() {
-    haveGlobalToken = false;
+    haveGlobalToken.set(false);
   }
 
   /**
@@ -284,7 +283,7 @@ public class AsyncConfiguration {
    * @return True if worker is holding global token.
    */
   public boolean haveGlobalToken() {
-    return haveGlobalToken;
+    return haveGlobalToken.get();
   }
 
   /**
