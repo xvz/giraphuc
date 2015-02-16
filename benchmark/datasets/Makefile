@@ -20,4 +20,4 @@ mst-weight-reducer: mst-weight-reducer.cpp
 	g++ -Wall --std=c++0x mst-weight-reducer.cpp -o mst-weight-reducer
 
 mst-weight-remover: mst-weight-remover.cpp
-	g++ -Wall --std=c++0x mst-weight-remover.cpp -o mst-weight-remover
+	g++ -Wall mst-weight-remover.cpp -o mst-weight-remover
