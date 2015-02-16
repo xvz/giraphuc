@@ -69,10 +69,10 @@ public class PhilosophersTable<I extends WritableComparable,
 
   /**
    * Map of vertex id (philosopher) to vertex ids (vertex's neighbours)
-   * to single byte (indicates status, fork, token, dirty/clean).
+   * to single byte (indicates dirty/clean, have fork, have token).
    *
    * Basically, this tracks the state of philosophers (boundary vertices),
-   * who are sitting at a distributed table, that are local to this worker.
+   * sitting at a distributed "table", that are local to this worker.
    */
   private Long2ObjectOpenHashMap<Long2ByteOpenHashMap> pMap;
   /** Set of vertices (philosophers) that are hungry (acquiring forks) */
@@ -133,7 +133,7 @@ public class PhilosophersTable<I extends WritableComparable,
     long pId = ((LongWritable) vertex.getId()).get();  // "philosopher" id
 
     // TODO-YH: assumes undirected graph... for directed graph,
-    // need do broadcast to all neighbours
+    // need to broadcast to all neighbours + check in-edges
     for (Edge<I, E> e : vertex.getEdges()) {
       int dstPartitionId = serviceWorker.
         getVertexPartitionOwner(e.getTargetVertexId()).getPartitionId();

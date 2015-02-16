@@ -60,9 +60,8 @@ public class VertexTypeStore<I extends WritableComparable,
   /** Provided configuration */
   private ImmutableClassesGiraphConfiguration conf;
 
-  // These are for token passing ONLY.
-  // w/ hash partitioning, edge cuts are extremely high,
-  // meaning 99%+ of vertices are usually local+remote boundary.
+  // With hash partitioning, edge cuts are extremely high, meaning
+  // 99%+ of vertices are usually local/remote/both boundary.
   /** Set of internal vertex ids (owned by this worker only) */
   private Set internalVertices;
   /** Set of local boundary vertex ids (owned by this worker only) */
@@ -110,7 +109,7 @@ public class VertexTypeStore<I extends WritableComparable,
     WorkerInfo myWorker = conf.getServiceWorker().getWorkerInfo();
 
     // TODO-YH: assumes undirected graph... for directed graph,
-    // need do broadcast to all neighbours
+    // need to broadcast to all neighbours + check in-edges
     for (Edge<I, E> e : vertex.getEdges()) {
       PartitionOwner dstOwner = conf.getServiceWorker().
         getVertexPartitionOwner(e.getTargetVertexId());
@@ -119,7 +118,6 @@ public class VertexTypeStore<I extends WritableComparable,
 
       // check if neighbour is remote; if not,
       // check if neighbour is in another local partition
-      // id is this (vertex's) partition id
       if (!myWorker.equals(dstWorker)) {
         isRemoteBoundary = true;
       } else if (dstPartitionId != partitionId) {

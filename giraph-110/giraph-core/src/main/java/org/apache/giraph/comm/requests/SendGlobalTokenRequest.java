@@ -22,7 +22,6 @@ import org.apache.giraph.bsp.BspService;
 import org.apache.giraph.comm.ServerData;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
-import org.apache.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -38,10 +37,6 @@ import java.io.IOException;
 public class SendGlobalTokenRequest<I extends WritableComparable,
     V extends Writable, E extends Writable> extends
     WritableRequest<I, V, E> implements WorkerRequest<I, V, E> {
-  /** Class logger */
-  private static final Logger LOG =
-      Logger.getLogger(SendGlobalTokenRequest.class);
-
   /**
    * Default constructor.
    */
@@ -62,12 +57,10 @@ public class SendGlobalTokenRequest<I extends WritableComparable,
 
   @Override
   public void doRequest(ServerData<I, V, E> serverData) {
-    // YH: server handler instantiates received requests using
+    // Server handler instantiates received requests using
     // ReflectionUtils(class, config), which will set conf properly
     // since WritableRequest is configurable (see RequestDecoder)
     getConf().getAsyncConf().getGlobalToken();
-    LOG.info("[[TESTING]] got global token: " +
-             serverData.getServiceWorker().getWorkerInfo().getTaskId());
 
     // signal worker if needed
     if (getConf().getAsyncConf().disableBarriers()) {
