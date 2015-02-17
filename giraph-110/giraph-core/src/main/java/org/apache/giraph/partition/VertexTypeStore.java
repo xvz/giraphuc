@@ -54,14 +54,14 @@ public class VertexTypeStore<I extends WritableComparable,
     /** all neighbours are in remote workers (NONE in same worker) */
     REMOTE_BOUNDARY,
     /** neighbours in both remote and local workers */
-    BOTH_BOUNDARY;
+    MIXED_BOUNDARY;
   }
 
   /** Provided configuration */
   private ImmutableClassesGiraphConfiguration conf;
 
   // With hash partitioning, edge cuts are extremely high, meaning
-  // 99%+ of vertices are usually local/remote/both boundary.
+  // 99%+ of vertices are usually local/remote/mixed boundary.
   /** Set of internal vertex ids (owned by this worker only) */
   private Set internalVertices;
   /** Set of local boundary vertex ids (owned by this worker only) */
@@ -126,7 +126,7 @@ public class VertexTypeStore<I extends WritableComparable,
 
       // need to check all edges before concluding vertex
       // is ONLY local or remote boundary, but if it's
-      // already both, we can quit early
+      // already both/mixed, we can quit early
       if (isRemoteBoundary && isLocalBoundary) {
         break;
       }
@@ -139,7 +139,7 @@ public class VertexTypeStore<I extends WritableComparable,
     } else if (isRemoteBoundary && !isLocalBoundary) {
       setVertexType(vertex.getId(), VertexType.REMOTE_BOUNDARY);
     }
-    // else BOTH_BOUNDARY is implicit
+    // else MIXED_BOUNDARY is implicit
   }
 
   /**
@@ -159,7 +159,7 @@ public class VertexTypeStore<I extends WritableComparable,
     case REMOTE_BOUNDARY:
       synchronizedAdd(remoteBoundaryVertices, vertexId);
       return;
-    case BOTH_BOUNDARY:
+    case MIXED_BOUNDARY:
       // local+remote boundary will not be on any of the sets
       // (i.e., absence on all sets indicates this)
       return;
@@ -190,7 +190,7 @@ public class VertexTypeStore<I extends WritableComparable,
       return contains(localBoundaryVertices, vertexId);
     case REMOTE_BOUNDARY:
       return contains(remoteBoundaryVertices, vertexId);
-    case BOTH_BOUNDARY:
+    case MIXED_BOUNDARY:
       return !(contains(internalVertices, vertexId) ||
                contains(localBoundaryVertices, vertexId) ||
                contains(remoteBoundaryVertices, vertexId));
@@ -216,7 +216,7 @@ public class VertexTypeStore<I extends WritableComparable,
     } else if (contains(remoteBoundaryVertices, vertexId)) {
       return VertexType.REMOTE_BOUNDARY;
     } else {
-      return VertexType.BOTH_BOUNDARY;
+      return VertexType.MIXED_BOUNDARY;
     }
   }
 

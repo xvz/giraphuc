@@ -283,7 +283,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
                             getAllMessages(vertexId));
             }
             break;
-          case BOTH_BOUNDARY:
+          case MIXED_BOUNDARY:
             // local+remote boundary needs both tokens
             if (asyncConf.haveGlobalToken() &&
                 asyncConf.haveLocalToken(partition.getId())) {
