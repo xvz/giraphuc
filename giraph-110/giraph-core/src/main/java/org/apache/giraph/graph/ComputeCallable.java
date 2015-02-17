@@ -165,9 +165,11 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       Partition<I, V, E> partition =
           serviceWorker.getPartitionStore().getOrCreatePartition(partitionId);
 
-      // for partition-based dist locking, acquire forks before
-      // executing partition and skip if acquisition fails
+      // For partition-based dist locking, acquire forks before
+      // executing partition and skip if acquisition fails.
+      // Skip this if this is first superstep.
       if (asyncConf.partitionLockSerialized() &&
+          serviceWorker.getLogicalSuperstep() > 0 &&
           !serviceWorker.getPartitionPhilosophersTable().
             acquireForks(partition.getId())) {
         // add "unchanged" partition stats
@@ -192,7 +194,8 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
             computePartition(computation, partition);
 
         // YH: immediately release partition forks
-        if (asyncConf.partitionLockSerialized()) {
+        if (asyncConf.partitionLockSerialized() &&
+          serviceWorker.getLogicalSuperstep() > 0) {
           serviceWorker.getPartitionPhilosophersTable().
             releaseForks(partition.getId());
         }
