@@ -116,6 +116,9 @@ public abstract class BasicPartition<I extends WritableComparable,
       } else if (getConf().getAsyncConf().lockSerialized()) {
         getConf().getServiceWorker().getPhilosophersTable().
           addVertexIfBoundary(vertex);
+      } else if (getConf().getAsyncConf().partitionLockSerialized()) {
+        getConf().getServiceWorker().getPartitionPhilosophersTable().
+          addVertexDependencies(vertex);
       }
 
       // Release the vertex if it was put, otherwise reuse as an optimization

@@ -152,6 +152,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
         // for hash partitioning, one partition will almost always
         // depend uniformly on ALL other partitions
         neighbours = new Int2ByteOpenHashMap(numTotalPartitions);
+        pMap.put(partitionId, neighbours);
       }
     }
 
@@ -205,9 +206,15 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
     LOG.debug("[[PTABLE]] " + pId + ": acquiring forks");
     boolean needRemoteFork = false;
     boolean needForks = false;
-
-    Int2ByteOpenHashMap neighbours = pMap.get(pId);
     byte oldForkInfo;
+
+    // there CAN be partitions with 0 vertices---there will be
+    // no dependencies on them, but we do need to handle them
+    Int2ByteOpenHashMap neighbours = pMap.get(pId);
+    if (neighbours == null) {
+      LOG.debug("[[PTABLE]] " + pId + ": empty partition");
+      return false;
+    }
 
     synchronized (pHungry) {
       pHungry.add(pId);
@@ -290,9 +297,15 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
   public void releaseForks(int pId) {
     LOG.debug("[[PTABLE]] " + pId + ": releasing forks");
     boolean needFlush = false;
-
-    Int2ByteOpenHashMap neighbours = pMap.get(pId);
     byte oldForkInfo;
+
+    // there CAN be partitions with 0 vertices---there will be
+    // no dependencies on them, but we do need to handle them
+    Int2ByteOpenHashMap neighbours = pMap.get(pId);
+    if (neighbours == null) {
+      LOG.debug("[[PTABLE]] " + pId + ": empty partition");
+      return;
+    }
 
     synchronized (pEating) {
       pEating.remove(pId);
@@ -426,7 +439,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       LOG.debug("[[PTABLE]] " + receiverId + ": got token from " +
                senderId  + " " + toString(forkInfo));
 
-      if (isEating || !isDirty(forkInfo)) {
+      if (isEating) { // || !isDirty(forkInfo)) {
         // Do not give up fork, but record token so that receiver
         // will see it when it finishes eating.
         //
@@ -441,7 +454,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
         forkInfo |= MASK_HAVE_TOKEN;
         LOG.debug("[[PTABLE]] " + receiverId + ": not giving up fork " +
                  senderId  + " " + toString(forkInfo));
-      } else if (!isHungry && !isEating && isDirty(forkInfo)) {
+      } else if (!isHungry && !isEating) { // && isDirty(forkInfo)) {
         // Give up dirty fork and record token receipt.
         forkInfo &= ~MASK_IS_DIRTY;
         forkInfo &= ~MASK_HAVE_FORK;
@@ -460,7 +473,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       neighbours.put(neighbourId, forkInfo);
     }
 
-    if (!isHungry && !isEating && isDirty(oldForkInfo)) {
+    if (!isHungry && !isEating) { //&& isDirty(oldForkInfo)) {
       needFlush |= sendFork(receiverId, senderId);
     } else if (isHungry && isDirty(oldForkInfo)) {
       // TODO-YH: consolidate??
