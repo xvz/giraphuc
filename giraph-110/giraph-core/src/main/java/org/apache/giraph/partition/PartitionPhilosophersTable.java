@@ -19,34 +19,38 @@
 package org.apache.giraph.partition;
 
 import org.apache.giraph.bsp.CentralizedServiceWorker;
-import org.apache.giraph.comm.requests.SendDistributedLockingForkRequest;
-import org.apache.giraph.comm.requests.SendDistributedLockingTokenRequest;
+import org.apache.giraph.comm.requests.SendPartitionDLForkRequest;
+import org.apache.giraph.comm.requests.SendPartitionDLTokenRequest;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.edge.Edge;
 import org.apache.giraph.graph.Vertex;
-import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.log4j.Logger;
 
-import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
-import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.ints.Int2ByteOpenHashMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
+import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import com.google.common.collect.Iterables;
+
 /**
- * YH: Implements the hygienic dining philosophers solution.
+ * YH: Implements the hygienic dining philosophers solution that
+ * treats partitions (rather than vertices) as philosophers.
  *
  * @param <I> Vertex id
  * @param <V> Vertex value
  * @param <E> Edge value
  */
-public class PhilosophersTable<I extends WritableComparable,
+public class PartitionPhilosophersTable<I extends WritableComparable,
     V extends Writable, E extends Writable> {
   /** Class logger */
-  private static final Logger LOG = Logger.getLogger(PhilosophersTable.class);
+  private static final Logger LOG =
+    Logger.getLogger(PartitionPhilosophersTable.class);
 
   /** Mask for have-token bit */
   private static final byte MASK_HAVE_TOKEN = 0x1;
@@ -68,17 +72,22 @@ public class PhilosophersTable<I extends WritableComparable,
   private Thread waitThread;
 
   /**
-   * Map of vertex id (philosopher) to vertex ids (vertex's neighbours)
+   * Map of partition id (philosopher) to partition ids (dependencies)
    * to single byte (indicates dirty/clean, have fork, have token).
    *
-   * Basically, this tracks the state of philosophers (boundary vertices),
+   * Basically, this tracks the state of philosophers (partitions),
    * sitting at a distributed "table", that are local to this worker.
    */
-  private Long2ObjectOpenHashMap<Long2ByteOpenHashMap> pMap;
+  private Int2ObjectOpenHashMap<Int2ByteOpenHashMap> pMap;
   /** Set of vertices (philosophers) that are hungry (acquiring forks) */
-  private LongOpenHashSet pHungry;
+  private IntOpenHashSet pHungry;
   /** Set of vertices (philosophers) that are eating (acquired forks) */
-  private LongOpenHashSet pEating;
+  private IntOpenHashSet pEating;
+
+  /** Total number of partitions across all workers */
+  private int numTotalPartitions;
+  /** Map of partition ids to worker/task ids */
+  private Int2IntOpenHashMap taskIdMap;
 
   /**
    * Constructor
@@ -86,30 +95,36 @@ public class PhilosophersTable<I extends WritableComparable,
    * @param conf Configuration used.
    * @param serviceWorker Service worker
    */
-  public PhilosophersTable(
+  public PartitionPhilosophersTable(
      ImmutableClassesGiraphConfiguration<I, V, E> conf,
      CentralizedServiceWorker<I, V, E> serviceWorker) {
-    Class<I> vertexIdClass = conf.getVertexIdClass();
-    if (!vertexIdClass.equals(LongWritable.class)) {
-      // TODO-YH: implement general support (easy to do, but tedious)
-      throw new RuntimeException(
-        "Non-long vertex id classes not yet supported!");
-    }
-
     this.conf = conf;
     this.serviceWorker = serviceWorker;
-    this.pMap = new Long2ObjectOpenHashMap<Long2ByteOpenHashMap>();
-    this.pHungry = new LongOpenHashSet(
-      Math.min(conf.getNumComputeThreads(),
-               serviceWorker.getPartitionStore().getNumPartitions()));
-    this.pEating = new LongOpenHashSet(
-      Math.min(conf.getNumComputeThreads(),
-               serviceWorker.getPartitionStore().getNumPartitions()));
+
+    int numLocalPartitions =
+      serviceWorker.getPartitionStore().getNumPartitions();
+
+    // need one entry for every local partition
+    this.pMap =
+      new Int2ObjectOpenHashMap<Int2ByteOpenHashMap>(numLocalPartitions);
+
+    this.pHungry = new IntOpenHashSet(
+      Math.min(conf.getNumComputeThreads(), numLocalPartitions));
+    this.pEating = new IntOpenHashSet(
+      Math.min(conf.getNumComputeThreads(), numLocalPartitions));
+
+    // this gives total number of partitions, b/c WorkerGraphPartitioner
+    // must store location of ALL partitions in system
+    // (PartitionOwners are init and assigned by master)
+    this.numTotalPartitions =
+      Iterables.size(serviceWorker.getPartitionOwners());
+
+    this.taskIdMap = new Int2IntOpenHashMap(numTotalPartitions);
 
     this.waitAllRunnable = new Runnable() {
         @Override
         public void run() {
-          PhilosophersTable.this.serviceWorker.
+          PartitionPhilosophersTable.this.serviceWorker.
             getWorkerClient().waitAllRequests();
         }
       };
@@ -120,89 +135,78 @@ public class PhilosophersTable<I extends WritableComparable,
   }
 
   /**
-   * Add and initialize a vertex as a philosopher if it's a boundary vertex.
+   * Add a vertex's dependencies to the partition to which it belongs.
    * Must not be called/used when compute threads are executing.
    *
-   * @param vertex Vertex to be added
+   * @param vertex Vertex to be processed
    */
-  public void addVertexIfBoundary(Vertex<I, V, E> vertex) {
-    Long2ByteOpenHashMap neighbours = null;
-
+  public void addVertexDependencies(Vertex<I, V, E> vertex) {
+    // partition and "philosopher" id
     int partitionId = serviceWorker.
       getVertexPartitionOwner(vertex.getId()).getPartitionId();
-    long pId = ((LongWritable) vertex.getId()).get();  // "philosopher" id
+
+    Int2ByteOpenHashMap neighbours;
+    synchronized (pMap) {
+      neighbours = pMap.get(partitionId);
+      if (neighbours == null) {
+        // for hash partitioning, one partition will almost always
+        // depend uniformly on ALL other partitions
+        neighbours = new Int2ByteOpenHashMap(numTotalPartitions);
+      }
+    }
 
     // TODO-YH: assumes undirected graph... for directed graph,
     // need to broadcast to all neighbours + check in-edges
     for (Edge<I, E> e : vertex.getEdges()) {
       int dstPartitionId = serviceWorker.
         getVertexPartitionOwner(e.getTargetVertexId()).getPartitionId();
-      long neighbourId = ((LongWritable) e.getTargetVertexId()).get();
-      byte forkInfo = 0;
 
-      // Determine if neighbour is on different partition.
-      // This does two things:
-      // - if vertex is internal, skips creating "neighbours" altogether
-      // - if vertex is boundary, skips tracking neighbours on same partition
-      //   (same partition = executed by single thread = no forks needed)
-      if (dstPartitionId != partitionId) {
-        if (neighbours == null) {
-          neighbours = new Long2ByteOpenHashMap(vertex.getNumEdges());
-        }
-
-        // For acyclic precedence graph, always initialize
-        // tokens at smaller id and dirty fork at larger id.
-        // Skip self-loops (saves a bit of space).
-        if (neighbourId == pId) {
+      // neighbours are not deleted, so no need to sync on pMap
+      synchronized (neighbours) {
+        // partition dependency may have already been
+        // initialized by another vertex.. if so, skip
+        if (neighbours.get(dstPartitionId) != 0) {
           continue;
-        } else if (neighbourId < pId) {
-          // I am larger id, so I hold dirty fork
-          forkInfo |= MASK_HAVE_FORK;
-          forkInfo |= MASK_IS_DIRTY;
         } else {
-          forkInfo |= MASK_HAVE_TOKEN;
-        }
-        neighbours.put(neighbourId, forkInfo);
-      }
-    }
+          byte forkInfo = 0;
 
-    if (neighbours != null) {
-      synchronized (pMap) {
-        Long2ByteOpenHashMap ret = pMap.put(pId, neighbours);
-        if (ret != null) {
-          throw new RuntimeException("Duplicate neighbours!");
+          // For acyclic precedence graph, always initialize
+          // tokens at smaller id and dirty fork at larger id.
+          // Skip self-loops/dependencies.
+          if (dstPartitionId == partitionId) {
+            continue;
+          } else if (dstPartitionId < partitionId) {
+            // I have larger id, so I hold dirty fork
+            forkInfo |= MASK_HAVE_FORK;
+            forkInfo |= MASK_IS_DIRTY;
+          } else {
+            forkInfo |= MASK_HAVE_TOKEN;
+          }
+          neighbours.put(dstPartitionId, forkInfo);
+
+          // also store reverse index of partition to task ids
+          // (by default, we only have task to partition ids)
+          taskIdMap.put(dstPartitionId,
+                        serviceWorker.getVertexPartitionOwner(vertex.getId()).
+                        getWorkerInfo().getTaskId());
         }
       }
     }
   }
-
-  /**
-   * Whether vertex is a boundary vertex (philosopher). Thread-safe
-   * for all concurrent calls EXCEPT addBoundaryVertex() calls.
-   *
-   * @param vertexId Vertex id to check
-   * @return True if vertex is boundary vertex
-   */
-  public boolean isBoundaryVertex(I vertexId) {
-    return pMap.containsKey(((LongWritable) vertexId).get());
-  }
-
 
   /**
    * Blocking call that returns true when all forks are acquired and
    * the philosopher starts to eat, or false if acquisition failed.
    *
-   * @param vertexId Vertex id (philosopher) to acquire forks for
+   * @param pId Partition id (philosopher) to acquire forks for
    * @return True if forks acquired, false otherwise
    */
-  public boolean acquireForks(I vertexId) {
-    LOG.debug("[[PTABLE]] " + vertexId + ": acquiring forks");
+  public boolean acquireForks(int pId) {
+    LOG.debug("[[PTABLE]] " + pId + ": acquiring forks");
     boolean needRemoteFork = false;
     boolean needForks = false;
-    LongWritable dstId = new LongWritable();  // reused
 
-    long pId = ((LongWritable) vertexId).get();
-    Long2ByteOpenHashMap neighbours = pMap.get(pId);
+    Int2ByteOpenHashMap neighbours = pMap.get(pId);
     byte oldForkInfo;
 
     synchronized (pHungry) {
@@ -211,7 +215,7 @@ public class PhilosophersTable<I extends WritableComparable,
 
     // for loop NOT synchronized b/c mutations must never occur
     // while compute threads are running, so keyset is fixed
-    for (long neighbourId : neighbours.keySet()) {
+    for (int neighbourId : neighbours.keySet()) {
       synchronized (neighbours) {
         byte forkInfo = neighbours.get(neighbourId);
         oldForkInfo = forkInfo;
@@ -219,7 +223,7 @@ public class PhilosophersTable<I extends WritableComparable,
         if (haveToken(forkInfo) && !haveFork(forkInfo)) {
           forkInfo &= ~MASK_HAVE_TOKEN;
           needForks = true;
-          LOG.debug("[[PTABLE]] " + vertexId + ":   missing fork " +
+          LOG.debug("[[PTABLE]] " + pId + ":   missing fork " +
                    neighbourId + " " + toString(forkInfo));
         }
         // otherwise, we either have fork (could be clean or dirty)
@@ -236,27 +240,26 @@ public class PhilosophersTable<I extends WritableComparable,
       // Also note that we've applied forkInfo update before sending.
       // Important b/c local requests will immediately modify forkInfo.
       if (haveToken(oldForkInfo) && !haveFork(oldForkInfo)) {
-        dstId.set(neighbourId);
-        needRemoteFork |= sendToken(vertexId, (I) dstId);
+        needRemoteFork |= sendToken(pId, neighbourId);
       }
     }
 
     if (needRemoteFork) {
-      LOG.debug("[[PTABLE]] " + vertexId + ":   flushing");
+      LOG.debug("[[PTABLE]] " + pId + ":   flushing");
       serviceWorker.getWorkerClient().waitAllRequests();
-      LOG.debug("[[PTABLE]] " + vertexId + ":   done flush");
+      LOG.debug("[[PTABLE]] " + pId + ":   done flush");
     }
 
     // Do we have all our forks? This must be done in a single
     // block to get fully consistent view of ALL forks.
     synchronized (neighbours) {
       if (needForks) {
-        for (long neighbourId : neighbours.keySet()) {
+        for (int neighbourId : neighbours.keySet()) {
           byte forkInfo = neighbours.get(neighbourId);
           if (!haveFork(forkInfo)) {
             // For efficiency, don't block---just give up and execute
             // other vertices. Revisit on next (logical) superstep.
-            LOG.debug("[[PTABLE]] " + vertexId + ": no go, missing fork " +
+            LOG.debug("[[PTABLE]] " + pId + ": no go, missing fork " +
                      neighbourId + " " + toString(forkInfo));
             synchronized (pHungry) {
               pHungry.remove(pId);
@@ -274,7 +277,7 @@ public class PhilosophersTable<I extends WritableComparable,
         pEating.add(pId);
       }
     }
-    LOG.debug("[[PTABLE]] " + vertexId + ": got all forks");
+    LOG.debug("[[PTABLE]] " + pId + ": got all forks");
     return true;
   }
 
@@ -282,15 +285,13 @@ public class PhilosophersTable<I extends WritableComparable,
    * Dirties used forks and satisfies any pending requests
    * for such forks. Equivalent to "stop eating".
    *
-   * @param vertexId Vertex id (philosopher) that finished eating
+   * @param pId Partition id (philosopher) that finished eating
    */
-  public void releaseForks(I vertexId) {
-    LOG.debug("[[PTABLE]] " + vertexId + ": releasing forks");
+  public void releaseForks(int pId) {
+    LOG.debug("[[PTABLE]] " + pId + ": releasing forks");
     boolean needFlush = false;
-    LongWritable dstId = new LongWritable();  // reused
 
-    long pId = ((LongWritable) vertexId).get();
-    Long2ByteOpenHashMap neighbours = pMap.get(pId);
+    Int2ByteOpenHashMap neighbours = pMap.get(pId);
     byte oldForkInfo;
 
     synchronized (pEating) {
@@ -298,7 +299,7 @@ public class PhilosophersTable<I extends WritableComparable,
     }
 
     // all held forks are (implicitly) dirty
-    for (long neighbourId : neighbours.keySet()) {
+    for (int neighbourId : neighbours.keySet()) {
       // must synchronize since we may receive token
       synchronized (neighbours) {
         byte forkInfo = neighbours.get(neighbourId);
@@ -307,13 +308,13 @@ public class PhilosophersTable<I extends WritableComparable,
         if (haveToken(forkInfo)) {
           // fork will be sent outside of sync block
           forkInfo &= ~MASK_HAVE_FORK;
-          LOG.debug("[[PTABLE]] " + vertexId + ": sending clean fork to " +
+          LOG.debug("[[PTABLE]] " + pId + ": sending clean fork to " +
                    neighbourId + " " + toString(forkInfo));
         } else {
           // otherwise, explicitly dirty the fork
           // (so that fork is released immediately on token receipt)
           forkInfo |= MASK_IS_DIRTY;
-          LOG.debug("[[PTABLE]] " + vertexId + ": dirty fork " +
+          LOG.debug("[[PTABLE]] " + pId + ": dirty fork " +
                    neighbourId + " " + toString(forkInfo));
         }
 
@@ -321,15 +322,14 @@ public class PhilosophersTable<I extends WritableComparable,
       }
 
       if (haveToken(oldForkInfo)) {
-        dstId.set(neighbourId);
-        needFlush |= sendFork(vertexId, (I) dstId);
+        needFlush |= sendFork(pId, neighbourId);
       }
     }
 
     if (needFlush) {
-      LOG.debug("[[PTABLE]] " + vertexId + ": flushing");
+      LOG.debug("[[PTABLE]] " + pId + ": flushing");
       serviceWorker.getWorkerClient().waitAllRequests();
-      LOG.debug("[[PTABLE]] " + vertexId + ": done flush");
+      LOG.debug("[[PTABLE]] " + pId + ": done flush");
     }
   }
 
@@ -340,9 +340,8 @@ public class PhilosophersTable<I extends WritableComparable,
    * @param receiverId Receiver of token
    * @return True if receiver is remote, false if local
    */
-  public boolean sendToken(I senderId, I receiverId) {
-    int dstTaskId = serviceWorker.getVertexPartitionOwner(receiverId).
-      getWorkerInfo().getTaskId();
+  public boolean sendToken(int senderId, int receiverId) {
+    int dstTaskId = taskIdMap.get(receiverId);
 
     if (serviceWorker.getWorkerInfo().getTaskId() == dstTaskId) {
       LOG.debug("[[PTABLE]] " + senderId +
@@ -357,7 +356,7 @@ public class PhilosophersTable<I extends WritableComparable,
                ": send remote token to " + receiverId);
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
-        new SendDistributedLockingTokenRequest(senderId, receiverId, conf));
+        new SendPartitionDLTokenRequest(senderId, receiverId));
       LOG.debug("[[PTABLE]] " + senderId +
                ": SENT remote token to " + receiverId);
       return true;
@@ -371,9 +370,8 @@ public class PhilosophersTable<I extends WritableComparable,
    * @param receiverId Receiver of fork
    * @return True if receiver is remote, false if local
    */
-  public boolean sendFork(I senderId, I receiverId) {
-    int dstTaskId = serviceWorker.getVertexPartitionOwner(receiverId).
-      getWorkerInfo().getTaskId();
+  public boolean sendFork(int senderId, int receiverId) {
+    int dstTaskId = taskIdMap.get(receiverId);
 
     if (serviceWorker.getWorkerInfo().getTaskId() == dstTaskId) {
       LOG.debug("[[PTABLE]] " + senderId +
@@ -388,7 +386,7 @@ public class PhilosophersTable<I extends WritableComparable,
                ": send remote fork to " + receiverId);
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
-        new SendDistributedLockingForkRequest(senderId, receiverId, conf));
+        new SendPartitionDLForkRequest(senderId, receiverId));
       LOG.debug("[[PTABLE]] " + senderId +
                ": SENT remote fork to " + receiverId);
       return true;
@@ -401,13 +399,12 @@ public class PhilosophersTable<I extends WritableComparable,
    * @param senderId Sender of token
    * @param receiverId New holder of token
    */
-  public void receiveToken(I senderId, I receiverId) {
+  public void receiveToken(int senderId, int receiverId) {
     boolean needFlush = false;
+    int pId = senderId;
+    int neighbourId = receiverId;
 
-    long pId = ((LongWritable) receiverId).get();
-    long neighbourId = ((LongWritable) senderId).get();
-
-    Long2ByteOpenHashMap neighbours = pMap.get(pId);
+    Int2ByteOpenHashMap neighbours = pMap.get(pId);
     byte oldForkInfo;
 
     boolean isHungry;
@@ -489,10 +486,10 @@ public class PhilosophersTable<I extends WritableComparable,
    * @param senderId Sender of fork
    * @param receiverId New holder of fork
    */
-  public void receiveFork(I senderId, I receiverId) {
-    long pId = ((LongWritable) receiverId).get();
-    long neighbourId = ((LongWritable) senderId).get();
-    Long2ByteOpenHashMap neighbours = pMap.get(pId);
+  public void receiveFork(int senderId, int receiverId) {
+    int pId = senderId;
+    int neighbourId = receiverId;
+    Int2ByteOpenHashMap neighbours = pMap.get(pId);
 
     synchronized (neighbours) {
       byte forkInfo = neighbours.get(neighbourId);

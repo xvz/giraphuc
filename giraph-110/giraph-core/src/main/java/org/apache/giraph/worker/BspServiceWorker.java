@@ -62,6 +62,7 @@ import org.apache.giraph.partition.PartitionExchange;
 import org.apache.giraph.partition.PartitionOwner;
 import org.apache.giraph.partition.PartitionStats;
 import org.apache.giraph.partition.PartitionStore;
+import org.apache.giraph.partition.PartitionPhilosophersTable;
 import org.apache.giraph.partition.PhilosophersTable;
 import org.apache.giraph.partition.WorkerGraphPartitioner;
 import org.apache.giraph.partition.VertexTypeStore;
@@ -186,6 +187,8 @@ public class BspServiceWorker<I extends WritableComparable,
   private VertexTypeStore<I, V, E> vertexTypeStore;
   /** YH: Philosophers table for distributed locking serializability */
   private PhilosophersTable<I, V, E> pTable;
+  /** YH: Philosophers table for partition-base dist locking */
+  private PartitionPhilosophersTable<I, V, E> partitionPTable;
 
   // Per-Superstep Metrics
   /** Timer for WorkerContext#postSuperstep */
@@ -249,6 +252,8 @@ public class BspServiceWorker<I extends WritableComparable,
       vertexTypeStore = new VertexTypeStore<I, V, E>(conf);
     } else if (asyncConf.lockSerialized()) {
       pTable = new PhilosophersTable<I, V, E>(conf, this);
+    } else if (asyncConf.partitionLockSerialized()) {
+      partitionPTable = new PartitionPhilosophersTable<I, V, E>(conf, this);
     }
   }
 
@@ -1230,8 +1235,7 @@ public class BspServiceWorker<I extends WritableComparable,
       boolean haveLocalWork;
       boolean haveRemoteWork;
 
-      if (asyncConf.isMultiPhase() || asyncConf.tokenSerialized() ||
-          asyncConf.lockSerialized()) {
+      if (asyncConf.isMultiPhase() || asyncConf.isSerialized()) {
         // For multi-phase computation, we must check only the message stores
         // for the current phase. Hence, we can't use workerSentMessages, since
         // that also captures messages sent for the next phase.
@@ -2499,5 +2503,10 @@ else[HADOOP_NON_SECURE]*/
   @Override
   public PhilosophersTable<I, V, E> getPhilosophersTable() {
     return pTable;
+  }
+
+  @Override
+  public PartitionPhilosophersTable<I, V, E> getPartitionPhilosophersTable() {
+    return partitionPTable;
   }
 }

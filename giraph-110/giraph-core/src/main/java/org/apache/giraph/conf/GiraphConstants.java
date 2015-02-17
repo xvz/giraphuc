@@ -1146,6 +1146,16 @@ public interface GiraphConstants {
           "via distributed locking.");
 
   /**
+   * YH: Whether algorithm requires a serializable execution
+   * via partition-based distributed locking.
+   */
+  BooleanConfOption ASYNC_PARTITION_LOCK_SERIALIZED =
+      new BooleanConfOption("giraph.partitionLockSerialized", false,
+          "Whether algorithm requires a serializable execution" +
+          "via partition-based distributed locking.");
+
+
+  /**
    * YH: Whether to print out timing info (for ALL modes)
    */
   BooleanConfOption ASYNC_PRINT_TIMING =

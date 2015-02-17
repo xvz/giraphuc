@@ -29,6 +29,7 @@ import org.apache.giraph.metrics.GiraphTimerContext;
 import org.apache.giraph.partition.PartitionOwner;
 import org.apache.giraph.partition.PartitionStats;
 import org.apache.giraph.partition.PartitionStore;
+import org.apache.giraph.partition.PartitionPhilosophersTable;
 import org.apache.giraph.partition.PhilosophersTable;
 import org.apache.giraph.partition.VertexTypeStore;
 import org.apache.giraph.worker.WorkerAggregatorHandler;
@@ -243,6 +244,13 @@ public interface CentralizedServiceWorker<I extends WritableComparable,
    * @return Philosophers table
    */
   PhilosophersTable<I, V, E> getPhilosophersTable();
+
+  /**
+   * YH: Get the philosophers table. For partition-based distributed locking.
+   *
+   * @return Philosophers table
+   */
+  PartitionPhilosophersTable<I, V, E> getPartitionPhilosophersTable();
 
   /**
    * Clean up the service (no calls may be issued after this)

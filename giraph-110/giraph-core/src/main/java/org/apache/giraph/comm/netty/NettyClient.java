@@ -28,6 +28,8 @@ import org.apache.giraph.comm.netty.handler.ResponseClientHandler;
 import org.apache.giraph.comm.netty.handler.SaslClientHandler;
 import org.apache.giraph.comm.requests.SendDistributedLockingForkRequest;
 import org.apache.giraph.comm.requests.SendDistributedLockingTokenRequest;
+import org.apache.giraph.comm.requests.SendPartitionDLForkRequest;
+import org.apache.giraph.comm.requests.SendPartitionDLTokenRequest;
 import org.apache.giraph.comm.requests.RequestType;
 import org.apache.giraph.comm.requests.SaslTokenMessageRequest;
 /*end[HADOOP_NON_SECURE]*/
@@ -702,6 +704,12 @@ public class NettyClient {
          request instanceof SendDistributedLockingTokenRequest)) {
       return;
     }
+    if (conf.getAsyncConf().partitionLockSerialized() &&
+        (request instanceof SendPartitionDLForkRequest ||
+         request instanceof SendPartitionDLTokenRequest)) {
+      return;
+    }
+
 
     // YH: disable request limit on new phase (b/c it's followed by global SS)
     if (!(conf.getAsyncConf().isMultiPhase() &&

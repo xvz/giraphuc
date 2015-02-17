@@ -165,6 +165,22 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       Partition<I, V, E> partition =
           serviceWorker.getPartitionStore().getOrCreatePartition(partitionId);
 
+      // for partition-based dist locking, acquire forks before
+      // executing partition and skip if acquisition fails
+      if (asyncConf.partitionLockSerialized() &&
+          !serviceWorker.getPartitionPhilosophersTable().
+            acquireForks(partition.getId())) {
+        // add "unchanged" partition stats
+        PartitionStats partitionStats =
+          new PartitionStats(partition.getId(),
+                             partition.getVertexCount(), 0,
+                             partition.getEdgeCount(), 0, 0);
+        partitionStatsList.add(partitionStats);
+
+        serviceWorker.getPartitionStore().putPartition(partition);
+        continue;
+      }
+
       Computation<I, V, E, M1, M2> computation =
           (Computation<I, V, E, M1, M2>) configuration.createComputation();
       computation.initialize(graphState, workerClientRequestProcessor,
@@ -174,6 +190,12 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       try {
         PartitionStats partitionStats =
             computePartition(computation, partition);
+
+        // YH: immediately release partition forks
+        if (asyncConf.partitionLockSerialized()) {
+          serviceWorker.getPartitionPhilosophersTable().
+            releaseForks(partition.getId());
+        }
         partitionStatsList.add(partitionStats);
 
         // YH: if barriers are disabled, number of messages is LOCAL
