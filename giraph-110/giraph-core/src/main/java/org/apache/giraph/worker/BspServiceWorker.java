@@ -849,6 +849,17 @@ public class BspServiceWorker<I extends WritableComparable,
     //           numInternal + "," + numLocalBoundary + "," +
     //           numRemoteBoundary + "," + numBothBoundary + ")" +
     //           " -- numTot: " + numVertices);
+    //
+    //// printing per-partiiton dependencies
+    //  LOG.info("[[TESTING]] worker: " + workerInfo.getTaskId());
+    //  for (Map.Entry<Integer, Int2LongOpenHashMap> e :
+    //         vertexTypeStore.getNumDeps().entrySet()) {
+    //    LOG.info("[[TESTING]]    partition " + e.getKey());
+    //    for (Map.Entry<Integer, Long> ee : e.getValue().entrySet()) {
+    //      LOG.info("[[TESTING]]       dep: " + ee.getKey() +
+    //               ", " + ee.getValue());
+    //    }
+    //  }
     //}
 
     //LOG.info("[[MST-internal]] ##START##: ss=" + getSuperstep() +
@@ -1235,7 +1246,8 @@ public class BspServiceWorker<I extends WritableComparable,
       boolean haveLocalWork;
       boolean haveRemoteWork;
 
-      if (asyncConf.isMultiPhase() || asyncConf.isSerialized()) {
+      if (asyncConf.isMultiPhase() || asyncConf.tokenSerialized() ||
+          asyncConf.lockSerialized()) {
         // For multi-phase computation, we must check only the message stores
         // for the current phase. Hence, we can't use workerSentMessages, since
         // that also captures messages sent for the next phase.
@@ -1246,6 +1258,15 @@ public class BspServiceWorker<I extends WritableComparable,
         // miss these messages. There's more local worker to do, b/c more
         // LSSes will pass local token (or forks) around.
         haveLocalWork = getServerData().getLocalMessageStore().hasMessages();
+
+      } else if (asyncConf.partitionLockSerialized()) {
+        // Partition-based dist locking is special b/c if ALL partitions
+        // happen to not execute, then there will be no local messages.
+        // But this doesn't mean vertices are all halted, so we DO need
+        // to check w/ doneVertices. This ensures we avoid global barriers.
+        haveLocalWork = localVertices != doneVertices ||
+          getServerData().getLocalMessageStore().hasMessages();
+
       } else {
         // For single-phase algs (non-serializable), workerSentMessages is
         // sufficient. This is faster than checking local message store.

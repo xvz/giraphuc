@@ -55,9 +55,6 @@ public class AsyncConfiguration {
   /** Local in-flight message bytes */
   private final AtomicLong inFlightBytes = new AtomicLong();
 
-  /** Whether algorithm requires serializable execution */
-  private final boolean isSerialized;
-
   /** Whether serializability is done via tokens. */
   private final boolean tokenSerialized;
   /** Whether worker has global token. */
@@ -97,9 +94,6 @@ public class AsyncConfiguration {
       GiraphConstants.ASYNC_LOCK_SERIALIZED.get(conf);
     partitionLockSerialized = !tokenSerialized && !lockSerialized &&
       GiraphConstants.ASYNC_PARTITION_LOCK_SERIALIZED.get(conf);
-
-    isSerialized = tokenSerialized ||
-      lockSerialized || partitionLockSerialized;
 
     printTiming = GiraphConstants.ASYNC_PRINT_TIMING.get(conf);
 
@@ -260,13 +254,6 @@ public class AsyncConfiguration {
     inFlightBytes.addAndGet(sentBytes);
   }
 
-
-  /**
-   * @return True if execution is serializable
-   */
-  public boolean isSerialized() {
-    return isSerialized;
-  }
 
   /**
    * @return True if serializability is done via token passing

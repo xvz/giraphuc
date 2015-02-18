@@ -29,6 +29,7 @@ import org.apache.hadoop.io.WritableComparable;
 import org.apache.log4j.Logger;
 
 import it.unimi.dsi.fastutil.ints.Int2ByteOpenHashMap;
+import it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
@@ -88,6 +89,8 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
   private int numTotalPartitions;
   /** Map of partition ids to worker/task ids */
   private Int2IntOpenHashMap taskIdMap;
+  /** Map of partition ids to worker/task ids */
+  private Int2LongOpenHashMap doneVerticesCache;
 
   /**
    * Constructor
@@ -120,6 +123,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       Iterables.size(serviceWorker.getPartitionOwners());
 
     this.taskIdMap = new Int2IntOpenHashMap(numTotalPartitions);
+    this.doneVerticesCache = new Int2LongOpenHashMap(numLocalPartitions);
 
     this.waitAllRunnable = new Runnable() {
         @Override
@@ -523,6 +527,32 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
                senderId + " " + toString(forkInfo));
     }
   }
+
+
+  /**
+   * Cache the done vertices count for a particular partition.
+   *
+   * @param pId Partition id to cache for
+   * @param doneCount Number of finished vertices to cache
+   */
+  public void cacheDoneVertices(int pId, long doneCount) {
+    synchronized (doneVerticesCache) {
+      doneVerticesCache.put(pId, doneCount);
+    }
+  }
+
+  /**
+   * Get cached done vertices for a particular partition.
+   *
+   * @param pId Partition id to get done count for
+   * @return Cached number of finished vertices
+   */
+  public long getDoneVertices(int pId) {
+    synchronized (doneVerticesCache) {
+      return doneVerticesCache.get(pId);
+    }
+  }
+
 
   /**
    * @param forkInfo Philosopher's state

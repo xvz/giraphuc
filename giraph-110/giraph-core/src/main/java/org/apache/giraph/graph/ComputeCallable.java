@@ -30,6 +30,7 @@ import org.apache.giraph.metrics.MetricNames;
 import org.apache.giraph.metrics.SuperstepMetricsRegistry;
 import org.apache.giraph.partition.Partition;
 import org.apache.giraph.partition.PartitionStats;
+import org.apache.giraph.partition.PartitionPhilosophersTable;
 import org.apache.giraph.partition.PhilosophersTable;
 import org.apache.giraph.time.SystemTime;
 import org.apache.giraph.time.Time;
@@ -155,6 +156,9 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
 
     vertexWriter = serviceWorker.getSuperstepOutput().getVertexWriter();
 
+    PartitionPhilosophersTable pTable =
+      serviceWorker.getPartitionPhilosophersTable();
+
     List<PartitionStats> partitionStatsList = Lists.newArrayList();
     while (!partitionIdQueue.isEmpty()) {
       Integer partitionId = partitionIdQueue.poll();
@@ -165,17 +169,17 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       Partition<I, V, E> partition =
           serviceWorker.getPartitionStore().getOrCreatePartition(partitionId);
 
-      // For partition-based dist locking, acquire forks before
+      // YH: For partition-based dist locking, acquire forks before
       // executing partition and skip if acquisition fails.
       // Skip this if this is first superstep.
       if (asyncConf.partitionLockSerialized() &&
           serviceWorker.getLogicalSuperstep() > 0 &&
-          !serviceWorker.getPartitionPhilosophersTable().
-            acquireForks(partition.getId())) {
-        // add "unchanged" partition stats
+          !pTable.acquireForks(partition.getId())) {
+        // Add "unchanged" partition stats. Here, we use our cached
+        // "doneVertices" to avoid termination issues.
         PartitionStats partitionStats =
-          new PartitionStats(partition.getId(),
-                             partition.getVertexCount(), 0,
+          new PartitionStats(partition.getId(), partition.getVertexCount(),
+                             pTable.getDoneVertices(partition.getId()),
                              partition.getEdgeCount(), 0, 0);
         partitionStatsList.add(partitionStats);
 
@@ -196,8 +200,17 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         // YH: immediately release partition forks
         if (asyncConf.partitionLockSerialized() &&
           serviceWorker.getLogicalSuperstep() > 0) {
-          serviceWorker.getPartitionPhilosophersTable().
-            releaseForks(partition.getId());
+          pTable.releaseForks(partition.getId());
+
+          // Also store "doneVertices" stat so that when we skip
+          // this partition we'll have a correct value to use.
+          // (It won't change when we're skipping the partition.)
+          //
+          // Without this, we would have to iterate through and deserialize
+          // all vertices in this partition JUST to re-acquire an accurate
+          // "doneVertices", which is more expensive.
+          pTable.cacheDoneVertices(partition.getId(),
+                                   partitionStats.getFinishedVertexCount());
         }
         partitionStatsList.add(partitionStats);
 
