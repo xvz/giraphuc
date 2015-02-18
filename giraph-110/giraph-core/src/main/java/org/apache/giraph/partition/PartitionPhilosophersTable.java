@@ -187,9 +187,11 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
 
           // also store reverse index of partition to task ids
           // (by default, we only have task to partition ids)
-          taskIdMap.put(dstPartitionId,
-                        serviceWorker.getVertexPartitionOwner(vertex.getId()).
-                        getWorkerInfo().getTaskId());
+          synchronized (taskIdMap) {
+            taskIdMap.put(dstPartitionId,
+                          serviceWorker.getVertexPartitionOwner(vertex.getId()).
+                          getWorkerInfo().getTaskId());
+          }
         }
       }
     }
