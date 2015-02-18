@@ -187,9 +187,12 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
 
           // also store reverse index of partition to task ids
           // (by default, we only have task to partition ids)
+          //
+          // need synchronize b/c not everyone synchronizes
+          // on same "neighbours"
           synchronized (taskIdMap) {
-            taskIdMap.put(dstPartitionId,
-                          serviceWorker.getVertexPartitionOwner(vertex.getId()).
+            taskIdMap.put(dstPartitionId, serviceWorker.
+                          getVertexPartitionOwner(e.getTargetVertexId()).
                           getWorkerInfo().getTaskId());
           }
         }
@@ -341,6 +344,12 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       }
     }
 
+    // TODO-YH: should we do explicit message flushing irrespective
+    // of whether or not we sent dirty fork to someone???
+
+    // NOTE: this is also what flushes pending messages to the network,
+    // so that other philosophers will see up-to-date messages (required
+    // for serializability)
     if (needFlush) {
       LOG.debug("[[PTABLE]] " + pId + ": flushing");
       serviceWorker.getWorkerClient().waitAllRequests();
@@ -416,8 +425,8 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
    */
   public void receiveToken(int senderId, int receiverId) {
     boolean needFlush = false;
-    int pId = senderId;
-    int neighbourId = receiverId;
+    int pId = receiverId;
+    int neighbourId = senderId;
 
     Int2ByteOpenHashMap neighbours = pMap.get(pId);
     byte oldForkInfo;
@@ -441,7 +450,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       LOG.debug("[[PTABLE]] " + receiverId + ": got token from " +
                senderId  + " " + toString(forkInfo));
 
-      if (isEating) { // || !isDirty(forkInfo)) {
+      if (isEating || !isDirty(forkInfo)) {
         // Do not give up fork, but record token so that receiver
         // will see it when it finishes eating.
         //
@@ -456,13 +465,13 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
         forkInfo |= MASK_HAVE_TOKEN;
         LOG.debug("[[PTABLE]] " + receiverId + ": not giving up fork " +
                  senderId  + " " + toString(forkInfo));
-      } else if (!isHungry && !isEating) { // && isDirty(forkInfo)) {
+      } else if (!isHungry && !isEating && isDirty(forkInfo)) {
         // Give up dirty fork and record token receipt.
         forkInfo &= ~MASK_IS_DIRTY;
         forkInfo &= ~MASK_HAVE_FORK;
         forkInfo |= MASK_HAVE_TOKEN;
         LOG.debug("[[PTABLE]] " + receiverId + ": give up fork " +
-                 senderId  + " " + toString(forkInfo));
+                  senderId  + " " + toString(forkInfo));
       } else if (isHungry && isDirty(forkInfo)) {
         // Give up fork (sender has priority), but tell sender that
         // we want fork back by sending back the newly receive token.
@@ -475,7 +484,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       neighbours.put(neighbourId, forkInfo);
     }
 
-    if (!isHungry && !isEating) { //&& isDirty(oldForkInfo)) {
+    if (!isHungry && !isEating && isDirty(oldForkInfo)) {
       needFlush |= sendFork(receiverId, senderId);
     } else if (isHungry && isDirty(oldForkInfo)) {
       // TODO-YH: consolidate??
@@ -502,8 +511,8 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
    * @param receiverId New holder of fork
    */
   public void receiveFork(int senderId, int receiverId) {
-    int pId = senderId;
-    int neighbourId = receiverId;
+    int pId = receiverId;
+    int neighbourId = senderId;
     Int2ByteOpenHashMap neighbours = pMap.get(pId);
 
     synchronized (neighbours) {
