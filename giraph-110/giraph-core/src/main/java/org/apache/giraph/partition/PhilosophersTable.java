@@ -326,6 +326,10 @@ public class PhilosophersTable<I extends WritableComparable,
       }
     }
 
+    // NOTE: this is also what flushes pending messages to the network,
+    // so that other philosophers will see up-to-date messages (required
+    // for serializability). If nobody needs a fork, messages will
+    // get flushed only when that fork is requested.
     if (needFlush) {
       LOG.debug("[[PTABLE]] " + vertexId + ": flushing");
       serviceWorker.getWorkerClient().waitAllRequests();
@@ -450,7 +454,7 @@ public class PhilosophersTable<I extends WritableComparable,
         forkInfo &= ~MASK_HAVE_FORK;
         forkInfo |= MASK_HAVE_TOKEN;
         LOG.debug("[[PTABLE]] " + receiverId + ": give up fork " +
-                 senderId  + " " + toString(forkInfo));
+                  senderId  + " " + toString(forkInfo));
       } else if (isHungry && isDirty(forkInfo)) {
         // Give up fork (sender has priority), but tell sender that
         // we want fork back by sending back the newly receive token.
@@ -471,9 +475,14 @@ public class PhilosophersTable<I extends WritableComparable,
       needFlush |= sendToken(receiverId, senderId);
     }
 
+    // NOTE: If fork is requested, we must flush our messages
+    // in case it hasn't been flushed since releaseFork().
+    // This ensures fork is delivered AND serializability
+    // is maintained (newest messages show up).
+    //
     // TODO-YH: still need async thread... why??
     if (needFlush) {
-      // can't use synchronized block b/c ref is changing
+      // can't use synchronized block b/c waitThread ref is changing
       waitLock.lock();
       if (waitThread == null || !waitThread.isAlive()) {
         waitThread = new Thread(waitAllRunnable);

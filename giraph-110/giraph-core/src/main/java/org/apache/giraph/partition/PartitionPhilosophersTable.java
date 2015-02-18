@@ -89,7 +89,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
   private int numTotalPartitions;
   /** Map of partition ids to worker/task ids */
   private Int2IntOpenHashMap taskIdMap;
-  /** Map of partition ids to worker/task ids */
+  /** Map/cache of partition ids to done vertices count */
   private Int2LongOpenHashMap doneVerticesCache;
 
   /**
@@ -348,12 +348,10 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       }
     }
 
-    // TODO-YH: should we do explicit message flushing irrespective
-    // of whether or not we sent dirty fork to someone???
-
     // NOTE: this is also what flushes pending messages to the network,
     // so that other philosophers will see up-to-date messages (required
-    // for serializability)
+    // for serializability). If nobody needs a fork, messages will
+    // get flushed only when that fork is requested.
     if (needFlush) {
       LOG.debug("[[PTABLE]] " + pId + ": flushing");
       serviceWorker.getWorkerClient().waitAllRequests();
@@ -496,9 +494,14 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       needFlush |= sendToken(receiverId, senderId);
     }
 
+    // NOTE: If fork is requested, we must flush our messages
+    // in case it hasn't been flushed since releaseFork().
+    // This ensures fork is delivered AND serializability
+    // is maintained (newest messages show up).
+    //
     // TODO-YH: still need async thread... why??
     if (needFlush) {
-      // can't use synchronized block b/c ref is changing
+      // can't use synchronized block b/c waitThread ref is changing
       waitLock.lock();
       if (waitThread == null || !waitThread.isAlive()) {
         waitThread = new Thread(waitAllRunnable);
@@ -548,6 +551,8 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
    * @return Cached number of finished vertices
    */
   public long getDoneVertices(int pId) {
+    // if cached value doesn't exist, this returns 0,
+    // which is exactly what we want
     synchronized (doneVerticesCache) {
       return doneVerticesCache.get(pId);
     }

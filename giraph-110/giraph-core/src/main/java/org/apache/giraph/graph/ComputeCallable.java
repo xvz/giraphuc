@@ -228,8 +228,10 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         partitionStats.addMessageBytesSentCount(partitionMsgBytes);
         messageBytesSentCounter.inc(partitionMsgBytes);
 
-        // TODO-YH: why does recomputing here (or adding partition id
-        // back on to queue) cause termination issues?
+        // YH: recomputing partition or adding partition id back
+        // on to queue CAN cause termination issues if partition stats
+        // are not properly managed. In particularly, partition stats
+        // are ultimately used as input to graph state of next iteration!
 
         timedLogger.info("call: Completed " +
             partitionStatsList.size() + " partitions, " +
@@ -337,14 +339,13 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
                    serviceWorker.getLogicalSuperstep() > 0) {
           PhilosophersTable pTable = serviceWorker.getPhilosophersTable();
           if (pTable.isBoundaryVertex(vertexId)) {
-            // if acquiring fork fails, skip this vertex and
-            // process it in next (logical) superstep
-            //
-            // note that we must acquire forks for EVERY boundary vertex,
-            // even if it's inactive; otherwise forks won't be released
-            if (pTable.acquireForks(vertexId)) {
-              computeVertex(computation, partition, vertex,
-                            getAllMessages(vertexId));
+            // If acquiring fork fails, skip this vertex and process it
+            // in the next (logical) superstep. We skip vertices that
+            // are halted and have no messages (to wake it).
+            Iterable<M1> messages = getAllMessages(vertexId);
+            if (!(vertex.isHalted() && Iterables.isEmpty(messages)) &&
+                pTable.acquireForks(vertexId)) {
+              computeVertex(computation, partition, vertex, messages);
               // can release iff all forks were acquired
               pTable.releaseForks(vertexId);
             }
@@ -354,7 +355,8 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
           }
 
         } else {
-          // regular non-serializable execution
+          // regular non-serializable execution or
+          // partition lock-serialized when not skipping partition
           computeVertex(computation, partition, vertex,
                         getAllMessages(vertexId));
         }
@@ -382,7 +384,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       // Should NOT clear partitions for stores otherwise, as they will
       // have picked up unprocessed messages during compute calls above.
       //
-      // TODO-YH: can partitions disappear?...
+      // Note: partitions won't disappear during computation.
       if (!asyncConf.isAsync()) {
         messageStore.clearPartition(partition.getId());
       }
@@ -472,7 +474,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         messages = localMessageStore.removeVertexMessages(vertexId);
       }
     } else {
-      // TODO-YH: implement BSP--need two stores!!
+      // TODO-YH: implement BSP for serializability--need two stores!!
       messages = null;
     }
 
