@@ -177,7 +177,7 @@ size_t validate_conflict(graph_type::edge_type& edge) {
 
 
 int main(int argc, char** argv) {
-
+  graphlab::timer total_timer; total_timer.start();
   //global_logger().set_log_level(LOG_INFO);
 
   // Initialize control plane using mpi
@@ -192,30 +192,33 @@ int main(int argc, char** argv) {
     "Given a graph, this program computes a graph coloring of the graph."
     "The Asynchronous engine is used.");
   std::string prefix, format;
-  std::string output;
+  std::string saveprefix;
   size_t powerlaw = 0;
+  bool check_conflict = false;
   clopts.attach_option("graph", prefix,
                        "Graph input. reads all graphs matching prefix*");
   clopts.attach_option("format", format,
                        "The graph format");
-   clopts.attach_option("output", output,
+  clopts.attach_option("saveprefix", saveprefix,
                        "A prefix to save the output.");
-   clopts.attach_option("powerlaw", powerlaw,
+  clopts.attach_option("powerlaw", powerlaw,
                        "Generate a synthetic powerlaw out-degree graph. ");
   clopts.attach_option("edgescope", EDGE_CONSISTENT,
                        "Use Locking. ");
+  clopts.attach_option("checkconflict", check_conflict,
+                       "Check for number of conflicts.");
     
   if(!clopts.parse(argc, argv)) return EXIT_FAILURE;
   if (prefix.length() == 0 && powerlaw == 0) {
     clopts.print_description();
     return EXIT_FAILURE;
   }
-  if (output == "") {
-    dc.cout() << "Warning! Output will not be saved\n";
-  }
+  //if (saveprefix == "") {
+  //  dc.cout() << "Warning! Output will not be saved\n";
+  //}
 
 
-  graphlab::launch_metric_server();
+  //graphlab::launch_metric_server();
   // load graph
   graph_type graph(dc, clopts);
 
@@ -238,8 +241,6 @@ int main(int argc, char** argv) {
   dc.cout() << "Number of vertices: " << graph.num_vertices() << std::endl
     << "Number of edges:    " << graph.num_edges() << std::endl;
 
-  graphlab::timer ti;
-  
   // create engine to count the number of triangles
   dc.cout() << "Coloring..." << std::endl;
   if (EDGE_CONSISTENT) {
@@ -251,22 +252,26 @@ int main(int argc, char** argv) {
   engine.signal_all();
   engine.start();
 
-  dc.cout() << "Colored in " << ti.current_time() << " seconds" << std::endl;
+  const double runtime = engine.elapsed_seconds();
+  dc.cout() << "Finished Running engine in " << runtime
+            << " seconds." << std::endl;
 
-  size_t conflict_count = graph.map_reduce_edges<size_t>(validate_conflict);
-  dc.cout() << "Num conflicts = " << conflict_count << "\n";
-  if (output != "") {
-    graph.save(output,
-              save_colors(),
-              false, /* no compression */
-              true, /* save vertex */
-              false, /* do not save edge */
-              1); /* one file per machine */
+  if (check_conflict) {
+    size_t conflict_count = graph.map_reduce_edges<size_t>(validate_conflict);
+    dc.cout() << "Num conflicts = " << conflict_count << "\n";
+  }
+
+  if (saveprefix.size() > 0) {
+    graph.save(saveprefix, save_colors(),
+        false, //set to true if each output file is to be gzipped
+        true, //whether vertices are saved
+        false); //whether edges are saved
   }
   
-  graphlab::stop_metric_server();
+  //graphlab::stop_metric_server();
 
   graphlab::mpi_tools::finalize();
+  dc.cout() << "TOTAL TIME (sec): " << total_timer.current_time() << std::endl;
   return EXIT_SUCCESS;
 } // End of main
 
