@@ -87,7 +87,7 @@ public class SendDistributedLockingForkRequest<I extends WritableComparable,
 
   @Override
   public void doRequest(ServerData<I, V, E> serverData) {
-    serverData.getServiceWorker().getPhilosophersTable().
+    serverData.getServiceWorker().getVertexPhilosophersTable().
       receiveFork(senderId, receiverId);
   }
 

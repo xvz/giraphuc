@@ -44,10 +44,11 @@ import java.util.concurrent.locks.ReentrantLock;
  * @param <V> Vertex value
  * @param <E> Edge value
  */
-public class PhilosophersTable<I extends WritableComparable,
+public class VertexPhilosophersTable<I extends WritableComparable,
     V extends Writable, E extends Writable> {
   /** Class logger */
-  private static final Logger LOG = Logger.getLogger(PhilosophersTable.class);
+  private static final Logger LOG =
+    Logger.getLogger(VertexPhilosophersTable.class);
 
   /** Mask for have-token bit */
   private static final byte MASK_HAVE_TOKEN = 0x1;
@@ -87,7 +88,7 @@ public class PhilosophersTable<I extends WritableComparable,
    * @param conf Configuration used.
    * @param serviceWorker Service worker
    */
-  public PhilosophersTable(
+  public VertexPhilosophersTable(
      ImmutableClassesGiraphConfiguration<I, V, E> conf,
      CentralizedServiceWorker<I, V, E> serviceWorker) {
     Class<I> vertexIdClass = conf.getVertexIdClass();
@@ -110,7 +111,7 @@ public class PhilosophersTable<I extends WritableComparable,
     this.waitAllRunnable = new Runnable() {
         @Override
         public void run() {
-          PhilosophersTable.this.serviceWorker.
+          VertexPhilosophersTable.this.serviceWorker.
             getWorkerClient().waitAllRequests();
         }
       };

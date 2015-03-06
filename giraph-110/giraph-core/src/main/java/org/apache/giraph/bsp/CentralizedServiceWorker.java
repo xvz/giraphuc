@@ -30,7 +30,7 @@ import org.apache.giraph.partition.PartitionOwner;
 import org.apache.giraph.partition.PartitionStats;
 import org.apache.giraph.partition.PartitionStore;
 import org.apache.giraph.partition.PartitionPhilosophersTable;
-import org.apache.giraph.partition.PhilosophersTable;
+import org.apache.giraph.partition.VertexPhilosophersTable;
 import org.apache.giraph.partition.VertexTypeStore;
 import org.apache.giraph.worker.WorkerAggregatorHandler;
 import org.apache.giraph.worker.WorkerContext;
@@ -239,11 +239,11 @@ public interface CentralizedServiceWorker<I extends WritableComparable,
   VertexTypeStore<I, V, E> getVertexTypeStore();
 
   /**
-   * YH: Get the philosophers table. For distributed locking.
+   * YH: Get the philosophers table. For vertex-based distributed locking.
    *
    * @return Philosophers table
    */
-  PhilosophersTable<I, V, E> getPhilosophersTable();
+  VertexPhilosophersTable<I, V, E> getVertexPhilosophersTable();
 
   /**
    * YH: Get the philosophers table. For partition-based distributed locking.

@@ -31,7 +31,7 @@ import org.apache.giraph.metrics.SuperstepMetricsRegistry;
 import org.apache.giraph.partition.Partition;
 import org.apache.giraph.partition.PartitionStats;
 import org.apache.giraph.partition.PartitionPhilosophersTable;
-import org.apache.giraph.partition.PhilosophersTable;
+import org.apache.giraph.partition.VertexPhilosophersTable;
 import org.apache.giraph.time.SystemTime;
 import org.apache.giraph.time.Time;
 import org.apache.giraph.time.Times;
@@ -360,9 +360,10 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
             throw new RuntimeException("Invalid vertex type!");
           }
 
-        } else if (asyncConf.lockSerialized() &&
+        } else if (asyncConf.vertexLockSerialized() &&
                    serviceWorker.getLogicalSuperstep() > 0) {
-          PhilosophersTable pTable = serviceWorker.getPhilosophersTable();
+          VertexPhilosophersTable pTable =
+            serviceWorker.getVertexPhilosophersTable();
           if (pTable.isBoundaryVertex(vertexId)) {
             // If acquiring fork fails, skip this vertex and process it
             // in the next (logical) superstep. We skip vertices that

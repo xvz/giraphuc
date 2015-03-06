@@ -62,8 +62,8 @@ public class AsyncConfiguration {
   /** Id of partition holding local token. */
   private int localTokenId;
 
-  /** Whether serializability is done via distributed locking */
-  private final boolean lockSerialized;
+  /** Whether serializability is done via vertex-based distributed locking */
+  private final boolean vertexLockSerialized;
   /** Whether serializability is done via partition-based dist locking */
   private final boolean partitionLockSerialized;
 
@@ -90,9 +90,9 @@ public class AsyncConfiguration {
 
     // only one can be enabled, so apply an arbitrary order
     tokenSerialized = GiraphConstants.ASYNC_TOKEN_SERIALIZED.get(conf);
-    lockSerialized = !tokenSerialized &&
-      GiraphConstants.ASYNC_LOCK_SERIALIZED.get(conf);
-    partitionLockSerialized = !tokenSerialized && !lockSerialized &&
+    vertexLockSerialized = !tokenSerialized &&
+      GiraphConstants.ASYNC_VERTEX_LOCK_SERIALIZED.get(conf);
+    partitionLockSerialized = !tokenSerialized && !vertexLockSerialized &&
       GiraphConstants.ASYNC_PARTITION_LOCK_SERIALIZED.get(conf);
 
     printTiming = GiraphConstants.ASYNC_PRINT_TIMING.get(conf);
@@ -308,10 +308,10 @@ public class AsyncConfiguration {
 
 
   /**
-   * @return True if serializability is done via distributed locking
+   * @return True if serializability is done via vertex-based dist locking
    */
-  public boolean lockSerialized() {
-    return lockSerialized;
+  public boolean vertexLockSerialized() {
+    return vertexLockSerialized;
   }
 
   /**

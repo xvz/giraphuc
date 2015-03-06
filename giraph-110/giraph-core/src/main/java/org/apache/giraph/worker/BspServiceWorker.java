@@ -63,7 +63,7 @@ import org.apache.giraph.partition.PartitionOwner;
 import org.apache.giraph.partition.PartitionStats;
 import org.apache.giraph.partition.PartitionStore;
 import org.apache.giraph.partition.PartitionPhilosophersTable;
-import org.apache.giraph.partition.PhilosophersTable;
+import org.apache.giraph.partition.VertexPhilosophersTable;
 import org.apache.giraph.partition.WorkerGraphPartitioner;
 import org.apache.giraph.partition.VertexTypeStore;
 import org.apache.giraph.utils.CallableFactory;
@@ -185,8 +185,8 @@ public class BspServiceWorker<I extends WritableComparable,
 
   /** YH: Vertex type store/tracker for token serializability */
   private VertexTypeStore<I, V, E> vertexTypeStore;
-  /** YH: Philosophers table for distributed locking serializability */
-  private PhilosophersTable<I, V, E> pTable;
+  /** YH: Philosophers table for vertex-based dist locking serializability */
+  private VertexPhilosophersTable<I, V, E> vertexPTable;
   /** YH: Philosophers table for partition-base dist locking */
   private PartitionPhilosophersTable<I, V, E> partitionPTable;
 
@@ -250,8 +250,8 @@ public class BspServiceWorker<I extends WritableComparable,
 
     if (asyncConf.tokenSerialized()) {
       vertexTypeStore = new VertexTypeStore<I, V, E>(conf);
-    } else if (asyncConf.lockSerialized()) {
-      pTable = new PhilosophersTable<I, V, E>(conf, this);
+    } else if (asyncConf.vertexLockSerialized()) {
+      vertexPTable = new VertexPhilosophersTable<I, V, E>(conf, this);
     } else if (asyncConf.partitionLockSerialized()) {
       partitionPTable = new PartitionPhilosophersTable<I, V, E>(conf, this);
     }
@@ -1247,7 +1247,7 @@ public class BspServiceWorker<I extends WritableComparable,
       boolean haveRemoteWork;
 
       if (asyncConf.isMultiPhase() || asyncConf.tokenSerialized() ||
-          asyncConf.lockSerialized()) {
+          asyncConf.vertexLockSerialized()) {
         // For multi-phase computation, we must check only the message stores
         // for the current phase. Hence, we can't use workerSentMessages, since
         // that also captures messages sent for the next phase.
@@ -2522,8 +2522,8 @@ else[HADOOP_NON_SECURE]*/
   }
 
   @Override
-  public PhilosophersTable<I, V, E> getPhilosophersTable() {
-    return pTable;
+  public VertexPhilosophersTable<I, V, E> getVertexPhilosophersTable() {
+    return vertexPTable;
   }
 
   @Override

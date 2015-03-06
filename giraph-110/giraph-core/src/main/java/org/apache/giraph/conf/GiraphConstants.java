@@ -1138,12 +1138,12 @@ public interface GiraphConstants {
 
   /**
    * YH: Whether algorithm requires a serializable execution
-   * via distributed locking.
+   * via vertex-based distributed locking.
    */
-  BooleanConfOption ASYNC_LOCK_SERIALIZED =
-      new BooleanConfOption("giraph.lockSerialized", false,
+  BooleanConfOption ASYNC_VERTEX_LOCK_SERIALIZED =
+      new BooleanConfOption("giraph.vertexLockSerialized", false,
           "Whether algorithm requires a serializable execution" +
-          "via distributed locking.");
+          "via vertex-based distributed locking.");
 
   /**
    * YH: Whether algorithm requires a serializable execution

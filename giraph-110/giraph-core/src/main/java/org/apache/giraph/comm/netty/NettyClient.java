@@ -699,7 +699,7 @@ public class NettyClient {
 
     // TODO-YH: make this cleaner (don't use instanceof)
     // don't block fork/token requests
-    if (conf.getAsyncConf().lockSerialized() &&
+    if (conf.getAsyncConf().vertexLockSerialized() &&
         (request instanceof SendDistributedLockingForkRequest ||
          request instanceof SendDistributedLockingTokenRequest)) {
       return;

@@ -113,8 +113,8 @@ public abstract class BasicPartition<I extends WritableComparable,
       if (getConf().getAsyncConf().tokenSerialized()) {
         getConf().getServiceWorker().getVertexTypeStore().
           addVertex(vertex);
-      } else if (getConf().getAsyncConf().lockSerialized()) {
-        getConf().getServiceWorker().getPhilosophersTable().
+      } else if (getConf().getAsyncConf().vertexLockSerialized()) {
+        getConf().getServiceWorker().getVertexPhilosophersTable().
           addVertexIfBoundary(vertex);
       } else if (getConf().getAsyncConf().partitionLockSerialized()) {
         getConf().getServiceWorker().getPartitionPhilosophersTable().

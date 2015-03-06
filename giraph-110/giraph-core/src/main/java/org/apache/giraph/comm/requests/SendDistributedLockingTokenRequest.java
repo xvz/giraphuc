@@ -87,7 +87,7 @@ public class SendDistributedLockingTokenRequest<I extends WritableComparable,
 
   @Override
   public void doRequest(ServerData<I, V, E> serverData) {
-    serverData.getServiceWorker().getPhilosophersTable().
+    serverData.getServiceWorker().getVertexPhilosophersTable().
       receiveToken(senderId, receiverId);
   }
 
