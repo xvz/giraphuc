@@ -387,9 +387,11 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
     } else {
       LOG.debug("[[PTABLE]] " + senderId +
                ": send remote token to " + receiverId);
+      // call must be non-blocking to avoid deadlocks
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
-        new SendPartitionDLTokenRequest(senderId, receiverId));
+        new SendPartitionDLTokenRequest(senderId, receiverId),
+        true);
       LOG.debug("[[PTABLE]] " + senderId +
                ": SENT remote token to " + receiverId);
       return true;
@@ -417,9 +419,11 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
     } else {
       LOG.debug("[[PTABLE]] " + senderId +
                ": send remote fork to " + receiverId);
+      // call must be non-blocking to avoid deadlocks
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
-        new SendPartitionDLForkRequest(senderId, receiverId));
+        new SendPartitionDLForkRequest(senderId, receiverId),
+        true);
       LOG.debug("[[PTABLE]] " + senderId +
                ": SENT remote fork to " + receiverId);
       return true;

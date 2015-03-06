@@ -364,9 +364,11 @@ public class VertexPhilosophersTable<I extends WritableComparable,
     } else {
       LOG.debug("[[PTABLE]] " + senderId +
                ": send remote token to " + receiverId);
+      // call must be non-blocking to avoid deadlocks
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
-        new SendDistributedLockingTokenRequest(senderId, receiverId, conf));
+        new SendDistributedLockingTokenRequest(senderId, receiverId, conf),
+        true);
       LOG.debug("[[PTABLE]] " + senderId +
                ": SENT remote token to " + receiverId);
       return true;
@@ -395,9 +397,11 @@ public class VertexPhilosophersTable<I extends WritableComparable,
     } else {
       LOG.debug("[[PTABLE]] " + senderId +
                ": send remote fork to " + receiverId);
+      // call must be non-blocking to avoid deadlocks
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
-        new SendDistributedLockingForkRequest(senderId, receiverId, conf));
+        new SendDistributedLockingForkRequest(senderId, receiverId, conf),
+        true);
       LOG.debug("[[PTABLE]] " + senderId +
                ": SENT remote fork to " + receiverId);
       return true;

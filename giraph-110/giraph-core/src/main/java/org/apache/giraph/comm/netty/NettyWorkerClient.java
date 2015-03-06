@@ -136,12 +136,20 @@ public class NettyWorkerClient<I extends WritableComparable,
   @Override
   public void sendWritableRequest(Integer destTaskId,
                                   WritableRequest request) {
+    sendWritableRequest(destTaskId, request, false);
+  }
+
+  @Override
+  public void sendWritableRequest(Integer destTaskId,
+                                  WritableRequest request,
+                                  boolean nonBlocking) {
     Counter counter = superstepRequestCounters.get(request.getType());
     if (counter != null) {
       counter.inc();
     }
-    nettyClient.sendWritableRequest(destTaskId, request);
+    nettyClient.sendWritableRequest(destTaskId, request, nonBlocking);
   }
+
 
   @Override
   public void waitAllRequests() {

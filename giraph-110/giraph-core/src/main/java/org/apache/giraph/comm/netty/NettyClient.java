@@ -26,10 +26,6 @@ import org.apache.giraph.comm.netty.handler.RequestServerHandler;
 import org.apache.giraph.comm.netty.handler.ResponseClientHandler;
 /*if_not[HADOOP_NON_SECURE]*/
 import org.apache.giraph.comm.netty.handler.SaslClientHandler;
-import org.apache.giraph.comm.requests.SendDistributedLockingForkRequest;
-import org.apache.giraph.comm.requests.SendDistributedLockingTokenRequest;
-import org.apache.giraph.comm.requests.SendPartitionDLForkRequest;
-import org.apache.giraph.comm.requests.SendPartitionDLTokenRequest;
 import org.apache.giraph.comm.requests.RequestType;
 import org.apache.giraph.comm.requests.SaslTokenMessageRequest;
 /*end[HADOOP_NON_SECURE]*/
@@ -665,7 +661,21 @@ public class NettyClient {
    * @param request Request to send
    */
   public void sendWritableRequest(Integer destTaskId,
-      WritableRequest request) {
+                                  WritableRequest request) {
+    // YH: by default, calls are blocked if request limit is exceeded
+    sendWritableRequest(destTaskId, request, false);
+  }
+
+  /**
+   * Send a request to a remote server (should be already connected)
+   *
+   * @param destTaskId Destination task id
+   * @param request Request to send
+   * @param nonBlocking True if call must not block
+   */
+  public void sendWritableRequest(Integer destTaskId,
+                                  WritableRequest request,
+                                  boolean nonBlocking) {
     InetSocketAddress remoteServer = taskIdAddressMap.get(destTaskId);
     if (clientRequestIdRequestInfoMap.isEmpty()) {
       inboundByteCounter.resetAll();
@@ -697,24 +707,15 @@ public class NettyClient {
     ChannelFuture writeFuture = channel.write(request);
     newRequestInfo.setWriteFuture(writeFuture);
 
-    // TODO-YH: make this cleaner (don't use instanceof)
-    // don't block fork/token requests
-    if (conf.getAsyncConf().vertexLockSerialized() &&
-        (request instanceof SendDistributedLockingForkRequest ||
-         request instanceof SendDistributedLockingTokenRequest)) {
-      return;
-    }
-    if (conf.getAsyncConf().partitionLockSerialized() &&
-        (request instanceof SendPartitionDLForkRequest ||
-         request instanceof SendPartitionDLTokenRequest)) {
+    // YH: also ignore request limit/do not block on new phase
+    // (b/c it may be followed by global SS)
+    if (nonBlocking ||
+        (conf.getAsyncConf().isMultiPhase() &&
+         conf.getAsyncConf().isNewPhase())) {
       return;
     }
 
-
-    // YH: disable request limit on new phase (b/c it's followed by global SS)
-    if (!(conf.getAsyncConf().isMultiPhase() &&
-          conf.getAsyncConf().isNewPhase()) &&
-        limitNumberOfOpenRequests &&
+    if (limitNumberOfOpenRequests &&
         clientRequestIdRequestInfoMap.size() > maxNumberOfOpenRequests) {
       waitSomeRequests(maxNumberOfOpenRequests);
     }
