@@ -149,6 +149,9 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
     int partitionId = serviceWorker.
       getVertexPartitionOwner(vertex.getId()).getPartitionId();
 
+    LOG.debug("[[PTABLE]] add vertex " + vertex.getId() +
+              ", partition " + partitionId);
+
     Int2ByteOpenHashMap neighbours;
     synchronized (pMap) {
       neighbours = pMap.get(partitionId);
@@ -236,14 +239,18 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
         byte forkInfo = neighbours.get(neighbourId);
         oldForkInfo = forkInfo;
 
-        if (haveToken(forkInfo) && !haveFork(forkInfo)) {
-          forkInfo &= ~MASK_HAVE_TOKEN;
+        if (!haveFork(forkInfo)) {
           needForks = true;
           LOG.debug("[[PTABLE]] " + pId + ":   missing fork " +
                    neighbourId + " " + toString(forkInfo));
+
+          // missing fork does NOT imply holding token, b/c we
+          // may have already sent the token for our missing fork
+          if (haveToken(forkInfo)) {
+            forkInfo &= ~MASK_HAVE_TOKEN;
+          }
         }
-        // otherwise, we either have fork (could be clean or dirty)
-        // or dirty fork was taken and we already sent a token for it
+        // otherwise, we have our fork (can be clean or dirty)
 
         neighbours.put(neighbourId, forkInfo);
       }
@@ -286,11 +293,11 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       }
 
       // have all forks, now eating
-      synchronized (pHungry) {
-        pHungry.remove(pId);
-      }
       synchronized (pEating) {
         pEating.add(pId);
+      }
+      synchronized (pHungry) {
+        pHungry.remove(pId);
       }
     }
     LOG.debug("[[PTABLE]] " + pId + ": got all forks");

@@ -174,16 +174,23 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       // Skip this if this is first superstep.
       if (asyncConf.partitionLockSerialized() &&
           serviceWorker.getLogicalSuperstep() > 0 &&
-          !pTable.acquireForks(partition.getId())) {
-        // Add "unchanged" partition stats. Here, we use our cached
-        // "doneVertices" to avoid termination issues.
-        PartitionStats partitionStats =
-          new PartitionStats(partition.getId(), partition.getVertexCount(),
-                             pTable.getDoneVertices(partition.getId()),
-                             partition.getEdgeCount(), 0, 0);
-        partitionStatsList.add(partitionStats);
+          !pTable.acquireForks(partitionId)) {
+        // blocking call to put skipped partition back on to queue
+        try {
+          partitionIdQueue.put(partitionId);
+        } catch (InterruptedException e) {
+          throw new IllegalStateException("call: Put failed.", e);
+        }
 
-        serviceWorker.getPartitionStore().putPartition(partition);
+        //// Add "unchanged" partition stats. Here, we use our cached
+        //// "doneVertices" to avoid termination issues.
+        //PartitionStats partitionStats =
+        //  new PartitionStats(partitionId, partition.getVertexCount(),
+        //                     pTable.getDoneVertices(partitionId),
+        //                     partition.getEdgeCount(), 0, 0);
+        //partitionStatsList.add(partitionStats);
+        //
+        //serviceWorker.getPartitionStore().putPartition(partition);
         continue;
       }
 
@@ -195,23 +202,34 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
 
       try {
         PartitionStats partitionStats =
-            computePartition(computation, partition);
+            computePartition(computation, partition,
+                             workerClientRequestProcessor);
 
         // YH: immediately release partition forks
         if (asyncConf.partitionLockSerialized() &&
-          serviceWorker.getLogicalSuperstep() > 0) {
-          pTable.releaseForks(partition.getId());
+            serviceWorker.getLogicalSuperstep() > 0) {
+          // Flush all caches BEFORE releasing forks!
+          // This is b/c releasing forks will flush msgs to network
+          try {
+            workerClientRequestProcessor.flush();
+            serviceWorker.getWorkerClient().waitAllRequests();
+          } catch (IOException e) {
+            throw new IllegalStateException("call: Flushing failed.", e);
+          }
 
-          // Also store "doneVertices" stat so that when we skip
-          // this partition we'll have a correct value to use.
-          // (It won't change when we're skipping the partition.)
-          //
-          // Without this, we would have to iterate through and deserialize
-          // all vertices in this partition JUST to re-acquire an accurate
-          // "doneVertices", which is more expensive.
-          pTable.cacheDoneVertices(partition.getId(),
-                                   partitionStats.getFinishedVertexCount());
+          pTable.releaseForks(partitionId);
+
+          //// Also store "doneVertices" stat so that when we skip
+          //// this partition we'll have a correct value to use.
+          //// (It won't change when we're skipping the partition.)
+          ////
+          //// Without this, we would have to iterate through and deserialize
+          //// all vertices in this partition JUST to re-acquire an accurate
+          //// "doneVertices", which is more expensive.
+          //pTable.cacheDoneVertices(partitionId,
+          //                         partitionStats.getFinishedVertexCount());
         }
+
         partitionStatsList.add(partitionStats);
 
         // YH: if barriers are disabled, number of messages is LOCAL
@@ -283,11 +301,14 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
    *
    * @param computation Computation to use
    * @param partition Partition to compute
+   * @param workerClientRequestProcessor Client processor for this thread
    * @return Partition stats for this computed partition
    */
   private PartitionStats computePartition(
       Computation<I, V, E, M1, M2> computation,
-      Partition<I, V, E> partition) throws IOException, InterruptedException {
+      Partition<I, V, E> partition,
+      WorkerClientRequestProcessor<I, V, E> workerClientRequestProcessor)
+    throws IOException, InterruptedException {
     PartitionStats partitionStats =
         new PartitionStats(partition.getId(), 0, 0, 0, 0, 0);
     long verticesComputedProgress = 0;
@@ -303,6 +324,10 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
             serviceWorker.getLogicalSuperstep() > 0) {
           // internal vertices can always execute
           // boundary vertices need token to execute
+          //
+          // NOTE: token passing does not need to flush any caches,
+          // b/c token exchange happens only after all compute threads
+          // are killed (=> all caches are flushed).
           switch (serviceWorker.getVertexTypeStore().
                   getVertexType(vertexId)) {
           case INTERNAL:
@@ -346,6 +371,17 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
             if (!(vertex.isHalted() && Iterables.isEmpty(messages)) &&
                 pTable.acquireForks(vertexId)) {
               computeVertex(computation, partition, vertex, messages);
+
+              // Flush all caches BEFORE releasing forks!
+              // This is b/c releasing forks will flush msgs to network
+              try {
+                workerClientRequestProcessor.flush();
+                // TODO-YH: eager???
+                serviceWorker.getWorkerClient().waitAllRequests();
+              } catch (IOException e) {
+                throw new IllegalStateException("call: Flushing failed.", e);
+              }
+
               // can release iff all forks were acquired
               pTable.releaseForks(vertexId);
             }
@@ -480,6 +516,29 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
 
     return messages;
   }
+
+  ///**
+  // * Return whether vertex has messages.
+  // * Result is consistent with get*Messages(). That is, if this
+  // * returns true, get*Messages() will return a non-empty Iterable.
+  // *
+  // * @param vertexId Id of vertex to check
+  // * @return True if vertex has messages
+  // */
+  //private boolean hasMessages(I vertexId) {
+  //  if (asyncConf.isAsync()) {
+  //    if (serviceWorker.getLogicalSuperstep() == 0) {
+  //      return false;
+  //    } else if (asyncConf.needAllMsgs()) {
+  //      return true;
+  //    } else {
+  //      return messageStore.hasMessagesForVertex(vertexId) ||
+  //        localMessageStore.hasMessagesForVertex(vertexId);
+  //    }
+  //  } else {
+  //    return messageStore.hasMessagesForVertex(vertexId);
+  //  }
+  //}
 
   /**
    * Compute a single vertex.

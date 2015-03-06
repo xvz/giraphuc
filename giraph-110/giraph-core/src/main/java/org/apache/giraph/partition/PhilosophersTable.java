@@ -37,7 +37,8 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * YH: Implements the hygienic dining philosophers solution.
+ * YH: Implements the hygienic dining philosophers solution,
+ * with vertices as philosophers.
  *
  * @param <I> Vertex id
  * @param <V> Vertex value
@@ -216,14 +217,17 @@ public class PhilosophersTable<I extends WritableComparable,
         byte forkInfo = neighbours.get(neighbourId);
         oldForkInfo = forkInfo;
 
-        if (haveToken(forkInfo) && !haveFork(forkInfo)) {
-          forkInfo &= ~MASK_HAVE_TOKEN;
+        if (!haveFork(forkInfo)) {
           needForks = true;
           LOG.debug("[[PTABLE]] " + vertexId + ":   missing fork " +
-                   neighbourId + " " + toString(forkInfo));
+                    neighbourId + " " + toString(forkInfo));
+
+          // missing fork does NOT imply holding token, b/c we
+          // may have already sent the token for our missing fork
+          if (haveToken(forkInfo)) {
+            forkInfo &= ~MASK_HAVE_TOKEN;
+          }
         }
-        // otherwise, we either have fork (could be clean or dirty)
-        // or dirty fork was taken and we already sent a token for it
 
         neighbours.put(neighbourId, forkInfo);
       }
@@ -267,11 +271,11 @@ public class PhilosophersTable<I extends WritableComparable,
       }
 
       // have all forks, now eating
-      synchronized (pHungry) {
-        pHungry.remove(pId);
-      }
       synchronized (pEating) {
         pEating.add(pId);
+      }
+      synchronized (pHungry) {
+        pHungry.remove(pId);
       }
     }
     LOG.debug("[[PTABLE]] " + vertexId + ": got all forks");
