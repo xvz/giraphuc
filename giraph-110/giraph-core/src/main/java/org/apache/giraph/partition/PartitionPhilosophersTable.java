@@ -422,7 +422,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       // call must be non-blocking to avoid deadlocks
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
-        new SendPartitionDLForkRequest(senderId, receiverId),
+        new SendPartitionDLForkRequest(senderId, receiverId, conf),
         true);
       LOG.debug("[[PTABLE]] " + senderId +
                ": SENT remote fork to " + receiverId);
