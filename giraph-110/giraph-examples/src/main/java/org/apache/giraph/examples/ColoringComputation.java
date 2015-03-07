@@ -52,26 +52,22 @@ public class ColoringComputation extends BasicComputation<
       Vertex<LongWritable, LongWritable, NullWritable> vertex,
       Iterable<LongWritable> messages) throws IOException {
 
+    // initialization (no serializability in first SS)
     if (getLogicalSuperstep() == 0) {
       vertex.setValue(new LongWritable(NO_COLOR));
       return;
     }
 
-    LOG.debug("[[COLOR]] vid=" + vertex.getId() + " msgs...");
-
-    LongOpenHashSet colorConflicts = new LongOpenHashSet(vertex.getNumEdges());
-    for (LongWritable message : messages) {
-      colorConflicts.add(message.get());
-      LOG.debug("[[COLOR]] vid=" + vertex.getId() + "    got " +
-               message.get());
-    }
-
     if (vertex.getValue().get() == NO_COLOR) {
+      // get neighbour's colours
+      LongOpenHashSet conflicts = new LongOpenHashSet(vertex.getNumEdges());
+      for (LongWritable message : messages) {
+        conflicts.add(message.get());
+      }
+
       // acquire a new color
-      for (long i = 0; i < colorConflicts.size() + 1; i++) {
-        LOG.debug("[[COLOR]] vid=" + vertex.getId() + "    trying " + i);
-        if (!colorConflicts.contains(i)) {
-          LOG.debug("[[COLOR]] vid=" + vertex.getId() + "    " + i + " is ok!");
+      for (long i = 0; i < conflicts.size() + 1; i++) {
+        if (!conflicts.contains(i)) {
           vertex.getValue().set(i);
           break;
         }
@@ -88,15 +84,16 @@ public class ColoringComputation extends BasicComputation<
         if (e.getTargetVertexId().get() == vertex.getId().get()) {
           continue;
         }
-        LOG.debug("[[COLOR]] vid=" + vertex.getId() + " send " +
-                 vertex.getValue() + " to vid=" + e.getTargetVertexId());
         sendMessage(e.getTargetVertexId(), vertex.getValue());
       }
     } else {
-      // we should NOT get a conflict any more!
-      if (colorConflicts.contains(vertex.getValue().get())) {
-        LOG.fatal("[[COLOR]] vid=" + vertex.getId() + " unexpected conflict!");
-        throw new IllegalStateException("Unexpected conflict!");
+      // we should NOT get a conflict any more! (this check is optional)
+      for (LongWritable message : messages) {
+        if (message.get() == vertex.getValue().get()) {
+          LOG.fatal("[[COLOR]] vid=" + vertex.getId() +
+                    " unexpected conflict!");
+          throw new IllegalStateException("Unexpected conflict!");
+        }
       }
     }
 
