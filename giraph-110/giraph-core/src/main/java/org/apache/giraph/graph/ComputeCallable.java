@@ -183,8 +183,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         // of a fork). Consequently, there can be an extra *global* superstep
         // JUST to receive "in-transit" forks!
         //
-        // (2) is more fair and more performant. Memory usage can be slightly
-        // higher but tapers out for large graphs. We use (2).
+        // (2) is more fair and more performant, so we use (2).
         try {
           // blocking call to place id back on queue
           partitionIdQueue.put(partitionId);
