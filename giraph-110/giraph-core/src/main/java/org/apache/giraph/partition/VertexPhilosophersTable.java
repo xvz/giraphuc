@@ -19,8 +19,8 @@
 package org.apache.giraph.partition;
 
 import org.apache.giraph.bsp.CentralizedServiceWorker;
-import org.apache.giraph.comm.requests.SendDistributedLockingForkRequest;
-import org.apache.giraph.comm.requests.SendDistributedLockingTokenRequest;
+import org.apache.giraph.comm.requests.SendVertexDLForkRequest;
+import org.apache.giraph.comm.requests.SendVertexDLTokenRequest;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.edge.Edge;
 import org.apache.giraph.graph.Vertex;
@@ -367,7 +367,7 @@ public class VertexPhilosophersTable<I extends WritableComparable,
       // call must be non-blocking to avoid deadlocks
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
-        new SendDistributedLockingTokenRequest(senderId, receiverId, conf),
+        new SendVertexDLTokenRequest(senderId, receiverId, conf),
         true);
       LOG.debug("[[PTABLE]] " + senderId +
                ": SENT remote token to " + receiverId);
@@ -400,7 +400,7 @@ public class VertexPhilosophersTable<I extends WritableComparable,
       // call must be non-blocking to avoid deadlocks
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
-        new SendDistributedLockingForkRequest(senderId, receiverId, conf),
+        new SendVertexDLForkRequest(senderId, receiverId, conf),
         true);
       LOG.debug("[[PTABLE]] " + senderId +
                ": SENT remote fork to " + receiverId);

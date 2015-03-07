@@ -18,7 +18,6 @@
 
 package org.apache.giraph.comm.requests;
 
-import org.apache.giraph.bsp.BspService;
 import org.apache.giraph.comm.ServerData;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.hadoop.io.Writable;
@@ -30,18 +29,16 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 /**
- * YH: Send a fork to another worker.
+ * YH: Send a token (fork request) to another worker.
  *
  * @param <I> Vertex id
  * @param <V> Vertex data
  * @param <E> Edge data
  */
-public class SendDistributedLockingForkRequest<I extends WritableComparable,
+public class SendVertexDLTokenRequest<I extends WritableComparable,
     V extends Writable, E extends Writable> extends
     WritableRequest<I, V, E> implements WorkerRequest<I, V, E> {
 
-  /** Dummy non-zero size of this message, for AsyncConf */
-  private static final int FORK_BYTES = 1;
   /** Sender vertex id */
   private I senderId;
   /** Receiver vertex id */
@@ -50,26 +47,22 @@ public class SendDistributedLockingForkRequest<I extends WritableComparable,
   /**
    * Constructor used for reflection only
    */
-  public SendDistributedLockingForkRequest() {
+  public SendVertexDLTokenRequest() {
   }
 
   /**
-   * Constructor. All created requests MUST be sent.
+   * Constructor.
    *
    * @param senderId Sender vertex id
    * @param receiverId Receiver vertex id
    * @param conf ImmutableClassesGiraphConfiguration
    */
-  public SendDistributedLockingForkRequest(
+  public SendVertexDLTokenRequest(
       I senderId, I receiverId,
-      ImmutableClassesGiraphConfiguration conf) {
+      ImmutableClassesGiraphConfiguration<I, V, E> conf) {
     setConf(conf);    // getConf() is null until properly set
     this.senderId = WritableUtils.clone(senderId, getConf());
     this.receiverId = WritableUtils.clone(receiverId, getConf());
-
-    // no good place for this, so leave it here...
-    // this means all created requests MUST be sent
-    getConf().getAsyncConf().addSentBytes(FORK_BYTES);
   }
 
   @Override
@@ -89,19 +82,13 @@ public class SendDistributedLockingForkRequest<I extends WritableComparable,
 
   @Override
   public RequestType getType() {
-    return RequestType.SEND_DISTRIBUTED_LOCKING_FORK_REQUEST;
+    return RequestType.SEND_VERTEX_DL_TOKEN_REQUEST;
   }
 
   @Override
   public void doRequest(ServerData<I, V, E> serverData) {
     serverData.getServiceWorker().getVertexPhilosophersTable().
-      receiveFork(senderId, receiverId);
-
-    // MUST signal to avoid deadlock scenario where worker remains
-    // blocked while hogging its forks b/c no new (data) msgs arrive
-    getConf().getAsyncConf().addRecvBytes(FORK_BYTES);
-    ((BspService) serverData.getServiceWorker()).
-      getSuperstepReadyToFinishEvent().signal();
+      receiveToken(senderId, receiverId);
   }
 
   @Override
