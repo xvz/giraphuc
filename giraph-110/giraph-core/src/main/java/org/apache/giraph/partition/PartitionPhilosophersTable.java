@@ -129,9 +129,9 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
         }
       };
 
-    LOG.debug("[[PTABLE]] ========================================");
-    LOG.debug("[[PTABLE]] I am worker: " +
-             serviceWorker.getWorkerInfo().getTaskId());
+    //LOG.info("[[PTABLE]] ========================================");
+    //LOG.info("[[PTABLE]] I am worker: " +
+    //         serviceWorker.getWorkerInfo().getTaskId());
   }
 
   /**
@@ -145,8 +145,8 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
     int partitionId = serviceWorker.
       getVertexPartitionOwner(vertex.getId()).getPartitionId();
 
-    LOG.debug("[[PTABLE]] add vertex " + vertex.getId() +
-              ", partition " + partitionId);
+    //LOG.info("[[PTABLE]] add vertex " + vertex.getId() +
+    //          ", partition " + partitionId);
 
     Int2ByteOpenHashMap neighbours;
     synchronized (pMap) {
@@ -211,7 +211,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
    * @return True if forks acquired, false otherwise
    */
   public boolean acquireForks(int pId) {
-    LOG.debug("[[PTABLE]] " + pId + ": acquiring forks");
+    //LOG.info("[[PTABLE]] " + pId + ": acquiring forks");
     boolean needRemoteFork = false;
     boolean needForks = false;
     byte oldForkInfo;
@@ -220,7 +220,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
     // no dependencies on them, but we do need to handle them
     Int2ByteOpenHashMap neighbours = pMap.get(pId);
     if (neighbours == null) {
-      LOG.debug("[[PTABLE]] " + pId + ": empty partition");
+      //LOG.info("[[PTABLE]] " + pId + ": empty partition");
       return false;
     }
 
@@ -237,14 +237,15 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
 
         if (!haveFork(forkInfo)) {
           needForks = true;
-          LOG.debug("[[PTABLE]] " + pId + ":   missing fork " +
-                   neighbourId + " " + toString(forkInfo));
 
           // missing fork does NOT imply holding token, b/c we
           // may have already sent the token for our missing fork
           if (haveToken(forkInfo)) {
             forkInfo &= ~MASK_HAVE_TOKEN;
           }
+
+          //LOG.info("[[PTABLE]] " + pId + ":   missing fork " +
+          //         neighbourId + " " + toString(forkInfo));
         }
         // otherwise, we have our fork (can be clean or dirty)
 
@@ -264,9 +265,9 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
     }
 
     if (needRemoteFork) {
-      LOG.debug("[[PTABLE]] " + pId + ":   flushing");
+      //LOG.info("[[PTABLE]] " + pId + ":   flushing");
       serviceWorker.getWorkerClient().waitAllRequests();
-      LOG.debug("[[PTABLE]] " + pId + ":   done flush");
+      //LOG.info("[[PTABLE]] " + pId + ":   done flush");
     }
 
     // Do we have all our forks? This must be done in a single
@@ -276,10 +277,11 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
         for (int neighbourId : neighbours.keySet()) {
           byte forkInfo = neighbours.get(neighbourId);
           if (!haveFork(forkInfo)) {
+            //LOG.info("[[PTABLE]] " + pId + ": no go, missing fork " +
+            //         neighbourId + " " + toString(forkInfo));
+
             // For efficiency, don't block---just give up and execute
             // other vertices. Revisit on next (logical) superstep.
-            LOG.debug("[[PTABLE]] " + pId + ": no go, missing fork " +
-                     neighbourId + " " + toString(forkInfo));
             synchronized (pHungry) {
               pHungry.remove(pId);
             }
@@ -296,7 +298,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
         pEating.add(pId);
       }
     }
-    LOG.debug("[[PTABLE]] " + pId + ": got all forks");
+    //LOG.info("[[PTABLE]] " + pId + ": got all forks");
     return true;
   }
 
@@ -307,7 +309,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
    * @param pId Partition id (philosopher) that finished eating
    */
   public void releaseForks(int pId) {
-    LOG.debug("[[PTABLE]] " + pId + ": releasing forks");
+    //LOG.info("[[PTABLE]] " + pId + ": releasing forks");
     boolean needFlush = false;
     byte oldForkInfo;
 
@@ -315,7 +317,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
     // no dependencies on them, but we do need to handle them
     Int2ByteOpenHashMap neighbours = pMap.get(pId);
     if (neighbours == null) {
-      LOG.debug("[[PTABLE]] " + pId + ": empty partition");
+      //LOG.info("[[PTABLE]] " + pId + ": empty partition");
       return;
     }
 
@@ -333,14 +335,16 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
         if (haveToken(forkInfo)) {
           // fork will be sent outside of sync block
           forkInfo &= ~MASK_HAVE_FORK;
-          LOG.debug("[[PTABLE]] " + pId + ": sending clean fork to " +
-                   neighbourId + " " + toString(forkInfo));
+
+          //LOG.info("[[PTABLE]] " + pId + ": sending clean fork to " +
+          //         neighbourId + " " + toString(forkInfo));
         } else {
           // otherwise, explicitly dirty the fork
           // (so that fork is released immediately on token receipt)
           forkInfo |= MASK_IS_DIRTY;
-          LOG.debug("[[PTABLE]] " + pId + ": dirty fork " +
-                   neighbourId + " " + toString(forkInfo));
+
+          //LOG.info("[[PTABLE]] " + pId + ": dirty fork " +
+          //         neighbourId + " " + toString(forkInfo));
         }
 
         neighbours.put(neighbourId, forkInfo);
@@ -356,9 +360,9 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
     // for serializability). If nobody needs a fork, messages will
     // get flushed only when that fork is requested.
     if (needFlush) {
-      LOG.debug("[[PTABLE]] " + pId + ": flushing");
+      //LOG.info("[[PTABLE]] " + pId + ": flushing");
       serviceWorker.getWorkerClient().waitAllRequests();
-      LOG.debug("[[PTABLE]] " + pId + ": done flush");
+      //LOG.info("[[PTABLE]] " + pId + ": done flush");
     }
   }
 
@@ -373,23 +377,23 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
     int dstTaskId = taskIdMap.get(receiverId);
 
     if (serviceWorker.getWorkerInfo().getTaskId() == dstTaskId) {
-      LOG.debug("[[PTABLE]] " + senderId +
-               ": send local token to " + receiverId);
+      //LOG.info("[[PTABLE]] " + senderId +
+      //         ": send local token to " + receiverId);
       // handle request locally
       receiveToken(senderId, receiverId);
-      LOG.debug("[[PTABLE]] " + senderId +
-               ": SENT local token to " + receiverId);
+      //LOG.info("[[PTABLE]] " + senderId +
+      //         ": SENT local token to " + receiverId);
       return false;
     } else {
-      LOG.debug("[[PTABLE]] " + senderId +
-               ": send remote token to " + receiverId);
+      //LOG.info("[[PTABLE]] " + senderId +
+      //         ": send remote token to " + receiverId);
       // call must be non-blocking to avoid deadlocks
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
         new SendPartitionDLTokenRequest(senderId, receiverId),
         true);
-      LOG.debug("[[PTABLE]] " + senderId +
-               ": SENT remote token to " + receiverId);
+      //LOG.info("[[PTABLE]] " + senderId +
+      //         ": SENT remote token to " + receiverId);
       return true;
     }
   }
@@ -405,23 +409,23 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
     int dstTaskId = taskIdMap.get(receiverId);
 
     if (serviceWorker.getWorkerInfo().getTaskId() == dstTaskId) {
-      LOG.debug("[[PTABLE]] " + senderId +
-               ": send local fork to " + receiverId);
+      //LOG.info("[[PTABLE]] " + senderId +
+      //         ": send local fork to " + receiverId);
       // handle request locally
       receiveFork(senderId, receiverId);
-      LOG.debug("[[PTABLE]] " + senderId +
-               ": SENT local fork to " + receiverId);
+      //LOG.info("[[PTABLE]] " + senderId +
+      //         ": SENT local fork to " + receiverId);
       return false;
     } else {
-      LOG.debug("[[PTABLE]] " + senderId +
-               ": send remote fork to " + receiverId);
+      //LOG.info("[[PTABLE]] " + senderId +
+      //         ": send remote fork to " + receiverId);
       // call must be non-blocking to avoid deadlocks
       serviceWorker.getWorkerClient().sendWritableRequest(
         dstTaskId,
         new SendPartitionDLForkRequest(senderId, receiverId),
         true);
-      LOG.debug("[[PTABLE]] " + senderId +
-               ": SENT remote fork to " + receiverId);
+      //LOG.info("[[PTABLE]] " + senderId +
+      //         ": SENT remote fork to " + receiverId);
       return true;
     }
   }
@@ -456,8 +460,8 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       byte forkInfo = neighbours.get(neighbourId);
       oldForkInfo = forkInfo;
 
-      LOG.debug("[[PTABLE]] " + receiverId + ": got token from " +
-               senderId  + " " + toString(forkInfo));
+      //LOG.info("[[PTABLE]] " + receiverId + ": got token from " +
+      //         senderId  + " " + toString(forkInfo));
 
       if (isEating || !isDirty(forkInfo)) {
         // Do not give up fork, but record token so that receiver
@@ -472,22 +476,25 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
         // quit if it can't get fork. Note that we cannot give up
         // clean fork, as it creates cycle in precedence graph.
         forkInfo |= MASK_HAVE_TOKEN;
-        LOG.debug("[[PTABLE]] " + receiverId + ": not giving up fork " +
-                 senderId  + " " + toString(forkInfo));
+
+        //LOG.info("[[PTABLE]] " + receiverId + ": not giving up fork " +
+        //         senderId  + " " + toString(forkInfo));
       } else if (!isHungry && !isEating && isDirty(forkInfo)) {
         // Give up dirty fork and record token receipt.
         forkInfo &= ~MASK_IS_DIRTY;
         forkInfo &= ~MASK_HAVE_FORK;
         forkInfo |= MASK_HAVE_TOKEN;
-        LOG.debug("[[PTABLE]] " + receiverId + ": give up fork " +
-                  senderId  + " " + toString(forkInfo));
+
+        //LOG.info("[[PTABLE]] " + receiverId + ": give up fork " +
+        //          senderId  + " " + toString(forkInfo));
       } else if (isHungry && isDirty(forkInfo)) {
         // Give up fork (sender has priority), but tell sender that
         // we want fork back by sending back the newly receive token.
         forkInfo &= ~MASK_IS_DIRTY;
         forkInfo &= ~MASK_HAVE_FORK;
-        LOG.debug("[[PTABLE]] " + receiverId + ": reluctantly give up fork " +
-                 senderId  + " " + toString(forkInfo));
+
+        //LOG.info("[[PTABLE]] " + receiverId + ": reluctantly give up fork " +
+        //         senderId  + " " + toString(forkInfo));
       }
 
       neighbours.put(neighbourId, forkInfo);
@@ -533,8 +540,9 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       byte forkInfo = neighbours.get(neighbourId);
       forkInfo |= MASK_HAVE_FORK;
       neighbours.put(neighbourId, forkInfo);
-      LOG.debug("[[PTABLE]] " + receiverId + ": got fork from " +
-               senderId + " " + toString(forkInfo));
+
+      //LOG.info("[[PTABLE]] " + receiverId + ": got fork from " +
+      //         senderId + " " + toString(forkInfo));
     }
   }
 
