@@ -75,18 +75,16 @@ public class PageRankTolFinderComputation extends BasicComputation<
 
     if (getLogicalSuperstep() == 0) {
       // FIX: initial value is 1/|V| (or 1), not 0.15/|V| (or 0.15)
-      DoubleWritable vertexValue = new DoubleWritable(1.0);
-      //new DoubleWritable(0.15f / getTotalNumVertices());
-      vertex.setValue(vertexValue);
+      vertex.getValue().set(1.0);
+      //set(0.15f / getTotalNumVertices());
 
     } else {
       double sum = 0;
       for (DoubleWritable message : messages) {
         sum += message.get();
       }
-      DoubleWritable vertexValue = new DoubleWritable(0.15f + 0.85f * sum);
-      //new DoubleWritable((0.15f / getTotalNumVertices()) + 0.85f * sum);
-      vertex.setValue(vertexValue);
+      vertex.getValue().set(0.15f + 0.85f * sum);
+      //set((0.15f / getTotalNumVertices()) + 0.85f * sum);
     }
 
     aggregate(MAX_AGG,
@@ -94,9 +92,8 @@ public class PageRankTolFinderComputation extends BasicComputation<
 
     // Termination condition based on max supersteps
     if (getLogicalSuperstep() < MAX_SUPERSTEPS.get(getConf())) {
-      long edges = vertex.getNumEdges();
       sendMessageToAllEdges(vertex,
-          new DoubleWritable(vertex.getValue().get() / edges));
+          new DoubleWritable(vertex.getValue().get() / vertex.getNumEdges()));
     } else {
       vertex.voteToHalt();
     }

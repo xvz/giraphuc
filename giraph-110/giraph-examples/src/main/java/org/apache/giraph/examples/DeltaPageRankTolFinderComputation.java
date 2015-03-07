@@ -74,7 +74,7 @@ public class DeltaPageRankTolFinderComputation extends BasicComputation<
     double delta = 0;
 
     if (getLogicalSuperstep() == 0) {
-      vertex.setValue(new DoubleWritable(0.0));
+      vertex.getValue().set(0.0);
       delta = 0.15;
     }
 
@@ -84,7 +84,7 @@ public class DeltaPageRankTolFinderComputation extends BasicComputation<
 
     // Termination condition based on max supersteps
     if (getLogicalSuperstep() < MAX_SS.get(getConf()) && delta > 0) {
-      vertex.setValue(new DoubleWritable(vertex.getValue().get() + delta));
+      vertex.getValue().set(vertex.getValue().get() + delta);
       sendMessageToAllEdges(vertex,
           new DoubleWritable(0.85 * delta / vertex.getNumEdges()));
     }

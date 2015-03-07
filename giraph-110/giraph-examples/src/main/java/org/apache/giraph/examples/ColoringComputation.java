@@ -54,7 +54,7 @@ public class ColoringComputation extends BasicComputation<
 
     // initialization (no serializability in first SS)
     if (getLogicalSuperstep() == 0) {
-      vertex.setValue(new LongWritable(NO_COLOR));
+      vertex.getValue().set(NO_COLOR);
       return;
     }
 

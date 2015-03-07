@@ -96,8 +96,8 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
 
     if (getLogicalSuperstep() == 0) {
       // FIX: initial value is 1/|V| (or 1), not 0.15/|V| (or 0.15)
-      vertex.setValue(new DoubleWritable(1.0));
-      // new DoubleWritable(0.15f / getTotalNumVertices());
+      vertex.getValue().set(1.0);
+      //set(0.15f / getTotalNumVertices());
 
     } else {
       // termination when using error tolerance; must wait at least 1SS
@@ -113,9 +113,8 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
       for (DoubleWritable message : messages) {
         sum += message.get();
       }
-      DoubleWritable vertexValue = new DoubleWritable(0.15f + 0.85f * sum);
-      //new DoubleWritable((0.15f / getTotalNumVertices()) + 0.85f * sum);
-      vertex.setValue(vertexValue);
+      vertex.getValue().set(0.15f + 0.85f * sum);
+      //set((0.15f / getTotalNumVertices()) + 0.85f * sum);
 
       // NOTE: this logging is unnecessary for benchmarking!
       //aggregate(MAX_AGG, vertexValue);

@@ -67,6 +67,12 @@ public class MinimumSpanningTreeComputation extends BasicComputation<
   private static final Logger LOG =
       Logger.getLogger(MinimumSpanningTreeComputation.class);
 
+  /** LongWritable +1 */
+  private static final LongWritable PLUS_ONE = new LongWritable(1);
+  /** LongWritable -1 */
+  private static final LongWritable MINUS_ONE = new LongWritable(-1);
+
+
   /** Counter aggregator name */
   private static String COUNTER_AGG = "counter";
   /** Total supervertex aggregator name */
@@ -87,7 +93,7 @@ public class MinimumSpanningTreeComputation extends BasicComputation<
       }
 
       // need to set up correct number of supervertices on first superstep
-      aggregate(SUPERVERTEX_AGG, new LongWritable(1));
+      aggregate(SUPERVERTEX_AGG, PLUS_ONE);
     }
 
     IntWritable phaseInt = getAggregatedValue(PHASE_AGG);
@@ -288,7 +294,7 @@ public class MinimumSpanningTreeComputation extends BasicComputation<
 
           // increment counter aggregator (i.e., we're done this phase,
           // future answers messages will be ignored---see below)
-          aggregate(COUNTER_AGG, new LongWritable(1));
+          aggregate(COUNTER_AGG, PLUS_ONE);
         }
 
         // otherwise, type is still TYPE_UNKNOWN
@@ -324,7 +330,7 @@ public class MinimumSpanningTreeComputation extends BasicComputation<
           isPointerSupervertex = true;
 
           // increment counter aggregator (i.e., we're done this phase)
-          aggregate(COUNTER_AGG, new LongWritable(1));
+          aggregate(COUNTER_AGG, PLUS_ONE);
 
         } else {
           // otherwise, our pointer didn't know who supervertex is,
@@ -378,8 +384,8 @@ public class MinimumSpanningTreeComputation extends BasicComputation<
        Vertex<LongWritable, MSTVertexValue, MSTEdgeValue> vertex) {
 
     // This is dumb... there's probably a better way.
-    aggregate(COUNTER_AGG, new LongWritable(-1));
-    aggregate(SUPERVERTEX_AGG, new LongWritable(-1));
+    aggregate(COUNTER_AGG, MINUS_ONE);
+    aggregate(SUPERVERTEX_AGG, MINUS_ONE);
 
     // send our neighbours <my ID, my supervertex's ID>
     MSTMessage msg = new MSTMessage(new MSTMsgType(MSTMsgType.MSG_CLEAN),
@@ -577,7 +583,7 @@ public class MinimumSpanningTreeComputation extends BasicComputation<
       vertex.voteToHalt();
     } else {
       // otherwise, increment total supervertex counter
-      aggregate(SUPERVERTEX_AGG, new LongWritable(1));
+      aggregate(SUPERVERTEX_AGG, PLUS_ONE);
 
       // and go back to phase 1
     }

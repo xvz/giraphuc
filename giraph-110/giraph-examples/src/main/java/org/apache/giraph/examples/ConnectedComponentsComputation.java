@@ -88,7 +88,7 @@ public class ConnectedComponentsComputation extends
 
     // propagate new component id to the neighbors
     if (changed) {
-      vertex.setValue(new LongWritable(currentComponent));
+      vertex.getValue().set(currentComponent);
       sendMessageToAllEdges(vertex, vertex.getValue());
     }
     vertex.voteToHalt();

@@ -62,25 +62,20 @@ public class SimpleShortestPathsComputation extends BasicComputation<
       Vertex<LongWritable, DoubleWritable, FloatWritable> vertex,
       Iterable<DoubleWritable> messages) throws IOException {
     if (getLogicalSuperstep() == 0) {
-      vertex.setValue(new DoubleWritable(Double.MAX_VALUE));
+      vertex.getValue().set(Double.MAX_VALUE);
     }
+
     double minDist = isSource(vertex) ? 0d : Double.MAX_VALUE;
     for (DoubleWritable message : messages) {
       minDist = Math.min(minDist, message.get());
     }
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Vertex " + vertex.getId() + " got minDist = " + minDist +
-          " vertex value = " + vertex.getValue());
-    }
+
     if (minDist < vertex.getValue().get()) {
-      vertex.setValue(new DoubleWritable(minDist));
+      vertex.getValue().set(minDist);
+      DoubleWritable distance = new DoubleWritable();
       for (Edge<LongWritable, FloatWritable> edge : vertex.getEdges()) {
-        double distance = minDist + edge.getValue().get();
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("Vertex " + vertex.getId() + " sent to " +
-              edge.getTargetVertexId() + " = " + distance);
-        }
-        sendMessage(edge.getTargetVertexId(), new DoubleWritable(distance));
+        distance.set(minDist + edge.getValue().get());
+        sendMessage(edge.getTargetVertexId(), distance);
       }
     }
     vertex.voteToHalt();

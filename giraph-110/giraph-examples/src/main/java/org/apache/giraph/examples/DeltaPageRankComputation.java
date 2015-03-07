@@ -66,14 +66,14 @@ public class DeltaPageRankComputation extends BasicComputation<LongWritable,
     double delta = 0;
 
     if (getLogicalSuperstep() == 0) {
-      vertex.setValue(new DoubleWritable(0.0));
+      vertex.getValue().set(0.0);
       delta = 0.15;
     }
 
     for (DoubleWritable message : messages) {
       delta += message.get();
     }
-    vertex.setValue(new DoubleWritable(vertex.getValue().get() + delta));
+    vertex.getValue().set(vertex.getValue().get() + delta);
 
     if (getLogicalSuperstep() < MAX_SS.get(getConf()) && delta > 0) {
       sendMessageToAllEdges(vertex,
