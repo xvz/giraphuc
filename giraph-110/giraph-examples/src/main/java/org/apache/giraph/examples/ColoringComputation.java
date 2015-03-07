@@ -85,7 +85,7 @@ public class ColoringComputation extends BasicComputation<
       // broadcast change to all neighbours
       for (Edge<LongWritable, NullWritable> e : vertex.getEdges()) {
         // skip self-loops
-        if (e.getTargetVertexId() == vertex.getId()) {
+        if (e.getTargetVertexId().get() == vertex.getId().get()) {
           continue;
         }
         LOG.debug("[[COLOR]] vid=" + vertex.getId() + " send " +

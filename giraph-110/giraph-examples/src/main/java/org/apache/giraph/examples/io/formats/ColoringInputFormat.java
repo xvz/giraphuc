@@ -36,7 +36,7 @@ import java.util.regex.Pattern;
  * Simple text-based {@link org.apache.giraph.io.VertexInputFormat} for
  * {@link org.apache.giraph.examples.ColoringComputation}.
  *
- * Inputs have long ids and vertex values, but no edge weights.
+ * Inputs have long ids and no edge weights.
  *
  * Each line consists of:
  * vertex neighbor1 neighbor2 ...
