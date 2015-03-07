@@ -229,6 +229,7 @@ public class VertexPhilosophersTable<I extends WritableComparable,
             forkInfo &= ~MASK_HAVE_TOKEN;
           }
         }
+        // otherwise, we have our fork (can be clean or dirty)
 
         neighbours.put(neighbourId, forkInfo);
       }
@@ -272,11 +273,11 @@ public class VertexPhilosophersTable<I extends WritableComparable,
       }
 
       // have all forks, now eating
-      synchronized (pEating) {
-        pEating.add(pId);
-      }
       synchronized (pHungry) {
         pHungry.remove(pId);
+      }
+      synchronized (pEating) {
+        pEating.add(pId);
       }
     }
     LOG.debug("[[PTABLE]] " + vertexId + ": got all forks");

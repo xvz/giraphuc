@@ -166,33 +166,36 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         break;
       }
 
-      Partition<I, V, E> partition =
-          serviceWorker.getPartitionStore().getOrCreatePartition(partitionId);
-
       // YH: For partition-based dist locking, acquire forks before
       // executing partition and skip if acquisition fails.
       // Skip this if this is first superstep.
       if (asyncConf.partitionLockSerialized() &&
           serviceWorker.getLogicalSuperstep() > 0 &&
           !pTable.acquireForks(partitionId)) {
-        // blocking call to put skipped partition back on to queue
+        // We have two options:
+        // 1. skip partition and compute on next (logical) superstep
+        // 2. add partition back on to queue (to execute in same SS)
+        //
+        // (1) is bad b/c we never favour skipped partitions in the next SS,
+        // AND it requires fork requests to be treated as regular messages
+        // (i.e., have a byte count) so that workers can be properly woken
+        // (can get more complicated b/c workers may JUST miss the arrival
+        // of a fork). Consequently, there can be an extra *global* superstep
+        // JUST to receive "in-transit" forks!
+        //
+        // (2) is more fair and more performant. Memory usage can be slightly
+        // higher but tapers out for large graphs. We use (2).
         try {
+          // blocking call to place id back on queue
           partitionIdQueue.put(partitionId);
         } catch (InterruptedException e) {
           throw new IllegalStateException("call: Put failed.", e);
         }
-
-        //// Add "unchanged" partition stats. Here, we use our cached
-        //// "doneVertices" to avoid termination issues.
-        //PartitionStats partitionStats =
-        //  new PartitionStats(partitionId, partition.getVertexCount(),
-        //                     pTable.getDoneVertices(partitionId),
-        //                     partition.getEdgeCount(), 0, 0);
-        //partitionStatsList.add(partitionStats);
-        //
-        //serviceWorker.getPartitionStore().putPartition(partition);
         continue;
       }
+
+      Partition<I, V, E> partition =
+          serviceWorker.getPartitionStore().getOrCreatePartition(partitionId);
 
       Computation<I, V, E, M1, M2> computation =
           (Computation<I, V, E, M1, M2>) configuration.createComputation();
@@ -212,22 +215,12 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
           // This is b/c releasing forks will flush msgs to network
           try {
             workerClientRequestProcessor.flush();
-            serviceWorker.getWorkerClient().waitAllRequests();
+            //serviceWorker.getWorkerClient().waitAllRequests();
           } catch (IOException e) {
             throw new IllegalStateException("call: Flushing failed.", e);
           }
 
           pTable.releaseForks(partitionId);
-
-          //// Also store "doneVertices" stat so that when we skip
-          //// this partition we'll have a correct value to use.
-          //// (It won't change when we're skipping the partition.)
-          ////
-          //// Without this, we would have to iterate through and deserialize
-          //// all vertices in this partition JUST to re-acquire an accurate
-          //// "doneVertices", which is more expensive.
-          //pTable.cacheDoneVertices(partitionId,
-          //                         partitionStats.getFinishedVertexCount());
         }
 
         partitionStatsList.add(partitionStats);
@@ -378,7 +371,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
               try {
                 workerClientRequestProcessor.flush();
                 // TODO-YH: eager???
-                serviceWorker.getWorkerClient().waitAllRequests();
+                //serviceWorker.getWorkerClient().waitAllRequests();
               } catch (IOException e) {
                 throw new IllegalStateException("call: Flushing failed.", e);
               }
@@ -511,7 +504,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         messages = localMessageStore.removeVertexMessages(vertexId);
       }
     } else {
-      // TODO-YH: implement BSP for serializability--need two stores!!
+      // TODO-YH: implement serializability for BSP--need two stores!!
       messages = null;
     }
 
