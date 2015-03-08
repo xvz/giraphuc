@@ -359,11 +359,11 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
           if (pTable.isBoundaryVertex(vertexId)) {
             // If acquiring fork fails, skip this vertex and process it
             // in the next (logical) superstep. We skip vertices that
-            // are halted and have no messages (to wake it).
-            Iterable<M1> messages = getAllMessages(vertexId);
-            if (!(vertex.isHalted() && Iterables.isEmpty(messages)) &&
+            // are halted and have no messages to wake with.
+            if (!(vertex.isHalted() && !hasMessages(vertexId)) &&
                 pTable.acquireForks(vertexId)) {
-              computeVertex(computation, partition, vertex, messages);
+              computeVertex(computation, partition, vertex,
+                            getAllMessages(vertexId));
 
               // Flush all caches BEFORE releasing forks!
               // This is b/c releasing forks will flush msgs to network
@@ -510,28 +510,28 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
     return messages;
   }
 
-  ///**
-  // * Return whether vertex has messages.
-  // * Result is consistent with get*Messages(). That is, if this
-  // * returns true, get*Messages() will return a non-empty Iterable.
-  // *
-  // * @param vertexId Id of vertex to check
-  // * @return True if vertex has messages
-  // */
-  //private boolean hasMessages(I vertexId) {
-  //  if (asyncConf.isAsync()) {
-  //    if (serviceWorker.getLogicalSuperstep() == 0) {
-  //      return false;
-  //    } else if (asyncConf.needAllMsgs()) {
-  //      return true;
-  //    } else {
-  //      return messageStore.hasMessagesForVertex(vertexId) ||
-  //        localMessageStore.hasMessagesForVertex(vertexId);
-  //    }
-  //  } else {
-  //    return messageStore.hasMessagesForVertex(vertexId);
-  //  }
-  //}
+  /**
+   * Return whether a vertex has messages.
+   * Result is consistent with getAllMessages(). That is, if this
+   * returns true, getAllMessages() will return a non-empty Iterable.
+   *
+   * @param vertexId Id of vertex to check
+   * @return True if vertex has messages
+   */
+  private boolean hasMessages(I vertexId) {
+    if (asyncConf.isAsync()) {
+      if (serviceWorker.getLogicalSuperstep() == 0) {
+        return false;
+      } else if (asyncConf.needAllMsgs()) {
+        return true;
+      } else {
+        return messageStore.hasMessagesForVertex(vertexId) ||
+          localMessageStore.hasMessagesForVertex(vertexId);
+      }
+    } else {
+      return messageStore.hasMessagesForVertex(vertexId);
+    }
+  }
 
   /**
    * Compute a single vertex.
