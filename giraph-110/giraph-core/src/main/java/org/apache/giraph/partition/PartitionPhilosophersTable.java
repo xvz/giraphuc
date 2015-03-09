@@ -87,10 +87,11 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
    * sitting at a distributed "table", that are local to this worker.
    */
   private Int2ObjectOpenHashMap<Int2ByteOpenHashMap> pMap;
-  /** Set of vertices (philosophers) that are hungry (acquiring forks) */
+  /** Set of partitions (philosophers) that are hungry (acquiring forks) */
   private IntOpenHashSet pHungry;
-  /** Set of vertices (philosophers) that are eating (acquired forks) */
+  /** Set of partitions (philosophers) that are eating (acquired forks) */
   private IntOpenHashSet pEating;
+  // "thinking" philosophers are absent from both sets
 
   /** Total number of partitions across all workers */
   private int numTotalPartitions;
@@ -219,12 +220,13 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
    */
   public void acquireForks(int pId) {
     //LOG.info("[[PTABLE]] " + pId + ": acquiring forks");
-    boolean needRemoteFork = false;
+
+    Int2ByteOpenHashMap neighbours = pMap.get(pId);
     byte oldForkInfo;
+    boolean needFlush = false;
 
     // there CAN be partitions with 0 vertices---there will be
     // no dependencies on them, but we do need to handle them
-    Int2ByteOpenHashMap neighbours = pMap.get(pId);
     if (neighbours == null) {
       //LOG.info("[[PTABLE]] " + pId + ": empty partition");
       return;
@@ -244,19 +246,17 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
         byte forkInfo = neighbours.get(neighbourId);
         oldForkInfo = forkInfo;
 
-        if (!haveFork(forkInfo)) {
-          // missing fork does NOT imply holding token, b/c we
-          // may have already sent the token for our missing fork
-          if (haveToken(forkInfo)) {
-            forkInfo &= ~MASK_HAVE_TOKEN;
-          }
+        // Note that missing fork does NOT imply holding token,
+        // b/c we may have already sent off our token
+        if (!haveFork(forkInfo) && haveToken(forkInfo)) {
+          forkInfo &= ~MASK_HAVE_TOKEN;
+          neighbours.put(neighbourId, forkInfo);
 
-          //LOG.info("[[PTABLE]] " + pId + ":   missing fork " +
+          //LOG.info("[[PTABLE]] " + pId + ":   request fork " +
           //         neighbourId + " " + toString(forkInfo));
         }
-        // otherwise, we have our fork (can be clean or dirty)
-
-        neighbours.put(neighbourId, forkInfo);
+        // otherwise, we already sent our token or already hold
+        // our fork (can be clean or dirty)
       }
 
       // We're working with stale forkInfo here, so that request can
@@ -266,12 +266,12 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       //
       // Also note that we've applied forkInfo update before sending.
       // Important b/c local requests will immediately modify forkInfo.
-      if (haveToken(oldForkInfo) && !haveFork(oldForkInfo)) {
-        needRemoteFork |= sendToken(pId, neighbourId);
+      if (!haveFork(oldForkInfo) && haveToken(oldForkInfo)) {
+        needFlush |= sendToken(pId, neighbourId);
       }
     }
 
-    if (needRemoteFork) {
+    if (needFlush) {
       //LOG.info("[[PTABLE]] " + pId + ":   flushing");
       serviceWorker.getWorkerClient().waitAllRequests();
       //LOG.info("[[PTABLE]] " + pId + ":   done flush");
@@ -330,12 +330,13 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
    */
   public void releaseForks(int pId) {
     //LOG.info("[[PTABLE]] " + pId + ": releasing forks");
-    boolean needFlush = false;
+
+    Int2ByteOpenHashMap neighbours = pMap.get(pId);
     byte oldForkInfo;
+    boolean needFlush = false;
 
     // there CAN be partitions with 0 vertices---there will be
     // no dependencies on them, but we do need to handle them
-    Int2ByteOpenHashMap neighbours = pMap.get(pId);
     if (neighbours == null) {
       //LOG.info("[[PTABLE]] " + pId + ": empty partition");
       return;
@@ -361,28 +362,28 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
           //LOG.info("[[PTABLE]] " + pId + ": already lost fork " +
           //         neighbourId + " " + toString(forkInfo));
           continue;
-        }
 
-        if (haveToken(forkInfo)) {
-          // fork will be sent outside of sync block
-          forkInfo &= ~MASK_IS_DIRTY;
-          forkInfo &= ~MASK_HAVE_FORK;
-
-          //LOG.info("[[PTABLE]] " + pId + ": sending clean fork to " +
-          //         neighbourId + " " + toString(forkInfo));
         } else {
-          // otherwise, explicitly dirty the fork
-          // (so that fork is released immediately on token receipt)
-          forkInfo |= MASK_IS_DIRTY;
+          if (haveToken(forkInfo)) {
+            // fork will be sent outside of sync block
+            forkInfo &= ~MASK_IS_DIRTY;
+            forkInfo &= ~MASK_HAVE_FORK;
 
-          //LOG.info("[[PTABLE]] " + pId + ": dirty fork " +
-          //         neighbourId + " " + toString(forkInfo));
+            //LOG.info("[[PTABLE]] " + pId + ": sending clean fork to " +
+            //         neighbourId + " " + toString(forkInfo));
+          } else {
+            // otherwise, explicitly dirty the fork
+            // (so that fork is released immediately on token receipt)
+            forkInfo |= MASK_IS_DIRTY;
+
+            //LOG.info("[[PTABLE]] " + pId + ": dirty fork " +
+            //         neighbourId + " " + toString(forkInfo));
+          }
+          neighbours.put(neighbourId, forkInfo);
         }
-
-        neighbours.put(neighbourId, forkInfo);
       }
 
-      if (haveToken(oldForkInfo)) {
+      if (haveFork(oldForkInfo) && haveToken(oldForkInfo)) {
         needFlush |= sendFork(pId, neighbourId);
       }
     }
@@ -469,18 +470,18 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
    * @param receiverId New holder of token
    */
   public void receiveToken(int senderId, int receiverId) {
-    boolean needFlush = false;
     int pId = receiverId;
     int neighbourId = senderId;
 
     Int2ByteOpenHashMap neighbours = pMap.get(pId);
     byte oldForkInfo;
+    boolean needFlush = false;
 
     boolean isHungry;
     boolean isEating;
 
     // locking order matters: lock neighbours before pEating/pHungry;
-    // this is same order as in acquireForks()'s recheck-all-forks
+    // this is same order as in acquireForks & releasForks
     synchronized (neighbours) {
       synchronized (pHungry) {
         isHungry = pHungry.contains(pId);
@@ -492,6 +493,11 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       byte forkInfo = neighbours.get(neighbourId);
       oldForkInfo = forkInfo;
 
+      // invariant: must not already have token
+      //if (haveToken(forkInfo)) {
+      //  throw IllegalStateException("Should not already have token!");
+      //}
+
       //LOG.info("[[PTABLE]] " + receiverId + ": got token from " +
       //         senderId  + " " + toString(forkInfo));
 
@@ -500,44 +506,39 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
         // will see it when it finishes eating.
         //
         // This works b/c a philosopher has a clean fork iff it wants
-        // to eat, hence the fork is guaranteed to become dirty.
-        //
-        // Philosopher quits if it can't get all its forks, so it
-        // CAN be "thinking" while holding a clean fork (i.e., it
-        // failed to eat). But this is okay, since sender will also
-        // quit if it can't get fork. Note that we cannot give up
-        // clean fork, as it creates cycle in precedence graph.
+        // to eat, hence the fork is guaranteed to become dirty. Note
+        // that we cannot give up clean fork, as it creates a cycle
+        // in the precedence graph.
         forkInfo |= MASK_HAVE_TOKEN;
 
         //LOG.info("[[PTABLE]] " + receiverId + ": not giving up fork " +
         //         senderId  + " " + toString(forkInfo));
-      } else if (!isHungry && !isEating && isDirty(forkInfo)) {
-        // Give up dirty fork and record token receipt.
-        forkInfo &= ~MASK_IS_DIRTY;
-        forkInfo &= ~MASK_HAVE_FORK;
-        forkInfo |= MASK_HAVE_TOKEN;
-
+      } else {
+        if (isHungry) {      // hungry + not eating + dirty fork
+          // Give up fork (sender has priority), but tell sender that
+          // we want fork back by returning the newly received token.
+          forkInfo &= ~MASK_IS_DIRTY;
+          forkInfo &= ~MASK_HAVE_FORK;
+        } else {     // thinking + dirty fork
+          // Give up dirty fork and record token receipt.
+          forkInfo &= ~MASK_IS_DIRTY;
+          forkInfo &= ~MASK_HAVE_FORK;
+          forkInfo |= MASK_HAVE_TOKEN;
+        }
         //LOG.info("[[PTABLE]] " + receiverId + ": give up fork " +
         //          senderId  + " " + toString(forkInfo));
-      } else if (isHungry && isDirty(forkInfo)) {
-        // Give up fork (sender has priority), but tell sender that
-        // we want fork back by sending back the newly receive token.
-        forkInfo &= ~MASK_IS_DIRTY;
-        forkInfo &= ~MASK_HAVE_FORK;
-
-        //LOG.info("[[PTABLE]] " + receiverId + ": reluctantly give up fork " +
-        //         senderId  + " " + toString(forkInfo));
       }
 
       neighbours.put(neighbourId, forkInfo);
     }
 
-    if (!isHungry && !isEating && isDirty(oldForkInfo)) {
-      needFlush |= sendFork(receiverId, senderId);
-    } else if (isHungry && isDirty(oldForkInfo)) {
-      // TODO-YH: consolidate??
-      needFlush |= sendFork(receiverId, senderId);
-      needFlush |= sendToken(receiverId, senderId);
+    if (!isEating && isDirty(oldForkInfo)) {
+      if (isHungry) {
+        needFlush |= sendFork(receiverId, senderId);
+        needFlush |= sendToken(receiverId, senderId);
+      } else {
+        needFlush |= sendFork(receiverId, senderId);
+      }
     }
 
     // NOTE: If fork is requested, we must flush our messages
@@ -571,8 +572,12 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
     synchronized (neighbours) {
       byte forkInfo = neighbours.get(neighbourId);
       forkInfo |= MASK_HAVE_FORK;
-      forkInfo &= ~MASK_IS_DIRTY;
       neighbours.put(neighbourId, forkInfo);
+
+      // invariant: fork must not be dirty
+      //if (isDirty(forkInfo)) {
+      //  throw IllegalStateException("Fork should not be dirty!");
+      //}
 
       //LOG.info("[[PTABLE]] " + receiverId + ": got fork from " +
       //         senderId + " " + toString(forkInfo));
