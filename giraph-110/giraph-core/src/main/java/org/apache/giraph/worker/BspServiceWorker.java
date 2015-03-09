@@ -850,7 +850,7 @@ public class BspServiceWorker<I extends WritableComparable,
     //           numRemoteBoundary + "," + numBothBoundary + ")" +
     //           " -- numTot: " + numVertices);
     //
-    //// printing per-partiiton dependencies
+    //// printing per-partition dependencies
     //  LOG.info("[[TESTING]] worker: " + workerInfo.getTaskId());
     //  for (Map.Entry<Integer, Int2LongOpenHashMap> e :
     //         vertexTypeStore.getNumDeps().entrySet()) {
@@ -1540,8 +1540,6 @@ public class BspServiceWorker<I extends WritableComparable,
         //
         // If doing multi-phase computation, return ONLY if message is
         // for current phase. Do not return if it is for the next phase.
-        //
-        // If using dist locking, receiving a fork counts as a message.
         if (asyncConf.getInFlightBytes() < prevInFlightBytes &&
             (!asyncConf.isMultiPhase() ||
              getServerData().getRemoteMessageStore().hasMessages())) {

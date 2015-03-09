@@ -30,9 +30,12 @@ import org.apache.hadoop.io.WritableComparable;
 import org.apache.log4j.Logger;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2ByteMap;
 import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.objects.ObjectIterator;
 
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -61,6 +64,11 @@ public class VertexPhilosophersTable<I extends WritableComparable,
   private final ImmutableClassesGiraphConfiguration<I, V, E> conf;
   /** Service worker */
   private final CentralizedServiceWorker<I, V, E> serviceWorker;
+
+  /** Lock for condition var */
+  private final Lock cvLock = new ReentrantLock();
+  /** Condition var for arrival of fork */
+  private final Condition newFork = cvLock.newCondition();
 
   /** Runnable for waiting on requests asynchronously */
   private final Runnable waitAllRunnable;
@@ -191,24 +199,25 @@ public class VertexPhilosophersTable<I extends WritableComparable,
 
 
   /**
-   * Blocking call that returns true when all forks are acquired and
-   * the philosopher starts to eat, or false if acquisition failed.
+   * Blocking call that returns when all forks are acquired and
+   * the philosopher starts to eat.
    *
    * @param vertexId Vertex id (philosopher) to acquire forks for
-   * @return True if forks acquired, false otherwise
    */
-  public boolean acquireForks(I vertexId) {
+  public void acquireForks(I vertexId) {
     //LOG.info("[[PTABLE]] " + vertexId + ": acquiring forks");
     boolean needRemoteFork = false;
-    boolean needForks = false;
     LongWritable dstId = new LongWritable();  // reused
 
     long pId = ((LongWritable) vertexId).get();
     Long2ByteOpenHashMap neighbours = pMap.get(pId);
     byte oldForkInfo;
 
-    synchronized (pHungry) {
-      pHungry.add(pId);
+    // ALWAYS lock neighbours before pHungry/pEating
+    synchronized (neighbours) {
+      synchronized (pHungry) {
+        pHungry.add(pId);
+      }
     }
 
     // for loop NOT synchronized b/c mutations must never occur
@@ -219,8 +228,6 @@ public class VertexPhilosophersTable<I extends WritableComparable,
         oldForkInfo = forkInfo;
 
         if (!haveFork(forkInfo)) {
-          needForks = true;
-
           // missing fork does NOT imply holding token, b/c we
           // may have already sent the token for our missing fork
           if (haveToken(forkInfo)) {
@@ -254,36 +261,49 @@ public class VertexPhilosophersTable<I extends WritableComparable,
       //LOG.info("[[PTABLE]] " + vertexId + ":   done flush");
     }
 
-    // Do we have all our forks? This must be done in a single
-    // block to get fully consistent view of ALL forks.
-    synchronized (neighbours) {
-      if (needForks) {
-        for (long neighbourId : neighbours.keySet()) {
-          byte forkInfo = neighbours.get(neighbourId);
-          if (!haveFork(forkInfo)) {
-            //LOG.info("[[PTABLE]] " + vertexId + ": no go, missing fork " +
-            //         neighbourId + " " + toString(forkInfo));
+    boolean done;
+    cvLock.lock();     // lock early to avoid missing signals
+    try {
+      while (true) {
+        done = true;
 
-            // For efficiency, don't block---just give up and execute
-            // other vertices. Revisit on next (logical) superstep.
+        // Recheck forks. This must be done in a single block
+        // to get fully consistent view of ALL forks.
+        synchronized (neighbours) {
+          ObjectIterator<Long2ByteMap.Entry> itr =
+            neighbours.long2ByteEntrySet().fastIterator();
+          while (itr.hasNext()) {
+            byte forkInfo = itr.next().getByteValue();
+            if (!haveFork(forkInfo)) {
+              //LOG.info("[[PTABLE]] " + vertexId + ": still missing fork");
+              done = false;
+              break;
+            }
+          }
+
+          if (done) {
+            // have all forks, now eating
+            // must do this while synchronized on neighbours
             synchronized (pHungry) {
               pHungry.remove(pId);
             }
-            return false;
+            synchronized (pEating) {
+              pEating.add(pId);
+            }
+            //LOG.info("[[PTABLE]] " + vertexId + ": got all forks");
+            return;
           }
         }
-      }
 
-      // have all forks, now eating
-      synchronized (pHungry) {
-        pHungry.remove(pId);
+        //LOG.info("[[PTABLE]] " + vertexId + ": wait for forks");
+        newFork.await();
+        //LOG.info("[[PTABLE]] " + vertexId + ": woke up!");
       }
-      synchronized (pEating) {
-        pEating.add(pId);
-      }
+    } catch (InterruptedException e) {
+      throw new IllegalStateException("acquireForks: got interrupted!");
+    } finally {
+      cvLock.unlock();
     }
-    //LOG.info("[[PTABLE]] " + vertexId + ": got all forks");
-    return true;
   }
 
   /**
@@ -301,19 +321,31 @@ public class VertexPhilosophersTable<I extends WritableComparable,
     Long2ByteOpenHashMap neighbours = pMap.get(pId);
     byte oldForkInfo;
 
-    synchronized (pEating) {
-      pEating.remove(pId);
+    // ALWAYS lock neighbours before pHungry/pEating
+    synchronized (neighbours) {
+      synchronized (pEating) {
+        pEating.remove(pId);
+      }
     }
 
-    // all held forks are (implicitly) dirty
+    // all held forks are (possibly implicitly) dirty
     for (long neighbourId : neighbours.keySet()) {
       // must synchronize since we may receive token
       synchronized (neighbours) {
         byte forkInfo = neighbours.get(neighbourId);
         oldForkInfo = forkInfo;
 
+        // we stop eating right away, so a previously dirtied fork
+        // (dirty forks can be reused) CAN be taken from under us
+        if (!haveFork(forkInfo)) {
+          //LOG.info("[[PTABLE]] " + vertexId + ": already lost fork " +
+          //         neighbourId + " " + toString(forkInfo));
+          continue;
+        }
+
         if (haveToken(forkInfo)) {
           // fork will be sent outside of sync block
+          forkInfo &= ~MASK_IS_DIRTY;
           forkInfo &= ~MASK_HAVE_FORK;
 
           //LOG.info("[[PTABLE]] " + vertexId + ": sending clean fork to " +
@@ -523,11 +555,17 @@ public class VertexPhilosophersTable<I extends WritableComparable,
     synchronized (neighbours) {
       byte forkInfo = neighbours.get(neighbourId);
       forkInfo |= MASK_HAVE_FORK;
+      forkInfo &= ~MASK_IS_DIRTY;
       neighbours.put(neighbourId, forkInfo);
 
       //LOG.info("[[PTABLE]] " + receiverId + ": got fork from " +
       //         senderId + " " + toString(forkInfo));
     }
+
+    // signal fork arrival
+    cvLock.lock();
+    newFork.signalAll();
+    cvLock.unlock();
   }
 
   /**

@@ -29,10 +29,13 @@ import org.apache.hadoop.io.WritableComparable;
 import org.apache.log4j.Logger;
 
 import it.unimi.dsi.fastutil.ints.Int2ByteOpenHashMap;
+import it.unimi.dsi.fastutil.ints.Int2ByteMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
+import it.unimi.dsi.fastutil.objects.ObjectIterator;
 
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -63,6 +66,11 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
   private final ImmutableClassesGiraphConfiguration<I, V, E> conf;
   /** Service worker */
   private final CentralizedServiceWorker<I, V, E> serviceWorker;
+
+  /** Lock for condition var */
+  private final Lock cvLock = new ReentrantLock();
+  /** Condition var for arrival of fork */
+  private final Condition newFork = cvLock.newCondition();
 
   /** Runnable for waiting on requests asynchronously */
   private final Runnable waitAllRunnable;
@@ -204,16 +212,14 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
   }
 
   /**
-   * Blocking call that returns true when all forks are acquired and
-   * the philosopher starts to eat, or false if acquisition failed.
+   * Blocking call that returns when all forks are acquired and
+   * the philosopher starts to eat.
    *
    * @param pId Partition id (philosopher) to acquire forks for
-   * @return True if forks acquired, false otherwise
    */
-  public boolean acquireForks(int pId) {
+  public void acquireForks(int pId) {
     //LOG.info("[[PTABLE]] " + pId + ": acquiring forks");
     boolean needRemoteFork = false;
-    boolean needForks = false;
     byte oldForkInfo;
 
     // there CAN be partitions with 0 vertices---there will be
@@ -221,7 +227,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
     Int2ByteOpenHashMap neighbours = pMap.get(pId);
     if (neighbours == null) {
       //LOG.info("[[PTABLE]] " + pId + ": empty partition");
-      return false;
+      return;
     }
 
     // ALWAYS lock neighbours before pHungry/pEating
@@ -239,8 +245,6 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
         oldForkInfo = forkInfo;
 
         if (!haveFork(forkInfo)) {
-          needForks = true;
-
           // missing fork does NOT imply holding token, b/c we
           // may have already sent the token for our missing fork
           if (haveToken(forkInfo)) {
@@ -273,36 +277,49 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       //LOG.info("[[PTABLE]] " + pId + ":   done flush");
     }
 
-    // Do we have all our forks? This must be done in a single
-    // block to get fully consistent view of ALL forks.
-    synchronized (neighbours) {
-      if (needForks) {
-        for (int neighbourId : neighbours.keySet()) {
-          byte forkInfo = neighbours.get(neighbourId);
-          if (!haveFork(forkInfo)) {
-            //LOG.info("[[PTABLE]] " + pId + ": no go, missing fork " +
-            //         neighbourId + " " + toString(forkInfo));
+    boolean done;
+    cvLock.lock();     // lock early to avoid missing signals
+    try {
+      while (true) {
+        done = true;
 
-            // For efficiency, don't block---just give up and execute
-            // other vertices. Revisit on next (logical) superstep.
+        // Recheck forks. This must be done in a single block
+        // to get fully consistent view of ALL forks.
+        synchronized (neighbours) {
+          ObjectIterator<Int2ByteMap.Entry> itr =
+            neighbours.int2ByteEntrySet().fastIterator();
+          while (itr.hasNext()) {
+            byte forkInfo = itr.next().getByteValue();
+            if (!haveFork(forkInfo)) {
+              //LOG.info("[[PTABLE]] " + pId + ": still missing fork");
+              done = false;
+              break;
+            }
+          }
+
+          if (done) {
+            // have all forks, now eating
+            // must do this while synchronized on neighbours
             synchronized (pHungry) {
               pHungry.remove(pId);
             }
-            return false;
+            synchronized (pEating) {
+              pEating.add(pId);
+            }
+            //LOG.info("[[PTABLE]] " + pId + ": got all forks");
+            return;
           }
         }
-      }
 
-      // have all forks, now eating
-      synchronized (pHungry) {
-        pHungry.remove(pId);
+        //LOG.info("[[PTABLE]] " + pId + ": wait for forks");
+        newFork.await();
+        //LOG.info("[[PTABLE]] " + pId + ": woke up!");
       }
-      synchronized (pEating) {
-        pEating.add(pId);
-      }
+    } catch (InterruptedException e) {
+      throw new IllegalStateException("acquireForks: got interrupted!");
+    } finally {
+      cvLock.unlock();
     }
-    //LOG.info("[[PTABLE]] " + pId + ": got all forks");
-    return true;
   }
 
   /**
@@ -331,7 +348,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       }
     }
 
-    // all held forks are (implicitly) dirty
+    // all held forks are (possibly implicitly) dirty
     for (int neighbourId : neighbours.keySet()) {
       // must synchronize since we may receive token
       synchronized (neighbours) {
@@ -560,6 +577,11 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       //LOG.info("[[PTABLE]] " + receiverId + ": got fork from " +
       //         senderId + " " + toString(forkInfo));
     }
+
+    // signal fork arrival
+    cvLock.lock();
+    newFork.signalAll();
+    cvLock.unlock();
   }
 
   /**

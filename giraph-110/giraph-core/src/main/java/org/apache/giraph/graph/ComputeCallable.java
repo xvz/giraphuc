@@ -167,30 +167,11 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       }
 
       // YH: For partition-based dist locking, acquire forks before
-      // executing partition and skip if acquisition fails.
-      // Skip this if this is first superstep.
+      // executing partition. Skip this if this is first superstep.
+      // TODO-YH: skip partitions that don't need to be executed
       if (asyncConf.partitionLockSerialized() &&
-          serviceWorker.getLogicalSuperstep() > 0 &&
-          !pTable.acquireForks(partitionId)) {
-        // We have two options:
-        // 1. skip partition and compute on next (logical) superstep
-        // 2. add partition back on to queue (to execute in same SS)
-        //
-        // (1) is bad b/c we never favour skipped partitions in the next SS,
-        // AND it requires fork requests to be treated as regular messages
-        // (i.e., have a byte count) so that workers can be properly woken
-        // (can get more complicated b/c workers may JUST miss the arrival
-        // of a fork). Consequently, there can be an extra *global* superstep
-        // JUST to receive "in-transit" forks!
-        //
-        // (2) is more fair and more performant, so we use (2).
-        try {
-          // blocking call to place id back on queue
-          partitionIdQueue.put(partitionId);
-        } catch (InterruptedException e) {
-          throw new IllegalStateException("call: Put failed.", e);
-        }
-        continue;
+          serviceWorker.getLogicalSuperstep() > 0) {
+        pTable.acquireForks(partitionId);
       }
 
       Partition<I, V, E> partition =
@@ -211,10 +192,9 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         if (asyncConf.partitionLockSerialized() &&
             serviceWorker.getLogicalSuperstep() > 0) {
           // Flush all caches BEFORE releasing forks!
-          // This is b/c releasing forks will flush msgs to network
+          // Releasing forks will flush msgs to network if needed.
           try {
             workerClientRequestProcessor.flush();
-            //serviceWorker.getWorkerClient().waitAllRequests();
           } catch (IOException e) {
             throw new IllegalStateException("call: Flushing failed.", e);
           }
@@ -357,25 +337,21 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
           VertexPhilosophersTable pTable =
             serviceWorker.getVertexPhilosophersTable();
           if (pTable.isBoundaryVertex(vertexId)) {
-            // If acquiring fork fails, skip this vertex and process it
-            // in the next (logical) superstep. We skip vertices that
-            // are halted and have no messages to wake with.
-            if (!(vertex.isHalted() && !hasMessages(vertexId)) &&
-                pTable.acquireForks(vertexId)) {
+            // Skip halted vertices that have no messages to wake with.
+            if (!(vertex.isHalted() && !hasMessages(vertexId))) {
+              pTable.acquireForks(vertexId);
               computeVertex(computation, partition, vertex,
                             getAllMessages(vertexId));
 
               // Flush all caches BEFORE releasing forks!
-              // This is b/c releasing forks will flush msgs to network
+              // Releasing forks will flush msgs to network if needed.
               try {
                 workerClientRequestProcessor.flush();
-                // TODO-YH: eager???
-                //serviceWorker.getWorkerClient().waitAllRequests();
               } catch (IOException e) {
                 throw new IllegalStateException("call: Flushing failed.", e);
               }
 
-              // can release iff all forks were acquired
+              // release iff all forks were acquired
               pTable.releaseForks(vertexId);
             }
           } else {
