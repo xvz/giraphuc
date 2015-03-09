@@ -304,20 +304,20 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
                   getVertexType(vertexId)) {
           case INTERNAL:
             computeVertex(computation, partition, vertex,
-                          getLocalMessages(vertexId));
+                          removeLocalMessages(vertexId));
             break;
           case LOCAL_BOUNDARY:
             // local-only boundary only needs local token
             if (asyncConf.haveLocalToken(partition.getId())) {
               computeVertex(computation, partition, vertex,
-                            getLocalMessages(vertexId));
+                            removeLocalMessages(vertexId));
             }
             break;
           case REMOTE_BOUNDARY:
             // remote-only boundary only needs global token
             if (asyncConf.haveGlobalToken()) {
               computeVertex(computation, partition, vertex,
-                            getAllMessages(vertexId));
+                            removeAllMessages(vertexId));
             }
             break;
           case MIXED_BOUNDARY:
@@ -325,7 +325,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
             if (asyncConf.haveGlobalToken() &&
                 asyncConf.haveLocalToken(partition.getId())) {
               computeVertex(computation, partition, vertex,
-                            getAllMessages(vertexId));
+                            removeAllMessages(vertexId));
             }
             break;
           default:
@@ -341,7 +341,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
             if (!(vertex.isHalted() && !hasMessages(vertexId))) {
               pTable.acquireForks(vertexId);
               computeVertex(computation, partition, vertex,
-                            getAllMessages(vertexId));
+                            removeAllMessages(vertexId));
 
               // Flush all caches BEFORE releasing forks!
               // Releasing forks will flush msgs to network if needed.
@@ -356,14 +356,14 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
             }
           } else {
             computeVertex(computation, partition, vertex,
-                          getLocalMessages(vertexId));
+                          removeLocalMessages(vertexId));
           }
 
         } else {
           // regular non-serializable execution or
           // partition lock-serialized when not skipping partition
           computeVertex(computation, partition, vertex,
-                        getAllMessages(vertexId));
+                        removeAllMessages(vertexId));
         }
 
         if (vertex.isHalted()) {
@@ -400,12 +400,13 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
   }
 
   /**
-   * Get all messages (local and remote) for a vertex.
+   * Get and remove all messages (local and remote) for a vertex.
+   * (Does not do remove if asyncNeedAllMessages option is true.)
    *
    * @param vertexId Id of the vertex to be computed
    * @return All messages for the vertex.
    */
-  private Iterable<M1> getAllMessages(I vertexId) throws IOException {
+  private Iterable<M1> removeAllMessages(I vertexId) throws IOException {
     // Two types of algorithms:
     // 1. vertices need all messages (aka, stationary; e.g., PageRank)
     //    -> newer messages always as up-to-date as older messages
@@ -456,12 +457,13 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
   }
 
   /**
-   * Get only local messages for a vertex.
+   * Get and remove only local messages for a vertex.
+   * (Does not do remove if asyncNeedAllMessages option is true.)
    *
    * @param vertexId Id of the vertex to be computed
    * @return Local messages for the vertex.
    */
-  private Iterable<M1> getLocalMessages(I vertexId) throws IOException {
+  private Iterable<M1> removeLocalMessages(I vertexId) throws IOException {
     Iterable<M1> messages;
 
     if (asyncConf.isAsync()) {
@@ -488,8 +490,8 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
 
   /**
    * Return whether a vertex has messages.
-   * Result is consistent with getAllMessages(). That is, if this
-   * returns true, getAllMessages() will return a non-empty Iterable.
+   * Result is consistent with removeAllMessages(). That is, if this
+   * returns true, removeAllMessages() will return a non-empty Iterable.
    *
    * @param vertexId Id of vertex to check
    * @return True if vertex has messages
