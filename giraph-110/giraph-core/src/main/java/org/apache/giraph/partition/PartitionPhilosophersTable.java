@@ -495,7 +495,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
 
       // invariant: must not already have token
       //if (haveToken(forkInfo)) {
-      //  throw IllegalStateException("Should not already have token!");
+      //  throw new IllegalStateException("Should not already have token!");
       //}
 
       //LOG.info("[[PTABLE]] " + receiverId + ": got token from " +
@@ -576,7 +576,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
 
       // invariant: fork must not be dirty
       //if (isDirty(forkInfo)) {
-      //  throw IllegalStateException("Fork should not be dirty!");
+      //  throw new IllegalStateException("Fork should not be dirty!");
       //}
 
       //LOG.info("[[PTABLE]] " + receiverId + ": got fork from " +
