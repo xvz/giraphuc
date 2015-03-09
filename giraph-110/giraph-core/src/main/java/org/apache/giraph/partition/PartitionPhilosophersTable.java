@@ -224,8 +224,11 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       return false;
     }
 
-    synchronized (pHungry) {
-      pHungry.add(pId);
+    // ALWAYS lock neighbours before pHungry/pEating
+    synchronized (neighbours) {
+      synchronized (pHungry) {
+        pHungry.add(pId);
+      }
     }
 
     // for loop NOT synchronized b/c mutations must never occur
@@ -321,8 +324,11 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       return;
     }
 
-    synchronized (pEating) {
-      pEating.remove(pId);
+    // ALWAYS lock neighbours before pHungry/pEating
+    synchronized (neighbours) {
+      synchronized (pEating) {
+        pEating.remove(pId);
+      }
     }
 
     // all held forks are (implicitly) dirty
@@ -332,8 +338,17 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
         byte forkInfo = neighbours.get(neighbourId);
         oldForkInfo = forkInfo;
 
+        // we stop eating right away, so a previously dirtied fork
+        // (dirty forks can be reused) CAN be taken from under us
+        if (!haveFork(forkInfo)) {
+          //LOG.info("[[PTABLE]] " + pId + ": already lost fork " +
+          //         neighbourId + " " + toString(forkInfo));
+          continue;
+        }
+
         if (haveToken(forkInfo)) {
           // fork will be sent outside of sync block
+          forkInfo &= ~MASK_IS_DIRTY;
           forkInfo &= ~MASK_HAVE_FORK;
 
           //LOG.info("[[PTABLE]] " + pId + ": sending clean fork to " +
@@ -539,6 +554,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
     synchronized (neighbours) {
       byte forkInfo = neighbours.get(neighbourId);
       forkInfo |= MASK_HAVE_FORK;
+      forkInfo &= ~MASK_IS_DIRTY;
       neighbours.put(neighbourId, forkInfo);
 
       //LOG.info("[[PTABLE]] " + receiverId + ": got fork from " +
