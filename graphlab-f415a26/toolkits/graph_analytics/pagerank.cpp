@@ -153,7 +153,7 @@ public:
 struct pagerank_writer {
   std::string save_vertex(graph_type::vertex_type v) {
     std::stringstream strm;
-    strm << v.id() << "\t" << v.data() << "\n";
+    strm << v.id() << "\t" << std::fixed << std::setprecision(17) << v.data() << "\n";
     return strm.str();
   }
   std::string save_edge(graph_type::edge_type e) { return ""; }
@@ -168,6 +168,8 @@ double pagerank_sum(graph_type::vertex_type v) {
 }
 
 int main(int argc, char** argv) {
+  graphlab::timer total_timer; total_timer.start();
+
   // Initialize control plain using mpi
   graphlab::mpi_tools::init(argc, argv);
   graphlab::distributed_control dc;
@@ -265,11 +267,13 @@ int main(int argc, char** argv) {
                false);   // do not save edges
   }
 
-  double totalpr = graph.map_reduce_vertices<double>(pagerank_sum);
-  std::cout << "Totalpr = " << totalpr << "\n";
+  // this interferes with TOTAL TIME print out
+  //double totalpr = graph.map_reduce_vertices<double>(pagerank_sum);
+  //std::cout << "Totalpr = " << totalpr << "\n";
 
   // Tear-down communication layer and quit -----------------------------------
   graphlab::mpi_tools::finalize();
+  dc.cout() << "TOTAL TIME (sec): " << total_timer.current_time() << std::endl;
   return EXIT_SUCCESS;
 } // End of main
 
