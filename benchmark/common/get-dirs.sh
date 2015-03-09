@@ -26,3 +26,4 @@ GIRAPH_DIR="$DIR_PREFIX"/giraph-110/
 #GPS_LOG_DIR="$DIR_PREFIX"/var/tmp/
 
 GRAPHLAB_DIR="$DIR_PREFIX"/graphlab-ab1aae5/
+GRAPHLAB_OLD_DIR="$DIR_PREFIX"/graphlab-f415a26/
