@@ -1246,30 +1246,36 @@ public class BspServiceWorker<I extends WritableComparable,
       boolean haveLocalWork;
       boolean haveRemoteWork;
 
-      if (asyncConf.isMultiPhase() || asyncConf.tokenSerialized() ||
-          asyncConf.vertexLockSerialized()) {
+      if (asyncConf.isMultiPhase() || asyncConf.tokenSerialized()) {
         // For multi-phase computation, we must check only the message stores
         // for the current phase. Hence, we can't use workerSentMessages, since
         // that also captures messages sent for the next phase.
         //
-        // For serialized computations, local messages for local boundary
-        // vertices do not get processed right away (needs local token or
-        // skipped due to not getting forks), so workerSentMessages will
-        // miss these messages. There's more local worker to do, b/c more
-        // LSSes will pass local token (or forks) around.
+        // For token serialized computations, local messages for local boundary
+        // vertices do not get processed right away (it needs local token),
+        // so workerSentMessages will miss these messages. There's more local
+        // work to do b/c more LSSes will pass local token around.
         haveLocalWork = getServerData().getLocalMessageStore().hasMessages();
 
-      } else if (asyncConf.partitionLockSerialized()) {
-        // Partition-based dist locking is special b/c if ALL partitions
-        // happen to not execute, then there will be no local messages.
-        // But this doesn't mean vertices are all halted, so we DO need
-        // to check w/ doneVertices. This ensures we avoid global barriers.
-        haveLocalWork = localVertices != doneVertices ||
-          getServerData().getLocalMessageStore().hasMessages();
+      } else if (getLogicalSuperstep() == 0 &&
+                 (asyncConf.vertexLockSerialized() ||
+                  asyncConf.partitionLockSerialized())) {
+        // For dist locking, LSS/SS 0 is *reserved* for initialization.
+        // This is purely for backwards compatibility: BSP algs are coded
+        // under assumption that no messages are visible in SS 0. By having
+        // this support, we can execute BSP algs with serializability
+        // (although such algs do not need it for correctness).
+        //
+        // Consequently, there is always more local work to do.
+        haveLocalWork = true;
 
       } else {
-        // For single-phase algs (non-serializable), workerSentMessages is
-        // sufficient. This is faster than checking local message store.
+        // For single-phase algs, workerSentMessages is sufficient.
+        // This is faster than checking local message store.
+        //
+        // Also works for serialized algs via dist locking b/c all
+        // vertices execute once in each LSS, so its behaviour is
+        // identical to non-serailizable algs.
         //
         // NOTE: we do NOT need to check if all vertices are halted,
         // b/c if we have no messages, the vertices will have nothing

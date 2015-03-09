@@ -167,7 +167,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       }
 
       // YH: For partition-based dist locking, acquire forks before
-      // executing partition. Skip this if this is first superstep.
+      // executing partition. Skip this if first superstep.
       // TODO-YH: skip partitions that don't need to be executed
       if (asyncConf.partitionLockSerialized() &&
           serviceWorker.getLogicalSuperstep() > 0) {
@@ -198,7 +198,6 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
           } catch (IOException e) {
             throw new IllegalStateException("call: Flushing failed.", e);
           }
-
           pTable.releaseForks(partitionId);
         }
 
@@ -292,6 +291,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
 
         // YH: first superstep must allow ALL vertices to execute
         // as it can involve initialization that MUST be done
+        // (i.e., backwards compatability with regular BSP algs)
         if (asyncConf.tokenSerialized() &&
             serviceWorker.getLogicalSuperstep() > 0) {
           // internal vertices can always execute
@@ -337,7 +337,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
           VertexPhilosophersTable pTable =
             serviceWorker.getVertexPhilosophersTable();
           if (pTable.isBoundaryVertex(vertexId)) {
-            // Skip halted vertices that have no messages to wake with.
+            // skip halted vertices that have no messages to wake with
             if (!(vertex.isHalted() && !hasMessages(vertexId))) {
               pTable.acquireForks(vertexId);
               computeVertex(computation, partition, vertex,
@@ -350,8 +350,6 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
               } catch (IOException e) {
                 throw new IllegalStateException("call: Flushing failed.", e);
               }
-
-              // release iff all forks were acquired
               pTable.releaseForks(vertexId);
             }
           } else {
