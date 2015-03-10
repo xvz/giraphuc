@@ -28,6 +28,7 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.log4j.Logger;
 
+import it.unimi.dsi.fastutil.ints.Int2BooleanOpenHashMap;
 import it.unimi.dsi.fastutil.ints.Int2ByteOpenHashMap;
 import it.unimi.dsi.fastutil.ints.Int2ByteMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
@@ -97,6 +98,8 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
   private int numTotalPartitions;
   /** Map of partition ids to worker/task ids */
   private Int2IntOpenHashMap taskIdMap;
+  /** Map of partition ids to "all halted?" boolean */
+  private Int2BooleanOpenHashMap allHaltedMap;
 
   /**
    * Constructor
@@ -129,6 +132,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       Iterables.size(serviceWorker.getPartitionOwners());
 
     this.taskIdMap = new Int2IntOpenHashMap(numTotalPartitions);
+    this.allHaltedMap = new Int2BooleanOpenHashMap(numLocalPartitions);
 
     this.waitAllRunnable = new Runnable() {
         @Override
@@ -588,6 +592,34 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
     newFork.signalAll();
     cvLock.unlock();
   }
+
+
+  /**
+   * Get whether a partition has all halted vertices.
+   *
+   * @param partitionId Partition id
+   * @return True if partition has vertices that are all halted
+   */
+  public boolean allVerticesHalted(int partitionId) {
+    synchronized (allHaltedMap) {
+      // if partition id is missing, get() returns false,
+      // which is exactly what we want
+      return allHaltedMap.get(partitionId);
+    }
+  }
+
+  /**
+   * Store whether a partition has all halted vertices.
+   *
+   * @param partitionId Partition id
+   * @param allHalted True if all vertices in partition have halted
+   */
+  public void setAllVerticesHalted(int partitionId, boolean allHalted) {
+    synchronized (allHaltedMap) {
+      allHaltedMap.put(partitionId, allHalted);
+    }
+  }
+
 
   /**
    * @param forkInfo Philosopher's state

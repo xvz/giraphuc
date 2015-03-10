@@ -166,16 +166,28 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         break;
       }
 
-      // YH: For partition-based dist locking, acquire forks before
-      // executing partition. Skip this if first superstep.
-      // TODO-YH: skip partitions that don't need to be executed
-      if (asyncConf.partitionLockSerialized() &&
-          serviceWorker.getLogicalSuperstep() > 0) {
-        pTable.acquireForks(partitionId);
-      }
-
       Partition<I, V, E> partition =
           serviceWorker.getPartitionStore().getOrCreatePartition(partitionId);
+
+      // YH: For partition-based dist locking, acquire forks before
+      // executing partition. Skip this if first superstep.
+      if (asyncConf.partitionLockSerialized() &&
+          serviceWorker.getLogicalSuperstep() > 0) {
+        // skip partitions that don't need to be executed
+        if (pTable.allVerticesHalted(partitionId) &&
+            !hasMessages(partitionId.intValue())) {
+          PartitionStats partitionStats =
+            new PartitionStats(partitionId, partition.getVertexCount(),
+                               partition.getVertexCount(),
+                               partition.getEdgeCount(), 0, 0);
+          partitionStatsList.add(partitionStats);
+
+          serviceWorker.getPartitionStore().putPartition(partition);
+          continue;
+        } else {
+          pTable.acquireForks(partitionId);
+        }
+      }
 
       Computation<I, V, E, M1, M2> computation =
           (Computation<I, V, E, M1, M2>) configuration.createComputation();
@@ -199,6 +211,11 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
             throw new IllegalStateException("call: Flushing failed.", e);
           }
           pTable.releaseForks(partitionId);
+
+          boolean allHalted =
+            partitionStats.getFinishedVertexCount() ==
+            partitionStats.getVertexCount();
+          pTable.setAllVerticesHalted(partitionId, allHalted);
         }
 
         partitionStatsList.add(partitionStats);
@@ -506,6 +523,27 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
       }
     } else {
       return messageStore.hasMessagesForVertex(vertexId);
+    }
+  }
+
+  /**
+   * Return whether a partition has messages.
+   *
+   * @param partitionId Id of partition to check
+   * @return True if partition has messages
+   */
+  private boolean hasMessages(int partitionId) {
+    if (asyncConf.isAsync()) {
+      if (serviceWorker.getLogicalSuperstep() == 0) {
+        return false;
+      } else if (asyncConf.needAllMsgs()) {
+        return true;
+      } else {
+        return messageStore.hasMessagesForPartition(partitionId) ||
+          localMessageStore.hasMessagesForPartition(partitionId);
+      }
+    } else {
+      return messageStore.hasMessagesForPartition(partitionId);
     }
   }
 

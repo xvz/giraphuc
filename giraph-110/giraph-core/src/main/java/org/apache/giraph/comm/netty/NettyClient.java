@@ -728,6 +728,7 @@ public class NettyClient {
    */
   public void waitAllRequests() {
     waitSomeRequests(0);
+    // TODO-YH: disable logging to reduce overheads for dist locking?
     if (LOG.isInfoEnabled()) {
       LOG.info("waitAllRequests: Finished all requests. " +
           inboundByteCounter.getMetrics() + "\n" + outboundByteCounter
@@ -768,6 +769,7 @@ public class NettyClient {
 
     while (clientRequestIdRequestInfoMap.size() > maxOpenRequests) {
       // Wait for requests to complete for some time
+      // TODO-YH: disable logging to reduce overheads for dist locking?
       logInfoAboutOpenRequests(maxOpenRequests);
       synchronized (clientRequestIdRequestInfoMap) {
         if (clientRequestIdRequestInfoMap.size() <= maxOpenRequests) {
