@@ -19,6 +19,7 @@
 package org.apache.giraph.partition;
 
 import org.apache.giraph.bsp.CentralizedServiceWorker;
+import org.apache.giraph.comm.requests.SendVertexDLDepRequest;
 import org.apache.giraph.comm.requests.SendVertexDLForkRequest;
 import org.apache.giraph.comm.requests.SendVertexDLTokenRequest;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
@@ -143,8 +144,6 @@ public class VertexPhilosophersTable<I extends WritableComparable,
       getVertexPartitionOwner(vertex.getId()).getPartitionId();
     long pId = ((LongWritable) vertex.getId()).get();  // "philosopher" id
 
-    // TODO-YH: assumes undirected graph... for directed graph,
-    // need to broadcast to all neighbours + check in-edges
     for (Edge<I, E> e : vertex.getEdges()) {
       int dstPartitionId = serviceWorker.
         getVertexPartitionOwner(e.getTargetVertexId()).getPartitionId();
@@ -200,6 +199,97 @@ public class VertexPhilosophersTable<I extends WritableComparable,
 
 
   /**
+   * Send our philosopher's dependencies to their partners.
+   * Required in the case of directed graphs (neighbouring
+   * philosopher will otherwise fail to see dependencies).
+   */
+  public void sendDependencies() {
+    LongWritable vertexId = new LongWritable();     // reused
+    LongWritable depVertexId = new LongWritable();  // reused
+
+    // Get cached copy of keyset to ignore future modifications
+    // (future modifications are always *received* dependencies).
+    // keySet() is backed by collection, so need to get "safe" copy.
+    long[] pKeySet;
+    synchronized (pMap) {
+      pKeySet = pMap.keySet().toLongArray();
+    }
+
+    long[] neighboursKeySet;
+    for (long pId : pKeySet) {
+      synchronized (pMap) {
+        neighboursKeySet = pMap.get(pId).keySet().toLongArray();
+      }
+
+      // we store pId to neighbourId mapping, so we want every
+      // neighbourId to know that they need a "to pId" mapping
+      for (long neighbourId : neighboursKeySet) {
+        vertexId.set(neighbourId);
+        depVertexId.set(pId);
+
+        // this will work even if vertex doesn't exist yet
+        int dstTaskId = serviceWorker.getVertexPartitionOwner((I) vertexId).
+          getWorkerInfo().getTaskId();
+        //LOG.info("[[PTABLE]] send dependency to taskId " + dstTaskId);
+
+        // skip sending message for local request
+        if (serviceWorker.getWorkerInfo().getTaskId() == dstTaskId) {
+          receiveDependency((I) vertexId, (I) depVertexId);
+        } else {
+          SendVertexDLDepRequest req =
+            new SendVertexDLDepRequest((I) vertexId, (I) depVertexId, conf);
+          serviceWorker.getWorkerClient().
+            sendWritableRequest(dstTaskId, req, true);
+        }
+      }
+
+      // flush network
+      serviceWorker.getWorkerClient().waitAllRequests();
+    }
+  }
+
+  /**
+   * Process a received dependency.
+   *
+   * @param vertexId Vertex id of philosopher
+   * @param depVertexId Vertex id of new dependency
+   */
+  public void receiveDependency(I vertexId, I depVertexId) {
+    long pId = ((LongWritable) vertexId).get();
+    long depId = ((LongWritable) depVertexId).get();
+
+    // NOTE: this works even when there are vertices that have yet
+    // to be added via vertex mutation, because fork/philosopher
+    // state is stored separately from the vertex object
+
+    Long2ByteOpenHashMap neighbours;
+    synchronized (pMap) {
+      neighbours = pMap.get(pId);
+      if (neighbours == null) {
+        neighbours = new Long2ByteOpenHashMap();
+        pMap.put(pId, neighbours);
+      }
+    }
+
+    synchronized (neighbours) {
+      if (!neighbours.containsKey(depId)) {
+        byte forkInfo = 0;
+        if (depId < pId) {
+          // I have larger id, so I hold dirty fork
+          forkInfo |= MASK_HAVE_FORK;
+          forkInfo |= MASK_IS_DIRTY;
+        } else if (depId > pId) {
+          forkInfo |= MASK_HAVE_TOKEN;
+        } else {
+          throw new IllegalStateException("Ids must not be same!");
+        }
+        neighbours.put(depId, forkInfo);
+      }
+    }
+  }
+
+
+  /**
    * Blocking call that returns when all forks are acquired and
    * the philosopher starts to eat.
    *
@@ -223,6 +313,7 @@ public class VertexPhilosophersTable<I extends WritableComparable,
 
     // for loop NOT synchronized b/c mutations must never occur
     // while compute threads are running, so keyset is fixed
+    // (if NEW items were added, this will fail catastrophically!)
     for (long neighbourId : neighbours.keySet()) {
       synchronized (neighbours) {
         byte forkInfo = neighbours.get(neighbourId);
@@ -327,6 +418,10 @@ public class VertexPhilosophersTable<I extends WritableComparable,
       }
     }
 
+    // for loop NOT synchronized b/c mutations must never occur
+    // while compute threads are running, so keyset is fixed
+    // (if NEW items were added, this will fail catastrophically!)
+    //
     // all held forks are (possibly implicitly) dirty
     for (long neighbourId : neighbours.keySet()) {
       // must synchronize since we may receive token

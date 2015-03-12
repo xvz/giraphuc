@@ -19,6 +19,7 @@
 package org.apache.giraph.partition;
 
 import org.apache.giraph.bsp.CentralizedServiceWorker;
+import org.apache.giraph.comm.requests.SendPartitionDLDepRequest;
 import org.apache.giraph.comm.requests.SendPartitionDLForkRequest;
 import org.apache.giraph.comm.requests.SendPartitionDLTokenRequest;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
@@ -158,7 +159,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
     int partitionId = serviceWorker.
       getVertexPartitionOwner(vertex.getId()).getPartitionId();
 
-    //LOG.info("[[PTABLE]] add vertex " + vertex.getId() +
+    //LOG.info("[[PTABLE]] processing vertex " + vertex.getId() +
     //          ", partition " + partitionId);
 
     Int2ByteOpenHashMap neighbours;
@@ -172,8 +173,6 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       }
     }
 
-    // TODO-YH: assumes undirected graph... for directed graph,
-    // need to broadcast to all neighbours + check in-edges
     for (Edge<I, E> e : vertex.getEdges()) {
       int dstPartitionId = serviceWorker.
         getVertexPartitionOwner(e.getTargetVertexId()).getPartitionId();
@@ -182,9 +181,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       synchronized (neighbours) {
         // partition dependency may have already been
         // initialized by another vertex.. if so, skip
-        if (neighbours.get(dstPartitionId) != 0) {
-          continue;
-        } else {
+        if (!neighbours.containsKey(dstPartitionId)) {
           byte forkInfo = 0;
 
           // For acyclic precedence graph, always initialize
@@ -217,6 +214,97 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
   }
 
   /**
+   * Send our philosopher's dependencies to their partners.
+   * Required in the case of directed graphs (neighbouring
+   * philosopher will otherwise fail to see dependencies).
+   */
+  public void sendDependencies() {
+    // Get cached copy of keyset to ignore future modifications
+    // (future modifications are always *received* dependencies).
+    // keySet() is backed by collection, so need to get "safe" copy.
+    int[] pKeySet;
+    synchronized (pMap) {
+      pKeySet = pMap.keySet().toIntArray();
+    }
+
+    int[] neighboursKeySet;
+    for (int pId : pKeySet) {
+      synchronized (pMap) {
+        neighboursKeySet = pMap.get(pId).keySet().toIntArray();
+      }
+
+      // we store pId to neighbourId mapping, so we want every
+      // neighbourId to know that they need a "to pId" mapping
+      for (int neighbourId : neighboursKeySet) {
+        int dstTaskId = taskIdMap.get(neighbourId);
+        //LOG.info("[[PTABLE]] send dependency to taskId " + dstTaskId);
+
+        // skip sending message for local request
+        if (serviceWorker.getWorkerInfo().getTaskId() == dstTaskId) {
+          receiveDependency(neighbourId, pId);
+        } else {
+          SendPartitionDLDepRequest req =
+            new SendPartitionDLDepRequest(neighbourId, pId);
+          serviceWorker.getWorkerClient().
+            sendWritableRequest(dstTaskId, req, true);
+        }
+      }
+
+      // flush network
+      serviceWorker.getWorkerClient().waitAllRequests();
+    }
+  }
+
+  /**
+   * Process a received dependency.
+   *
+   * @param pId Partition id of philosopher
+   * @param depId Partition id of new dependency
+   */
+  public void receiveDependency(int pId, int depId) {
+    Int2ByteOpenHashMap neighbours;
+    synchronized (pMap) {
+      neighbours = pMap.get(pId);
+
+      // can happen when not-yet-created vertex
+      // falls under an otherwise empty partition
+      if (neighbours == null) {
+        neighbours = new Int2ByteOpenHashMap(numTotalPartitions);
+        pMap.put(pId, neighbours);
+      }
+    }
+
+    synchronized (neighbours) {
+      if (!neighbours.containsKey(depId)) {
+        byte forkInfo = 0;
+        if (depId < pId) {
+          // I have larger id, so I hold dirty fork
+          forkInfo |= MASK_HAVE_FORK;
+          forkInfo |= MASK_IS_DIRTY;
+        } else if (depId > pId) {
+          forkInfo |= MASK_HAVE_TOKEN;
+        } else {
+          throw new IllegalStateException("Ids must not be same!");
+        }
+        neighbours.put(depId, forkInfo);
+      }
+    }
+
+    synchronized (taskIdMap) {
+      if (!taskIdMap.containsKey(depId)) {
+        // have to do this the hard way---no vertex IDs available
+        for (PartitionOwner po : serviceWorker.getPartitionOwners()) {
+          if (po.getPartitionId() == depId) {
+            taskIdMap.put(depId, po.getWorkerInfo().getTaskId());
+            break;
+          }
+        }
+      }
+    }
+  }
+
+
+  /**
    * Blocking call that returns when all forks are acquired and
    * the philosopher starts to eat.
    *
@@ -245,6 +333,7 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
 
     // for loop NOT synchronized b/c mutations must never occur
     // while compute threads are running, so keyset is fixed
+    // (if NEW items were added, this will fail catastrophically!)
     for (int neighbourId : neighbours.keySet()) {
       synchronized (neighbours) {
         byte forkInfo = neighbours.get(neighbourId);
@@ -353,6 +442,10 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       }
     }
 
+    // for loop NOT synchronized b/c mutations must never occur
+    // while compute threads are running, so keyset is fixed
+    // (if NEW items were added, this will fail catastrophically!)
+    //
     // all held forks are (possibly implicitly) dirty
     for (int neighbourId : neighbours.keySet()) {
       // must synchronize since we may receive token

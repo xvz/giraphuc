@@ -19,67 +19,76 @@
 package org.apache.giraph.comm.requests;
 
 import org.apache.giraph.comm.ServerData;
+import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
+import org.apache.hadoop.io.WritableUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
 /**
- * YH: Send a token (fork request) to another worker.
+ * YH: Send a vertex dependency to another worker.
  *
  * @param <I> Vertex id
  * @param <V> Vertex data
  * @param <E> Edge data
  */
-public class SendPartitionDLTokenRequest<I extends WritableComparable,
+public class SendVertexDLDepRequest<I extends WritableComparable,
     V extends Writable, E extends Writable> extends
     WritableRequest<I, V, E> implements WorkerRequest<I, V, E> {
 
-  /** Sender partition id */
-  private int senderId;
-  /** Receiver partition id */
-  private int receiverId;
+  /** Vertex id */
+  private I vertexId;
+  /** Dependency id */
+  private I depId;
 
   /**
    * Constructor used for reflection only
    */
-  public SendPartitionDLTokenRequest() {
+  public SendVertexDLDepRequest() {
   }
 
   /**
    * Constructor.
    *
-   * @param senderId Sender partition id
-   * @param receiverId Receiver partition id
+   * @param vertexId Vertex id of philosopher
+   * @param depId Vertex id of new dependency
+   * @param conf ImmutableClassesGiraphConfiguration
    */
-  public SendPartitionDLTokenRequest(int senderId, int receiverId) {
-    this.senderId = senderId;
-    this.receiverId = receiverId;
+  public SendVertexDLDepRequest(
+      I vertexId, I depId,
+      ImmutableClassesGiraphConfiguration conf) {
+    setConf(conf);    // getConf() is null until properly set
+    this.vertexId = WritableUtils.clone(vertexId, getConf());
+    this.depId = WritableUtils.clone(depId, getConf());
   }
 
   @Override
   public void readFieldsRequest(DataInput input) throws IOException {
-    senderId = input.readInt();
-    receiverId = input.readInt();
+    // conf will be set by server handler
+    vertexId = getConf().createVertexId();
+    depId = getConf().createVertexId();
+    vertexId.readFields(input);
+    depId.readFields(input);
   }
 
   @Override
   public void writeRequest(DataOutput output) throws IOException {
-    output.writeInt(senderId);
-    output.writeInt(receiverId);
+    vertexId.write(output);
+    depId.write(output);
   }
 
   @Override
   public RequestType getType() {
-    return RequestType.SEND_PARTITION_DL_TOKEN_REQUEST;
+    return RequestType.SEND_VERTEX_DL_DEP_REQUEST;
   }
 
   @Override
   public void doRequest(ServerData<I, V, E> serverData) {
-    serverData.getServiceWorker().getPartitionPhilosophersTable().
-      receiveToken(senderId, receiverId);
+    serverData.getServiceWorker().getVertexPhilosophersTable().
+      receiveDependency(vertexId, depId);
   }
 
   @Override
@@ -89,7 +98,7 @@ public class SendPartitionDLTokenRequest<I extends WritableComparable,
 
   @Override
   public int getSerializedSize() {
-    // two integers = 8 bytes
-    return super.getSerializedSize() + 8;
+    // ids are not serialized beforehand, so can't determine size
+    return WritableRequest.UNKNOWN_SIZE;
   }
 }

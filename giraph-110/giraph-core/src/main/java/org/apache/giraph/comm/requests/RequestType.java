@@ -71,10 +71,14 @@ public enum RequestType {
   SEND_AGGREGATORS_TO_WORKER_REQUEST(SendAggregatorsToWorkerRequest.class),
   /** YH: Send global token to a worker */
   SEND_GLOBAL_TOKEN_REQUEST(SendGlobalTokenRequest.class),
+  /** YH: Send vertex-based dist locking dependency to a worker */
+  SEND_VERTEX_DL_DEP_REQUEST(SendVertexDLDepRequest.class),
   /** YH: Send vertex-based distributed locking fork to a worker */
   SEND_VERTEX_DL_FORK_REQUEST(SendVertexDLForkRequest.class),
   /** YH: Send vertex-based distributed locking token to a worker */
   SEND_VERTEX_DL_TOKEN_REQUEST(SendVertexDLTokenRequest.class),
+  /** YH: Send partition-based dist locking dependency to a worker */
+  SEND_PARTITION_DL_DEP_REQUEST(SendPartitionDLDepRequest.class),
   /** YH: Send partition-based distributed locking fork to a worker */
   SEND_PARTITION_DL_FORK_REQUEST(SendPartitionDLForkRequest.class),
   /** YH: Send partition-based distributed locking token to a worker */

@@ -27,59 +27,59 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 /**
- * YH: Send a token (fork request) to another worker.
+ * YH: Send a partition dependency to another worker.
  *
  * @param <I> Vertex id
  * @param <V> Vertex data
  * @param <E> Edge data
  */
-public class SendPartitionDLTokenRequest<I extends WritableComparable,
+public class SendPartitionDLDepRequest<I extends WritableComparable,
     V extends Writable, E extends Writable> extends
     WritableRequest<I, V, E> implements WorkerRequest<I, V, E> {
 
-  /** Sender partition id */
-  private int senderId;
-  /** Receiver partition id */
-  private int receiverId;
+  /** Partition id */
+  private int pId;
+  /** Dependency id */
+  private int depId;
 
   /**
    * Constructor used for reflection only
    */
-  public SendPartitionDLTokenRequest() {
+  public SendPartitionDLDepRequest() {
   }
 
   /**
    * Constructor.
    *
-   * @param senderId Sender partition id
-   * @param receiverId Receiver partition id
+   * @param pId Partition id of philosopher
+   * @param depId Partition id of new dependency
    */
-  public SendPartitionDLTokenRequest(int senderId, int receiverId) {
-    this.senderId = senderId;
-    this.receiverId = receiverId;
+  public SendPartitionDLDepRequest(int pId, int depId) {
+    this.pId = pId;
+    this.depId = depId;
   }
 
   @Override
   public void readFieldsRequest(DataInput input) throws IOException {
-    senderId = input.readInt();
-    receiverId = input.readInt();
+    pId = input.readInt();
+    depId = input.readInt();
   }
 
   @Override
   public void writeRequest(DataOutput output) throws IOException {
-    output.writeInt(senderId);
-    output.writeInt(receiverId);
+    output.writeInt(pId);
+    output.writeInt(depId);
   }
 
   @Override
   public RequestType getType() {
-    return RequestType.SEND_PARTITION_DL_TOKEN_REQUEST;
+    return RequestType.SEND_PARTITION_DL_DEP_REQUEST;
   }
 
   @Override
   public void doRequest(ServerData<I, V, E> serverData) {
     serverData.getServiceWorker().getPartitionPhilosophersTable().
-      receiveToken(senderId, receiverId);
+      receiveDependency(pId, depId);
   }
 
   @Override

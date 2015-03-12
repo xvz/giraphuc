@@ -37,9 +37,9 @@ public class SendPartitionDLForkRequest<I extends WritableComparable,
     V extends Writable, E extends Writable> extends
     WritableRequest<I, V, E> implements WorkerRequest<I, V, E> {
 
-  /** Sender vertex id */
+  /** Sender partition id */
   private int senderId;
-  /** Receiver vertex id */
+  /** Receiver partition id */
   private int receiverId;
 
   /**
@@ -51,8 +51,8 @@ public class SendPartitionDLForkRequest<I extends WritableComparable,
   /**
    * Constructor.
    *
-   * @param senderId Sender vertex id
-   * @param receiverId Receiver vertex id
+   * @param senderId Sender partition id
+   * @param receiverId Receiver partition id
    */
   public SendPartitionDLForkRequest(int senderId, int receiverId) {
     this.senderId = senderId;

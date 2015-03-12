@@ -1052,6 +1052,17 @@ public class BspServiceWorker<I extends WritableComparable,
       roundRobinTokens();
     }
 
+    // YH: for distributed locking, if graph is directed,
+    // we need to find in-edge dependencies. This only
+    // needs to be done once.
+    if (getLogicalSuperstep() == INPUT_SUPERSTEP) {
+      if (asyncConf.vertexLockSerialized()) {
+        vertexPTable.sendDependencies();
+      } else if (asyncConf.partitionLockSerialized()) {
+        partitionPTable.sendDependencies();
+      }
+    }
+
     if (asyncConf.needBarrier()) {
       // YH: we count this as part of the global barrier synchronization
       // cost, since BAP avoids this code-path on logical supersteps.
