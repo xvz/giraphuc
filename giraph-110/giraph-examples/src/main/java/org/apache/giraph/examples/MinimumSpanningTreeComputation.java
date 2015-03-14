@@ -1019,17 +1019,16 @@ public class MinimumSpanningTreeComputation extends BasicComputation<
    * MSTMsgContent value.
    */
   public static class MSTMessage implements Writable {
-    /** private variables **/
-    private MSTMsgType type;       /** message type **/
-    private MSTMsgContent value;   /** message content/value **/
+    /** Message type */
+    private MSTMsgType type;
+    /** Message content/value */
+    private MSTMsgContent value;
 
     /**
-     * Default constructor.
+     * Constructor used for reflection only.
      */
     public MSTMessage() {
-      this.type = new MSTMsgType(MSTMsgType.MSG_INVALID);
-      // TODO: ??? or should we use MSTMsgContentLong??
-      this.value = new MSTMsgContentLong();
+      // type/value created in readFields()
     }
 
     /**
@@ -1053,6 +1052,7 @@ public class MinimumSpanningTreeComputation extends BasicComputation<
 
     @Override
     public void readFields(DataInput in) throws IOException {
+      type = new MSTMsgType(MSTMsgType.MSG_INVALID);
       type.readFields(in);
 
       switch(type.get()) {
