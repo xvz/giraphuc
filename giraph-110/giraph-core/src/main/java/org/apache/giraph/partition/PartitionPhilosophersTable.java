@@ -246,13 +246,13 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
           SendPartitionDLDepRequest req =
             new SendPartitionDLDepRequest(neighbourId, pId);
           serviceWorker.getWorkerClient().
-            sendWritableRequest(dstTaskId, req, true);
+            sendWritableRequest(dstTaskId, req);
         }
       }
-
-      // flush network
-      serviceWorker.getWorkerClient().waitAllRequests();
     }
+
+    // flush network
+    serviceWorker.getWorkerClient().waitAllRequests();
   }
 
   /**

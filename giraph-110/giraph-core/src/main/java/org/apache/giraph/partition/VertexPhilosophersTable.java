@@ -239,13 +239,16 @@ public class VertexPhilosophersTable<I extends WritableComparable,
           SendVertexDLDepRequest req =
             new SendVertexDLDepRequest((I) vertexId, (I) depVertexId, conf);
           serviceWorker.getWorkerClient().
-            sendWritableRequest(dstTaskId, req, true);
+            sendWritableRequest(dstTaskId, req);
         }
       }
-
-      // flush network
-      serviceWorker.getWorkerClient().waitAllRequests();
     }
+
+    // TODO-YH: this is very inefficient---sending too many messages!
+    // need to batch messages and send them together!! see SendMessageCache
+
+    // flush network
+    serviceWorker.getWorkerClient().waitAllRequests();
   }
 
   /**
