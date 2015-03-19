@@ -1257,7 +1257,19 @@ public class BspServiceWorker<I extends WritableComparable,
       boolean haveLocalWork;
       boolean haveRemoteWork;
 
-      if (asyncConf.isMultiPhase() || asyncConf.tokenSerialized()) {
+      if (getLogicalSuperstep() == 0 &&
+          (asyncConf.tokenSerialized() ||
+           asyncConf.vertexLockSerialized() ||
+           asyncConf.partitionLockSerialized())) {
+        // For token passing and dist locking, LSS/SS 0 is *reserved* for
+        // initialization. This is purely for backwards compatibility: BSP algs
+        // are coded under assumption that no messages are visible in SS 0.
+        // By having this support, we can execute BSP algs with serializability
+        // (although such algs do not need it for correctness).
+        //
+        // Consequently, there is always more local work to do.
+        haveLocalWork = true;
+      } else if (asyncConf.isMultiPhase() || asyncConf.tokenSerialized()) {
         // For multi-phase computation, we must check only the message stores
         // for the current phase. Hence, we can't use workerSentMessages, since
         // that also captures messages sent for the next phase.
@@ -1267,19 +1279,6 @@ public class BspServiceWorker<I extends WritableComparable,
         // so workerSentMessages will miss these messages. There's more local
         // work to do b/c more LSSes will pass local token around.
         haveLocalWork = getServerData().getLocalMessageStore().hasMessages();
-
-      } else if (getLogicalSuperstep() == 0 &&
-                 (asyncConf.vertexLockSerialized() ||
-                  asyncConf.partitionLockSerialized())) {
-        // For dist locking, LSS/SS 0 is *reserved* for initialization.
-        // This is purely for backwards compatibility: BSP algs are coded
-        // under assumption that no messages are visible in SS 0. By having
-        // this support, we can execute BSP algs with serializability
-        // (although such algs do not need it for correctness).
-        //
-        // Consequently, there is always more local work to do.
-        haveLocalWork = true;
-
       } else {
         // For single-phase algs, workerSentMessages is sufficient.
         // This is faster than checking local message store.
