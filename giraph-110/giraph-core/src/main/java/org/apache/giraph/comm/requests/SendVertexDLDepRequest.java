@@ -19,10 +19,11 @@
 package org.apache.giraph.comm.requests;
 
 import org.apache.giraph.comm.ServerData;
-import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
+import org.apache.giraph.utils.ByteArrayVertexIdVertexId;
+import org.apache.giraph.utils.VertexIdData;
+import org.apache.giraph.utils.VertexIdDataIterator;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
-import org.apache.hadoop.io.WritableUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -39,10 +40,8 @@ public class SendVertexDLDepRequest<I extends WritableComparable,
     V extends Writable, E extends Writable> extends
     WritableRequest<I, V, E> implements WorkerRequest<I, V, E> {
 
-  /** Vertex id */
-  private I vertexId;
-  /** Dependency id */
-  private I depId;
+  /** Message data */
+  private VertexIdData<I, I> messages;
 
   /**
    * Constructor used for reflection only
@@ -53,31 +52,22 @@ public class SendVertexDLDepRequest<I extends WritableComparable,
   /**
    * Constructor.
    *
-   * @param vertexId Vertex id of philosopher
-   * @param depId Vertex id of new dependency
-   * @param conf ImmutableClassesGiraphConfiguration
+   * @param messages Messages to send
    */
-  public SendVertexDLDepRequest(
-      I vertexId, I depId,
-      ImmutableClassesGiraphConfiguration conf) {
-    setConf(conf);    // getConf() is null until properly set
-    this.vertexId = WritableUtils.clone(vertexId, getConf());
-    this.depId = WritableUtils.clone(depId, getConf());
+  public SendVertexDLDepRequest(VertexIdData<I, I> messages) {
+    this.messages = messages;
   }
 
   @Override
   public void readFieldsRequest(DataInput input) throws IOException {
-    // conf will be set by server handler
-    vertexId = getConf().createVertexId();
-    depId = getConf().createVertexId();
-    vertexId.readFields(input);
-    depId.readFields(input);
+    messages = new ByteArrayVertexIdVertexId<I>();
+    messages.setConf(getConf());
+    messages.readFields(input);
   }
 
   @Override
   public void writeRequest(DataOutput output) throws IOException {
-    vertexId.write(output);
-    depId.write(output);
+    messages.write(output);
   }
 
   @Override
@@ -87,8 +77,14 @@ public class SendVertexDLDepRequest<I extends WritableComparable,
 
   @Override
   public void doRequest(ServerData<I, V, E> serverData) {
-    serverData.getServiceWorker().getVertexPhilosophersTable().
-      receiveDependency(vertexId, depId);
+    VertexIdDataIterator<I, I> itr = messages.getVertexIdDataIterator();
+    while (itr.hasNext()) {
+      itr.next();
+      // NOTE: must use release*() if receiveDepedency() uses/saves
+      // vertex Id or data references
+      serverData.getServiceWorker().getVertexPhilosophersTable().
+        receiveDependency(itr.getCurrentVertexId(), itr.getCurrentData());
+    }
   }
 
   @Override
@@ -98,7 +94,6 @@ public class SendVertexDLDepRequest<I extends WritableComparable,
 
   @Override
   public int getSerializedSize() {
-    // ids are not serialized beforehand, so can't determine size
-    return WritableRequest.UNKNOWN_SIZE;
+    return super.getSerializedSize() + messages.getSerializedSize();
   }
 }

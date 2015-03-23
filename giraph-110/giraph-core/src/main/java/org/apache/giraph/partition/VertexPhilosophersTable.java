@@ -22,14 +22,18 @@ import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.comm.requests.SendVertexDLDepRequest;
 import org.apache.giraph.comm.requests.SendVertexDLForkRequest;
 import org.apache.giraph.comm.requests.SendVertexDLTokenRequest;
+import org.apache.giraph.conf.GiraphConfiguration;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.edge.Edge;
 import org.apache.giraph.graph.Vertex;
+import org.apache.giraph.utils.ByteArrayVertexIdVertexId;
+import org.apache.giraph.utils.VertexIdData;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.log4j.Logger;
 
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ByteMap;
 import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
@@ -207,6 +211,17 @@ public class VertexPhilosophersTable<I extends WritableComparable,
     LongWritable vertexId = new LongWritable();     // reused
     LongWritable depVertexId = new LongWritable();  // reused
 
+    // when to flush cache/send message to particular worker
+    int maxMessagesSizePerWorker =
+      GiraphConfiguration.MAX_MSG_REQUEST_SIZE.get(conf);
+
+    // cache for messages that will be sent to neighbours
+    // (much more efficient than using SendDataCache b/c
+    //  we don't need to store/know dst partition ids)
+    Int2ObjectOpenHashMap<VertexIdData<I, I>> msgCache =
+      new Int2ObjectOpenHashMap<VertexIdData<I, I>>();
+
+
     // Get cached copy of keyset to ignore future modifications
     // (future modifications are always *received* dependencies).
     // keySet() is backed by collection, so need to get "safe" copy.
@@ -236,16 +251,34 @@ public class VertexPhilosophersTable<I extends WritableComparable,
         if (serviceWorker.getWorkerInfo().getTaskId() == dstTaskId) {
           receiveDependency((I) vertexId, (I) depVertexId);
         } else {
-          SendVertexDLDepRequest req =
-            new SendVertexDLDepRequest((I) vertexId, (I) depVertexId, conf);
-          serviceWorker.getWorkerClient().
-            sendWritableRequest(dstTaskId, req);
+          // no need to sync, this is executed by single thread
+          VertexIdData<I, I> messages = msgCache.get(dstTaskId);
+          if (messages == null) {
+            messages = new ByteArrayVertexIdVertexId<I>();
+            messages.setConf(conf);
+            messages.initialize();
+            msgCache.put(dstTaskId, messages);
+          }
+          // note that, unlike regular data messages, first vertex id
+          // is also data---i.e., this msg is not being sent to that id
+          messages.add((I) vertexId, (I) depVertexId);
+
+          if (messages.getSize() > maxMessagesSizePerWorker) {
+            msgCache.remove(dstTaskId);
+            serviceWorker.getWorkerClient().sendWritableRequest(
+                dstTaskId, new SendVertexDLDepRequest(messages));
+          }
         }
       }
     }
 
-    // TODO-YH: this is very inefficient---sending too many messages!
-    // need to batch messages and send them together!! see SendMessageCache
+    // send remaining messages
+    for (int dstTaskId : msgCache.keySet()) {
+      // no need to remove, map will no longer be added to
+      VertexIdData<I, I> messages = msgCache.get(dstTaskId);
+      serviceWorker.getWorkerClient().sendWritableRequest(
+          dstTaskId, new SendVertexDLDepRequest(messages));
+    }
 
     // flush network
     serviceWorker.getWorkerClient().waitAllRequests();
