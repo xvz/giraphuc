@@ -328,6 +328,14 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
             if (asyncConf.haveLocalToken(partition.getId())) {
               computeVertex(computation, partition, vertex,
                             removeLocalMessages(vertexId));
+            } else if (vertex.isHalted() && hasMessages(vertexId)) {
+              // Presence of local messages is NOT reported to master for
+              // termination check, so we MUST wake up any skipped vertices
+              // that have local messages to ensure active vertices != 0.
+              //
+              // Only needed for AP---BAP will not use barrier when there
+              // are still local messages.
+              vertex.wakeUp();
             }
             break;
           case REMOTE_BOUNDARY:
@@ -335,6 +343,11 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
             if (asyncConf.haveGlobalToken()) {
               computeVertex(computation, partition, vertex,
                             removeAllMessages(vertexId));
+            } else if (vertex.isHalted() && hasMessages(vertexId)) {
+              // Remote messages are reported to master (even after
+              // being received), so this isn't actually an issue.
+              // Leave it here just in case.
+              vertex.wakeUp();
             }
             break;
           case MIXED_BOUNDARY:
@@ -343,6 +356,9 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
                 asyncConf.haveLocalToken(partition.getId())) {
               computeVertex(computation, partition, vertex,
                             removeAllMessages(vertexId));
+            } else if (vertex.isHalted() && hasMessages(vertexId)) {
+              // Combination of above issues.
+              vertex.wakeUp();
             }
             break;
           default:
