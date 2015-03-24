@@ -109,8 +109,8 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
    * @param serviceWorker Service worker
    */
   public PartitionPhilosophersTable(
-     ImmutableClassesGiraphConfiguration<I, V, E> conf,
-     CentralizedServiceWorker<I, V, E> serviceWorker) {
+      ImmutableClassesGiraphConfiguration<I, V, E> conf,
+      CentralizedServiceWorker<I, V, E> serviceWorker) {
     this.conf = conf;
     this.serviceWorker = serviceWorker;
 

@@ -80,8 +80,6 @@ public class SendVertexDLDepRequest<I extends WritableComparable,
     VertexIdDataIterator<I, I> itr = messages.getVertexIdDataIterator();
     while (itr.hasNext()) {
       itr.next();
-      // NOTE: must use release*() if receiveDepedency() uses/saves
-      // vertex Id or data references
       serverData.getServiceWorker().getVertexPhilosophersTable().
         receiveDependency(itr.getCurrentVertexId(), itr.getCurrentData());
     }

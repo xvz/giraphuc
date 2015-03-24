@@ -103,8 +103,8 @@ public class VertexPhilosophersTable<I extends WritableComparable,
    * @param serviceWorker Service worker
    */
   public VertexPhilosophersTable(
-     ImmutableClassesGiraphConfiguration<I, V, E> conf,
-     CentralizedServiceWorker<I, V, E> serviceWorker) {
+      ImmutableClassesGiraphConfiguration<I, V, E> conf,
+      CentralizedServiceWorker<I, V, E> serviceWorker) {
     Class<I> vertexIdClass = conf.getVertexIdClass();
     if (!vertexIdClass.equals(LongWritable.class)) {
       // TODO-YH: implement general support (easy to do, but tedious)
@@ -259,6 +259,7 @@ public class VertexPhilosophersTable<I extends WritableComparable,
             messages.initialize();
             msgCache.put(dstTaskId, messages);
           }
+
           // note that, unlike regular data messages, first vertex id
           // is also data---i.e., this msg is not being sent to that id
           messages.add((I) vertexId, (I) depVertexId);
@@ -274,7 +275,7 @@ public class VertexPhilosophersTable<I extends WritableComparable,
 
     // send remaining messages
     for (int dstTaskId : msgCache.keySet()) {
-      // no need to remove, map will no longer be added to
+      // no need to remove, map will be trashed entirely
       VertexIdData<I, I> messages = msgCache.get(dstTaskId);
       serviceWorker.getWorkerClient().sendWritableRequest(
           dstTaskId, new SendVertexDLDepRequest(messages));
