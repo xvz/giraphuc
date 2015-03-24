@@ -338,6 +338,17 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
     }
   }
 
+  /**
+   * Prints all stored dependencies. Not thread safe.
+   */
+  public void printAll() {
+    for (int pId : pMap.keySet()) {
+      for (int neighbourId : pMap.get(pId).keySet()) {
+        LOG.info("[[PTABLE]] dep: " + pId + " " + neighbourId);
+      }
+    }
+  }
+
 
   /**
    * Blocking call that returns when all forks are acquired and

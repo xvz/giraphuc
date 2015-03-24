@@ -325,6 +325,17 @@ public class VertexPhilosophersTable<I extends WritableComparable,
     }
   }
 
+  /**
+   * Prints all stored dependencies. Not thread safe.
+   */
+  public void printAll() {
+    for (long pId : pMap.keySet()) {
+      for (long neighbourId : pMap.get(pId).keySet()) {
+        LOG.info("[[PTABLE]] dep: " + pId + " " + neighbourId);
+      }
+    }
+  }
+
 
   /**
    * Blocking call that returns when all forks are acquired and

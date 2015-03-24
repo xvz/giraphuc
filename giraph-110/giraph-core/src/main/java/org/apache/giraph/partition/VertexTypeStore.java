@@ -285,6 +285,22 @@ public class VertexTypeStore<I extends WritableComparable,
   }
 
   /**
+   * Prints all stored dependencies. Not thread safe.
+   */
+  public void printAll() {
+    for (Object i : localBoundaryVertices) {
+      LOG.info("[[VSTORE]] loc " + i);
+    }
+    for (Object i : remoteBoundaryVertices) {
+      LOG.info("[[VSTORE]] rem " + i);
+    }
+    for (Object i : mixedBoundaryVertices) {
+      LOG.info("[[VSTORE]] mix " + i);
+    }
+  }
+
+
+  /**
    * Set/tag a vertex id with the specified type.
    *
    * @param vertexId Vertex id

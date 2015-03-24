@@ -730,6 +730,20 @@ public class BspServiceWorker<I extends WritableComparable,
     workerGraphPartitioner.finalizePartitionStats(
         partitionStatsList, getPartitionStore());
 
+    // YH: At this point, all input splits are loaded and all workers
+    // have their correct partitions/vertices.
+    //
+    // If doing serializability, need to send in-edge dependencies
+    // for directed graphs. Must be performed after all workers have
+    // their correct partitions/vertices. Only needs to be done once.
+    if (asyncConf.tokenSerialized()) {
+      vertexTypeStore.sendDependencies();
+    } else if (asyncConf.vertexLockSerialized()) {
+      vertexPTable.sendDependencies();
+    } else if (asyncConf.partitionLockSerialized()) {
+      partitionPTable.sendDependencies();
+    }
+
     return finishSuperstep(partitionStatsList, null);
   }
 
@@ -827,38 +841,20 @@ public class BspServiceWorker<I extends WritableComparable,
       START_TIME = System.nanoTime();
     }
 
-    // TODO-YH: delete this
-    //if (asyncConf.tokenSerialized() && getLogicalSuperstep() == 0) {
-    //  StringBuilder partitionIds = new StringBuilder();
-    //  int numVertices = 0;
-    //  for (int i : getServerData().getPartitionStore().getPartitionIds()) {
-    //    numVertices += getServerData().getPartitionStore().
-    //      getOrCreatePartition(i).getVertexCount();
-    //    partitionIds.append(i + ",");
-    //  }
-    //
-    //  int numInternal = vertexTypeStore.numInternalVertices();
-    //  int numLocalBoundary = vertexTypeStore.numLocalBoundaryVertices();
-    //  int numRemoteBoundary = vertexTypeStore.numRemoteBoundaryVertices();
-    //  int numBothBoundary = numVertices - numInternal -
-    //    numLocalBoundary - numRemoteBoundary;
-    //
-    //  LOG.info("[[TESTING]] task-id: " + workerInfo.getTaskId());
-    //  LOG.info("[[TESTING]] partition-ids: (" + partitionIds + ")");
-    //  LOG.info("[[TESTING]] worker-only (int, lbv, rbv, bbv): (" +
-    //           numInternal + "," + numLocalBoundary + "," +
-    //           numRemoteBoundary + "," + numBothBoundary + ")" +
-    //           " -- numTot: " + numVertices);
-    //
-    //// printing per-partition dependencies
-    //  LOG.info("[[TESTING]] worker: " + workerInfo.getTaskId());
-    //  for (Map.Entry<Integer, Int2LongOpenHashMap> e :
-    //         vertexTypeStore.getNumDeps().entrySet()) {
-    //    LOG.info("[[TESTING]]    partition " + e.getKey());
-    //    for (Map.Entry<Integer, Long> ee : e.getValue().entrySet()) {
-    //      LOG.info("[[TESTING]]       dep: " + ee.getKey() +
-    //               ", " + ee.getValue());
-    //    }
+    // debugging stats
+    //if (getLogicalSuperstep() == 0) {
+    //  if (asyncConf.tokenSerialized()) {
+    //    //int numVertices = 0;
+    //    //for (int i : getServerData().
+    //    //       getPartitionStore().getPartitionIds()) {
+    //    //  numVertices += getServerData().getPartitionStore().
+    //    //    getOrCreatePartition(i).getVertexCount();
+    //    //}
+    //    vertexTypeStore.printAll();
+    //  } else if (asyncConf.vertexLockSerialized()) {
+    //    vertexPTable.printAll();
+    //  } else if (asyncConf.partitionLockSerialized()) {
+    //    partitionPTable.printAll();
     //  }
     //}
 
@@ -1050,19 +1046,6 @@ public class BspServiceWorker<I extends WritableComparable,
 
     if (asyncConf.tokenSerialized()) {
       roundRobinTokens();
-    }
-
-    // YH: for distributed locking, if graph is directed,
-    // we need to find in-edge dependencies. This only
-    // needs to be done once.
-    if (getLogicalSuperstep() == INPUT_SUPERSTEP) {
-      if (asyncConf.tokenSerialized()) {
-        vertexTypeStore.sendDependencies();
-      } else if (asyncConf.vertexLockSerialized()) {
-        vertexPTable.sendDependencies();
-      } else if (asyncConf.partitionLockSerialized()) {
-        partitionPTable.sendDependencies();
-      }
     }
 
     if (asyncConf.needBarrier()) {

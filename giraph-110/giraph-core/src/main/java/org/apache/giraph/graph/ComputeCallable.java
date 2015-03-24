@@ -512,8 +512,11 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         messages = localMessageStore.removeVertexMessages(vertexId);
       }
     } else {
-      // TODO-YH: implement serializability for BSP--need two stores!!
-      messages = null;
+      // BSP not supported b/c it has no local store
+      //
+      // also no support for serializability in BSP; use AP/BAP instead
+      // (BSP requires particular conditions, which are not performant)
+      throw new UnsupportedOperationException("BSP not supported");
     }
 
     return messages;
