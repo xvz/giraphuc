@@ -204,7 +204,6 @@ public class VertexTypeStore<I extends WritableComparable,
             // remote dependency
             // We may send redundant dependency messages, but
             // it's faster to send it than to prune it.
-
             VertexIdData<I, NullWritable> messages = msgCache.get(dstTaskId);
             if (messages == null) {
               messages = new ByteArrayVertexIdNullData<I>();
@@ -245,8 +244,8 @@ public class VertexTypeStore<I extends WritableComparable,
    * @param isLocal True of dependency is local (within same worker)
    */
   public synchronized void receiveDependency(I vertexId, boolean isLocal) {
-    // Function must be synchronized b/c of concurrent
-    // gets and mutations to multiple sets
+    // Function must be completely synchronized b/c of concurrent
+    // gets and sets/mutations to multiple sets
     VertexType type = getVertexType(vertexId);
 
     if (isLocal) {
@@ -382,7 +381,8 @@ public class VertexTypeStore<I extends WritableComparable,
   }
 
   /**
-   * Checks if vertex id exists in a set.
+   * Checks if vertex id exists in a set. Not synchronized.
+   * Thread-safe iff set will not be concurrently mutated.
    *
    * @param set Set to check
    * @param vertexId Vertex id to look for
