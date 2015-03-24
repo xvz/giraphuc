@@ -22,9 +22,11 @@ import org.apache.giraph.bsp.CentralizedServiceWorker;
 import org.apache.giraph.comm.requests.SendPartitionDLDepRequest;
 import org.apache.giraph.comm.requests.SendPartitionDLForkRequest;
 import org.apache.giraph.comm.requests.SendPartitionDLTokenRequest;
+import org.apache.giraph.conf.GiraphConfiguration;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.edge.Edge;
 import org.apache.giraph.graph.Vertex;
+import org.apache.giraph.utils.ByteArrayIntInt;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.log4j.Logger;
@@ -219,6 +221,16 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
    * philosopher will otherwise fail to see dependencies).
    */
   public void sendDependencies() {
+    // when to flush cache/send message to particular worker
+    int maxMessagesSizePerWorker =
+      GiraphConfiguration.MAX_MSG_REQUEST_SIZE.get(conf);
+
+    // cache for messages that will be sent to neighbours
+    // (much more efficient than using SendDataCache b/c
+    //  we don't need to store/know dst partition ids)
+    Int2ObjectOpenHashMap<ByteArrayIntInt> msgCache =
+      new Int2ObjectOpenHashMap<ByteArrayIntInt>();
+
     // Get cached copy of keyset to ignore future modifications
     // (future modifications are always *received* dependencies).
     // keySet() is backed by collection, so need to get "safe" copy.
@@ -243,12 +255,35 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
         if (serviceWorker.getWorkerInfo().getTaskId() == dstTaskId) {
           receiveDependency(neighbourId, pId);
         } else {
-          SendPartitionDLDepRequest req =
-            new SendPartitionDLDepRequest(neighbourId, pId);
-          serviceWorker.getWorkerClient().
-            sendWritableRequest(dstTaskId, req);
+          // caching is not really necessary, but this will make
+          // input loading scalable for millions of partitions
+          //
+          // no need to sync, this is executed by single thread
+          ByteArrayIntInt messages = msgCache.get(dstTaskId);
+          if (messages == null) {
+            messages = new ByteArrayIntInt();
+            messages.setConf(conf);
+            messages.initialize();
+            msgCache.put(dstTaskId, messages);
+          }
+
+          messages.add(neighbourId, pId);
+
+          if (messages.getSize() > maxMessagesSizePerWorker) {
+            msgCache.remove(dstTaskId);
+            serviceWorker.getWorkerClient().sendWritableRequest(
+                dstTaskId, new SendPartitionDLDepRequest(messages));
+          }
         }
       }
+    }
+
+    // send remaining messages
+    for (int dstTaskId : msgCache.keySet()) {
+      // no need to remove, map will be trashed entirely
+      ByteArrayIntInt messages = msgCache.get(dstTaskId);
+      serviceWorker.getWorkerClient().sendWritableRequest(
+          dstTaskId, new SendPartitionDLDepRequest(messages));
     }
 
     // flush network

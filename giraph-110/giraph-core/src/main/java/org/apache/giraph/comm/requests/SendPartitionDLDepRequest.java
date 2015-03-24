@@ -19,6 +19,8 @@
 package org.apache.giraph.comm.requests;
 
 import org.apache.giraph.comm.ServerData;
+import org.apache.giraph.utils.ByteArrayIntInt;
+import org.apache.giraph.utils.ByteArrayIntInt.ByteArrayIntIntIterator;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 
@@ -37,10 +39,8 @@ public class SendPartitionDLDepRequest<I extends WritableComparable,
     V extends Writable, E extends Writable> extends
     WritableRequest<I, V, E> implements WorkerRequest<I, V, E> {
 
-  /** Partition id */
-  private int pId;
-  /** Dependency id */
-  private int depId;
+  /** Message data */
+  private ByteArrayIntInt messages;
 
   /**
    * Constructor used for reflection only
@@ -51,24 +51,22 @@ public class SendPartitionDLDepRequest<I extends WritableComparable,
   /**
    * Constructor.
    *
-   * @param pId Partition id of philosopher
-   * @param depId Partition id of new dependency
+   * @param messages Messages to send
    */
-  public SendPartitionDLDepRequest(int pId, int depId) {
-    this.pId = pId;
-    this.depId = depId;
+  public SendPartitionDLDepRequest(ByteArrayIntInt messages) {
+    this.messages = messages;
   }
 
   @Override
   public void readFieldsRequest(DataInput input) throws IOException {
-    pId = input.readInt();
-    depId = input.readInt();
+    messages = new ByteArrayIntInt();
+    messages.setConf(getConf());
+    messages.readFields(input);
   }
 
   @Override
   public void writeRequest(DataOutput output) throws IOException {
-    output.writeInt(pId);
-    output.writeInt(depId);
+    messages.write(output);
   }
 
   @Override
@@ -78,8 +76,12 @@ public class SendPartitionDLDepRequest<I extends WritableComparable,
 
   @Override
   public void doRequest(ServerData<I, V, E> serverData) {
-    serverData.getServiceWorker().getPartitionPhilosophersTable().
-      receiveDependency(pId, depId);
+    ByteArrayIntIntIterator itr = messages.getIterator();
+    while (itr.hasNext()) {
+      itr.next();
+      serverData.getServiceWorker().getPartitionPhilosophersTable().
+        receiveDependency(itr.getFirst(), itr.getSecond());
+    }
   }
 
   @Override
@@ -89,7 +91,6 @@ public class SendPartitionDLDepRequest<I extends WritableComparable,
 
   @Override
   public int getSerializedSize() {
-    // two integers = 8 bytes
-    return super.getSerializedSize() + 8;
+    return super.getSerializedSize() + messages.getSerializedSize();
   }
 }
