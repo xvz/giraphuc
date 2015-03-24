@@ -18,17 +18,25 @@
 
 package org.apache.giraph.partition;
 
+import org.apache.giraph.bsp.CentralizedServiceWorker;
+import org.apache.giraph.comm.requests.SendTokenDepRequest;
+import org.apache.giraph.conf.GiraphConfiguration;
 import org.apache.giraph.conf.ImmutableClassesGiraphConfiguration;
 import org.apache.giraph.edge.Edge;
 import org.apache.giraph.graph.Vertex;
 import org.apache.giraph.worker.WorkerInfo;
+import org.apache.giraph.utils.ByteArrayVertexIdNullData;
+import org.apache.giraph.utils.VertexIdData;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.log4j.Logger;
 
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 
@@ -57,40 +65,54 @@ public class VertexTypeStore<I extends WritableComparable,
     MIXED_BOUNDARY;
   }
 
+  /** Class logger */
+  private static final Logger LOG = Logger.getLogger(VertexTypeStore.class);
+
   /** Provided configuration */
-  private ImmutableClassesGiraphConfiguration conf;
+  private final ImmutableClassesGiraphConfiguration<I, V, E> conf;
+  /** Service worker */
+  private final CentralizedServiceWorker<I, V, E> serviceWorker;
 
   // With hash partitioning, edge cuts are extremely high, meaning
   // 99%+ of vertices are usually local/remote/mixed boundary.
-  /** Set of internal vertex ids (owned by this worker only) */
-  private Set internalVertices;
+  //
+  // However, we can only implicitly track internal vertices
+  // (i.e., not being in the sets => vertex is internal), because
+  // we choose to send messages only for notifying dependencies
+  // and no messages otherwise.
   /** Set of local boundary vertex ids (owned by this worker only) */
   private Set localBoundaryVertices;
   /** Set of remote boundary vertex ids (owned by this worker only) */
   private Set remoteBoundaryVertices;
+  /** Set of mixed boundary vertex ids (owned by this worker only) */
+  private Set mixedBoundaryVertices;
 
   /**
    * Constructor.
    *
    * @param conf Configuration used.
+   * @param serviceWorker Service worker
    */
-  public VertexTypeStore(ImmutableClassesGiraphConfiguration conf) {
+  public VertexTypeStore(
+      ImmutableClassesGiraphConfiguration<I, V, E> conf,
+      CentralizedServiceWorker<I, V, E> serviceWorker) {
     this.conf = conf;
+    this.serviceWorker = serviceWorker;
 
     if (conf.getAsyncConf().tokenSerialized()) {
       Class<I> vertexIdClass = conf.getVertexIdClass();
       if (vertexIdClass.equals(IntWritable.class)) {
-        internalVertices = new IntOpenHashSet();
         localBoundaryVertices = new IntOpenHashSet();
         remoteBoundaryVertices = new IntOpenHashSet();
+        mixedBoundaryVertices = new IntOpenHashSet();
       } else if (vertexIdClass.equals(LongWritable.class)) {
-        internalVertices = new LongOpenHashSet();
         localBoundaryVertices = new LongOpenHashSet();
         remoteBoundaryVertices = new LongOpenHashSet();
+        mixedBoundaryVertices = new LongOpenHashSet();
       } else {
-        internalVertices = new ObjectOpenHashSet<I>();
         localBoundaryVertices = new ObjectOpenHashSet<I>();
         remoteBoundaryVertices = new ObjectOpenHashSet<I>();
+        mixedBoundaryVertices = new ObjectOpenHashSet<I>();
       }
     }
   }
@@ -104,14 +126,14 @@ public class VertexTypeStore<I extends WritableComparable,
     boolean isRemoteBoundary = false;
     boolean isLocalBoundary = false;
 
-    int partitionId = conf.getServiceWorker().
+    int partitionId = serviceWorker.
       getVertexPartitionOwner(vertex.getId()).getPartitionId();
-    WorkerInfo myWorker = conf.getServiceWorker().getWorkerInfo();
+    WorkerInfo myWorker = serviceWorker.getWorkerInfo();
 
-    // TODO-YH: assumes undirected graph... for directed graph,
-    // need to broadcast to all neighbours + check in-edges
+    // handle out-edge depedencies first
+    // in-edge handled later via sendDependencies()
     for (Edge<I, E> e : vertex.getEdges()) {
-      PartitionOwner dstOwner = conf.getServiceWorker().
+      PartitionOwner dstOwner = serviceWorker.
         getVertexPartitionOwner(e.getTargetVertexId());
       int dstPartitionId = dstOwner.getPartitionId();
       WorkerInfo dstWorker = dstOwner.getWorkerInfo();
@@ -138,8 +160,128 @@ public class VertexTypeStore<I extends WritableComparable,
       setVertexType(vertex.getId(), VertexType.LOCAL_BOUNDARY);
     } else if (isRemoteBoundary && !isLocalBoundary) {
       setVertexType(vertex.getId(), VertexType.REMOTE_BOUNDARY);
+    } else {
+      setVertexType(vertex.getId(), VertexType.MIXED_BOUNDARY);
     }
-    // else MIXED_BOUNDARY is implicit
+  }
+
+  /**
+   * For every vertex, send message to neighbours that are not
+   * on the same partition. Required for directed graphs.
+   *
+   * This ensures that every vertex is categorized based on
+   * both their in-edge and out-edge neighbours.
+   */
+  public void sendDependencies() {
+    // when to flush cache/send message to particular worker
+    int maxMessagesSizePerWorker =
+      GiraphConfiguration.MAX_MSG_REQUEST_SIZE.get(conf);
+
+    // cache for messages that will be sent to neighbours
+    // (much more efficient than using SendDataCache b/c
+    //  we don't need to store/know dst partition ids)
+    Int2ObjectOpenHashMap<VertexIdData<I, NullWritable>> msgCache =
+      new Int2ObjectOpenHashMap<VertexIdData<I, NullWritable>>();
+
+    int taskId = serviceWorker.getWorkerInfo().getTaskId();
+    PartitionStore<I, V, E> pStore = serviceWorker.getPartitionStore();
+
+    // don't need to synchronize, b/c this is all single threaded
+    for (int partitionId : pStore.getPartitionIds()) {
+      for (Vertex<I, V, E> vertex : pStore.getOrCreatePartition(partitionId)) {
+        for (Edge<I, E> e : vertex.getEdges()) {
+          PartitionOwner dstOwner = serviceWorker.
+            getVertexPartitionOwner(e.getTargetVertexId());
+          int dstPartitionId = dstOwner.getPartitionId();
+          int dstTaskId = dstOwner.getWorkerInfo().getTaskId();
+
+          if (dstPartitionId == partitionId) {
+            continue;    // skip, no dependency
+          } else if (taskId == dstTaskId) {
+            // local dependency
+            receiveDependency(e.getTargetVertexId(), true);
+          } else {
+            // remote dependency
+            // We may send redundant dependency messages, but
+            // it's faster to send it than to prune it.
+
+            VertexIdData<I, NullWritable> messages = msgCache.get(dstTaskId);
+            if (messages == null) {
+              messages = new ByteArrayVertexIdNullData<I>();
+              messages.setConf(conf);
+              messages.initialize();
+              msgCache.put(dstTaskId, messages);
+            }
+
+            // no data---messages are vertex id only
+            messages.add(e.getTargetVertexId(), NullWritable.get());
+
+            if (messages.getSize() > maxMessagesSizePerWorker) {
+              msgCache.remove(dstTaskId);
+              serviceWorker.getWorkerClient().sendWritableRequest(
+                  dstTaskId, new SendTokenDepRequest(messages));
+            }
+          }
+        }
+      }
+    }
+
+    // send remaining messages
+    for (int dstTaskId : msgCache.keySet()) {
+      // no need to remove, map will be trashed entirely
+      VertexIdData<I, NullWritable> messages = msgCache.get(dstTaskId);
+      serviceWorker.getWorkerClient().sendWritableRequest(
+          dstTaskId, new SendTokenDepRequest(messages));
+    }
+
+    // flush network
+    serviceWorker.getWorkerClient().waitAllRequests();
+  }
+
+  /**
+   * Process a received dependency.
+   *
+   * @param vertexId Id of vertex that has dependency
+   * @param isLocal True of dependency is local (within same worker)
+   */
+  public synchronized void receiveDependency(I vertexId, boolean isLocal) {
+    // Function must be synchronized b/c of concurrent
+    // gets and mutations to multiple sets
+    VertexType type = getVertexType(vertexId);
+
+    if (isLocal) {
+      // remote -> mixed, internal -> local
+      // (remote -> mixed is b/c we now have local dependency)
+      switch (type) {
+      case REMOTE_BOUNDARY:
+        synchronizedRemove(remoteBoundaryVertices, vertexId);
+        synchronizedAdd(mixedBoundaryVertices, vertexId);
+        return;
+      case LOCAL_BOUNDARY:
+        // fall through
+      case MIXED_BOUNDARY:
+        return;
+      default:
+        synchronizedAdd(localBoundaryVertices, vertexId);
+        return;
+      }
+    } else {
+      // local -> mixed, internal -> remote
+      // (local -> mixed is b/c we now have remote dependency)
+      switch(type) {
+      case LOCAL_BOUNDARY:
+        synchronizedRemove(localBoundaryVertices, vertexId);
+        synchronizedAdd(mixedBoundaryVertices, vertexId);
+        return;
+      case REMOTE_BOUNDARY:
+        // fall through
+      case MIXED_BOUNDARY:
+        return;
+      default:
+        synchronizedAdd(remoteBoundaryVertices, vertexId);
+        return;
+      }
+    }
   }
 
   /**
@@ -151,7 +293,7 @@ public class VertexTypeStore<I extends WritableComparable,
   public void setVertexType(I vertexId, VertexType type) {
     switch (type) {
     case INTERNAL:
-      synchronizedAdd(internalVertices, vertexId);
+      // implicit (absence from all sets indicates internal)
       return;
     case LOCAL_BOUNDARY:
       synchronizedAdd(localBoundaryVertices, vertexId);
@@ -160,8 +302,7 @@ public class VertexTypeStore<I extends WritableComparable,
       synchronizedAdd(remoteBoundaryVertices, vertexId);
       return;
     case MIXED_BOUNDARY:
-      // local+remote boundary will not be on any of the sets
-      // (i.e., absence on all sets indicates this)
+      synchronizedAdd(mixedBoundaryVertices, vertexId);
       return;
     default:
       throw new RuntimeException("Invalid vertex type!");
@@ -185,15 +326,15 @@ public class VertexTypeStore<I extends WritableComparable,
     // during computation (when compute threads are running)
     switch (type) {
     case INTERNAL:
-      return contains(internalVertices, vertexId);
+      return !(contains(localBoundaryVertices, vertexId) ||
+               contains(remoteBoundaryVertices, vertexId) ||
+               contains(mixedBoundaryVertices, vertexId));
     case LOCAL_BOUNDARY:
       return contains(localBoundaryVertices, vertexId);
     case REMOTE_BOUNDARY:
       return contains(remoteBoundaryVertices, vertexId);
     case MIXED_BOUNDARY:
-      return !(contains(internalVertices, vertexId) ||
-               contains(localBoundaryVertices, vertexId) ||
-               contains(remoteBoundaryVertices, vertexId));
+      return contains(mixedBoundaryVertices, vertexId);
     default:
       throw new RuntimeException("Invalid vertex type!");
     }
@@ -209,14 +350,18 @@ public class VertexTypeStore<I extends WritableComparable,
    * @return Type of vertex
    */
   public VertexType getVertexType(I vertexId) {
-    if (contains(internalVertices, vertexId)) {
-      return VertexType.INTERNAL;
-    } else if (contains(localBoundaryVertices, vertexId)) {
+    if (contains(localBoundaryVertices, vertexId)) {
       return VertexType.LOCAL_BOUNDARY;
     } else if (contains(remoteBoundaryVertices, vertexId)) {
       return VertexType.REMOTE_BOUNDARY;
-    } else {
+    } else if (contains(mixedBoundaryVertices, vertexId)) {
       return VertexType.MIXED_BOUNDARY;
+    } else {
+      // TODO-YH: this does NOT currently support graph mutations!
+      // Mutations can add vertices, which will be erroneously treated
+      // as internal. Handling mutations requires proper re-check of
+      // all out-edge AND in-edge neighbours.
+      return VertexType.INTERNAL;
     }
   }
 
@@ -258,13 +403,25 @@ public class VertexTypeStore<I extends WritableComparable,
     }
   }
 
-
   /**
-   * @return Number of internal vertices.
+   * Removes vertexId from set, synchronizing on set.
+   *
+   * @param set Set to remove from
+   * @param vertexId Vertex id to remove
    */
-  public int numInternalVertices() {
-    return internalVertices.size();
+  private void synchronizedRemove(Set set, I vertexId) {
+    Class<I> vertexIdClass = conf.getVertexIdClass();
+    synchronized (set) {
+      if (vertexIdClass.equals(IntWritable.class)) {
+        set.remove(((IntWritable) vertexId).get());
+      } else if (vertexIdClass.equals(LongWritable.class)) {
+        set.remove(((LongWritable) vertexId).get());
+      } else {
+        set.remove(vertexId);
+      }
+    }
   }
+
 
   /**
    * @return Number of local (only) boundary vertices.
@@ -278,5 +435,12 @@ public class VertexTypeStore<I extends WritableComparable,
    */
   public int numRemoteBoundaryVertices() {
     return remoteBoundaryVertices.size();
+  }
+
+  /**
+   * @return Number of mixed boundary vertices.
+   */
+  public int numMixedBoundaryVertices() {
+    return mixedBoundaryVertices.size();
   }
 }

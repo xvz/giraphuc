@@ -249,7 +249,7 @@ public class BspServiceWorker<I extends WritableComparable,
     asyncConf = conf.getAsyncConf();
 
     if (asyncConf.tokenSerialized()) {
-      vertexTypeStore = new VertexTypeStore<I, V, E>(conf);
+      vertexTypeStore = new VertexTypeStore<I, V, E>(conf, this);
     } else if (asyncConf.vertexLockSerialized()) {
       vertexPTable = new VertexPhilosophersTable<I, V, E>(conf, this);
     } else if (asyncConf.partitionLockSerialized()) {
@@ -1056,7 +1056,9 @@ public class BspServiceWorker<I extends WritableComparable,
     // we need to find in-edge dependencies. This only
     // needs to be done once.
     if (getLogicalSuperstep() == INPUT_SUPERSTEP) {
-      if (asyncConf.vertexLockSerialized()) {
+      if (asyncConf.tokenSerialized()) {
+        vertexTypeStore.sendDependencies();
+      } else if (asyncConf.vertexLockSerialized()) {
         vertexPTable.sendDependencies();
       } else if (asyncConf.partitionLockSerialized()) {
         partitionPTable.sendDependencies();
