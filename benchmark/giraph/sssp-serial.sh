@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
-if [ $# -ne 3 ]; then
-    echo "usage: $0 input-graph machines exec-mode"
+if [ $# -ne 4 ]; then
+    echo "usage: $0 input-graph machines exec-mode source-vertex"
     echo ""
     echo "exec-mode: 0, 1, 2 for async + token, vertex, partition"
     echo "           3, 4, 5 for bap + token, vertex, partition"
@@ -33,8 +33,10 @@ case ${execmode} in
     *) echo "Invalid exec-mode"; exit -1;;
 esac
 
+src=$4
+
 ## log names
-logname=color_${inputgraph}_${machines}_${execmode}_"$(date +%Y%m%d-%H%M%S)"
+logname=sssp_${inputgraph}_${machines}_${execmode}_"$(date +%Y%m%d-%H%M%S)"
 logfile=${logname}_time.txt       # running time
 
 
@@ -47,9 +49,12 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop
     -Dgiraph.numComputeThreads=${GIRAPH_THREADS} \
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \
+    -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.SimpleShortestPathsComputation\$SimpleShortestPathsVertexValueFactory \
     -Dmapred.task.timeout=0 \
-    org.apache.giraph.examples.ColoringComputation \
-    -vif org.apache.giraph.examples.io.formats.ColoringInputFormat \
+    org.apache.giraph.examples.SimpleShortestPathsComputation \
+    -c org.apache.giraph.combiner.MinimumDoubleMessageCombiner \
+    -ca SimpleShortestPathsComputation.sourceId=${src} \
+    -vif org.apache.giraph.examples.io.formats.SimpleShortestPathsInputFormat \
     -vip /user/${USER}/input/${inputgraph} \
     -vof org.apache.giraph.io.formats.IdWithValueTextOutputFormat \
     -op "$outputdir" \
