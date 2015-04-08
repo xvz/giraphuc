@@ -239,16 +239,26 @@ public class PartitionPhilosophersTable<I extends WritableComparable,
       pKeySet = pMap.keySet().toIntArray();
     }
 
+    Int2ByteOpenHashMap neighbours;
     int[] neighboursKeySet;
     for (int pId : pKeySet) {
+      // must synchronize on pMap and neighbours separately, due to
+      // race with synchronize-on-neighbours in receiveDependency()
       synchronized (pMap) {
-        neighboursKeySet = pMap.get(pId).keySet().toIntArray();
+        neighbours = pMap.get(pId);
+      }
+      synchronized (neighbours) {
+        neighboursKeySet = neighbours.keySet().toIntArray();
       }
 
       // we store pId to neighbourId mapping, so we want every
       // neighbourId to know that they need a "to pId" mapping
       for (int neighbourId : neighboursKeySet) {
-        int dstTaskId = taskIdMap.get(neighbourId);
+        int dstTaskId;
+        // potential race with taskIdMap in receiveDependency()
+        synchronized (taskIdMap) {
+          dstTaskId = taskIdMap.get(neighbourId);
+        }
         //LOG.info("[[PTABLE]] send dependency to taskId " + dstTaskId);
 
         // skip sending message for local request

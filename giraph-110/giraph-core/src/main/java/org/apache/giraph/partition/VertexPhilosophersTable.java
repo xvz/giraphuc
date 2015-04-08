@@ -230,10 +230,16 @@ public class VertexPhilosophersTable<I extends WritableComparable,
       pKeySet = pMap.keySet().toLongArray();
     }
 
+    Long2ByteOpenHashMap neighbours;
     long[] neighboursKeySet;
     for (long pId : pKeySet) {
+      // must synchronize on pMap and neighbours separately, due to
+      // race with synchronize-on-neighbours in receiveDependency()
       synchronized (pMap) {
-        neighboursKeySet = pMap.get(pId).keySet().toLongArray();
+        neighbours = pMap.get(pId);
+      }
+      synchronized (neighbours) {
+        neighboursKeySet = neighbours.keySet().toLongArray();
       }
 
       // we store pId to neighbourId mapping, so we want every
