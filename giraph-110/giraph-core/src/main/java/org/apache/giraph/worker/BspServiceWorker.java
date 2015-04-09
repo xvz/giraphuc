@@ -1371,12 +1371,13 @@ public class BspServiceWorker<I extends WritableComparable,
 
     } else {
       // Pass global token only after holding for some number of supersteps,
-      // BUT do not hold it if this worker is going to block.
+      // BUT do not hold it if BAP + this worker is going to block.
       //
       // Worker must hold global token for at least ONE entire SS/LSS, b/c
       // global token can arrive at any time when using async.
       if (asyncConf.haveGlobalToken() &&
-          (superstepsUntilTokenRevoke == 0 || asyncConf.needBarrier())) {
+          (superstepsUntilTokenRevoke == 0 ||
+           (asyncConf.disableBarriers() && asyncConf.needBarrier()))) {
         WorkerInfo nextWorker = null;
         boolean getNextWorker = false;
 
