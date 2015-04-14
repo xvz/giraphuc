@@ -3,9 +3,8 @@
 if [ $# -ne 4 ]; then
     echo "usage: $0 input-graph machines exec-mode tolerance"
     echo ""
-    echo "exec-mode: 0 for synchronous BSP"
-    echo "           1 for asynchronous"
-    echo "           2 for barrierless asynchronous"
+    echo "exec-mode: 0, 1, 2 for async + token, vertex, partition"
+    echo "           3, 4, 5 for bap + token, vertex, partition"
     exit -1
 fi
 
@@ -25,9 +24,12 @@ machines=$2
 
 execmode=$3
 case ${execmode} in
-    0) execopt="";;     # sync BSP are used by default
-    1) execopt="-Dgiraph.asyncDoAsync=true";;
-    2) execopt="-Dgiraph.asyncDisableBarriers=true";;
+    0) execopt="-Dgiraph.asyncDoAsync=true -Dgiraph.tokenSerialized=true";;
+    1) execopt="-Dgiraph.asyncDoAsync=true -Dgiraph.vertexLockSerialized=true";;
+    2) execopt="-Dgiraph.asyncDoAsync=true -Dgiraph.partitionLockSerialized=true";;
+    3) execopt="-Dgiraph.asyncDisableBarriers=true -Dgiraph.tokenSerialized=true";;
+    4) execopt="-Dgiraph.asyncDisableBarriers=true -Dgiraph.vertexLockSerialized=true";;
+    5) execopt="-Dgiraph.asyncDisableBarriers=true -Dgiraph.partitionLockSerialized=true";;
     *) echo "Invalid exec-mode"; exit -1;;
 esac
 

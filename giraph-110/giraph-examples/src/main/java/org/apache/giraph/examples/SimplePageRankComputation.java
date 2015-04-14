@@ -20,8 +20,8 @@ package org.apache.giraph.examples;
 
 import org.apache.giraph.conf.IntConfOption;
 //import org.apache.giraph.conf.FloatConfOption;
-//import org.apache.giraph.aggregators.DoubleMaxAggregator;
-//import org.apache.giraph.aggregators.DoubleMinAggregator;
+import org.apache.giraph.aggregators.DoubleMaxAggregator;
+import org.apache.giraph.aggregators.DoubleMinAggregator;
 import org.apache.giraph.aggregators.LongSumAggregator;
 import org.apache.giraph.edge.Edge;
 import org.apache.giraph.edge.EdgeFactory;
@@ -79,9 +79,6 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
   /** Max aggregator name */
   private static String MAX_AGG = "max";
 
-  /** Number of active vertices (for error tolerance) */
-  private static String NUM_ACTIVE_AGG = "num_active";
-
   @Override
   public void compute(
       Vertex<LongWritable, DoubleWritable, NullWritable> vertex,
@@ -91,7 +88,7 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
     // which is to not divide by |V|. To get the probability value at
     // each vertex, take its PageRank value and divide by |V|.
 
-    // for when using error tolerance
+    // YH: for when using error tolerance
     //double oldVal = vertex.getValue().get();
 
     if (getLogicalSuperstep() == 0) {
@@ -100,14 +97,6 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
       //set(0.15f / getTotalNumVertices());
 
     } else {
-      // termination when using error tolerance; must wait at least 1SS
-      // b/c tolerances >1.0 will cause immediate termination
-      //if (getLogicalSuperstep() > 1 &&
-      //    ((LongWritable) getAggregatedValue(NUM_ACTIVE_AGG)).get() == 0) {
-      //  vertex.voteToHalt();
-      //  return;
-      //}
-
       double sum = 0;
 
       for (DoubleWritable message : messages) {
@@ -133,18 +122,15 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
       vertex.voteToHalt();
     }
 
-    // YH: must always send to neighbours, even when we have converged,
-    // as otherwise the old value of this vertex is cached. Note that
-    // this can potentially wake up many vertices...
-    //sendMessageToAllEdges(vertex,
-    //    new DoubleWritable(vertex.getValue().get() / vertex.getNumEdges()));
-    //
-    //if (Math.abs(oldVal - vertex.getValue().get()) <=
+    //// YH: if delta <= tolerance, don't wake neighbours
+    //// (same behaviour as GraphLab async)
+    //if (Math.abs(oldVal - vertex.getValue().get()) >
     //    MIN_TOL.get(getConf())) {
-    //  vertex.voteToHalt();
-    //} else {
-    //  aggregate(NUM_ACTIVE_AGG, new LongWritable(1));
+    //  sendMessageToAllEdges(vertex,
+    //      new DoubleWritable(vertex.getValue().get() / vertex.getNumEdges()));
     //}
+    //// always vote to halt
+    //vertex.voteToHalt();
   }
 
   /**
@@ -235,12 +221,9 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
     @Override
     public void initialize() throws InstantiationException,
         IllegalAccessException {
-      //registerAggregator(SUM_AGG, LongSumAggregator.class);
-      //registerPersistentAggregator(MIN_AGG, DoubleMinAggregator.class);
-      //registerPersistentAggregator(MAX_AGG, DoubleMaxAggregator.class);
-
-      // YH: for tolerance
-      registerAggregator(NUM_ACTIVE_AGG, LongSumAggregator.class);
+      registerAggregator(SUM_AGG, LongSumAggregator.class);
+      registerPersistentAggregator(MIN_AGG, DoubleMinAggregator.class);
+      registerPersistentAggregator(MAX_AGG, DoubleMaxAggregator.class);
     }
   }
 

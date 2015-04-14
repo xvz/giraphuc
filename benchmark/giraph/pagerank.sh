@@ -63,9 +63,8 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop
     -op "$outputdir" \
     -w ${machines} 2>&1 | tee -a ./logs/${logfile}
 
-# flags for terminating by error tolerance (mc used for aggregators)
+# flags for terminating by error tolerance
 #    -ca SimplePageRankComputation.minTol=2.3 \
-#    -mc org.apache.giraph.examples.SimplePageRankComputation\$SimplePageRankMasterCompute \
 #
 # alternative output format: -vof org.apache.giraph.io.formats.IdWithValueTextOutputFormat
 

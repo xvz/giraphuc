@@ -3,9 +3,8 @@
 if [ $# -ne 4 ]; then
     echo "usage: $0 input-graph machines exec-mode tolerance"
     echo ""
-    echo "exec-mode: 0 for synchronous BSP"
-    echo "           1 for asynchronous"
-    echo "           2 for barrierless asynchronous"
+    echo "exec-mode: 0, 1, 2 for async + token, vertex, partition"
+    echo "           3, 4, 5 for bap + token, vertex, partition"
     exit -1
 fi
 
@@ -25,16 +24,19 @@ machines=$2
 
 execmode=$3
 case ${execmode} in
-    0) execopt="";;     # sync BSP are used by default
-    1) execopt="-Dgiraph.asyncDoAsync=true";;
-    2) execopt="-Dgiraph.asyncDisableBarriers=true";;
+    0) execopt="-Dgiraph.asyncDoAsync=true -Dgiraph.tokenSerialized=true";;
+    1) execopt="-Dgiraph.asyncDoAsync=true -Dgiraph.vertexLockSerialized=true";;
+    2) execopt="-Dgiraph.asyncDoAsync=true -Dgiraph.partitionLockSerialized=true";;
+    3) execopt="-Dgiraph.asyncDisableBarriers=true -Dgiraph.tokenSerialized=true";;
+    4) execopt="-Dgiraph.asyncDisableBarriers=true -Dgiraph.vertexLockSerialized=true";;
+    5) execopt="-Dgiraph.asyncDisableBarriers=true -Dgiraph.partitionLockSerialized=true";;
     *) echo "Invalid exec-mode"; exit -1;;
 esac
 
 tol=$4
 
 ## log names
-logname=deltapr_${inputgraph}_${machines}_${execmode}_${tol}_"$(date +%Y%m%d-%H%M%S)"
+logname=pagerank_${inputgraph}_${machines}_${execmode}_${tol}_"$(date +%Y%m%d-%H%M%S)"
 logfile=${logname}_time.txt       # running time
 
 
@@ -44,17 +46,17 @@ logfile=${logname}_time.txt       # running time
 ## start algorithm run
 hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop-1.0.4-jar-with-dependencies.jar org.apache.giraph.GiraphRunner \
     ${execopt} \
+    -Dgiraph.asyncNeedAllMessages=true \
     -Dgiraph.numComputeThreads=${GIRAPH_THREADS} \
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \
-    -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.DeltaTolPageRankComputation\$DeltaTolPageRankVertexValueFactory \
+    -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.SimplePageRankComputation\$SimplePageRankVertexValueFactory \
     -Dmapred.task.timeout=0 \
-    org.apache.giraph.examples.DeltaTolPageRankComputation \
-    -c org.apache.giraph.combiner.DoubleSumMessageCombiner \
-    -ca DeltaTolPageRankComputation.minTol=${tol} \
+    org.apache.giraph.examples.SimplePageRankComputation \
+    -ca SimplePageRankComputation.minTol=${tol} \
     -vif org.apache.giraph.examples.io.formats.SimplePageRankInputFormat \
     -vip /user/${USER}/input/${inputgraph} \
-    -vof org.apache.giraph.examples.DeltaTolPageRankComputation\$DeltaTolPageRankVertexOutputFormat \
+    -vof org.apache.giraph.examples.SimplePageRankComputation\$SimplePageRankVertexOutputFormat \
     -op "$outputdir" \
     -w ${machines} 2>&1 | tee -a ./logs/${logfile}
 

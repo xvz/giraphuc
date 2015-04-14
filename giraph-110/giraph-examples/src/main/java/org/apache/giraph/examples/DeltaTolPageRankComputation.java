@@ -19,12 +19,10 @@
 package org.apache.giraph.examples;
 
 import org.apache.giraph.conf.FloatConfOption;
-import org.apache.giraph.aggregators.LongSumAggregator;
 import org.apache.giraph.factories.DefaultVertexValueFactory;
 import org.apache.giraph.graph.BasicComputation;
 import org.apache.giraph.graph.Vertex;
 import org.apache.giraph.io.formats.TextVertexOutputFormat;
-import org.apache.giraph.master.DefaultMasterCompute;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.LongWritable;
@@ -55,9 +53,6 @@ public class DeltaTolPageRankComputation extends BasicComputation<LongWritable,
   private static final Logger LOG =
       Logger.getLogger(DeltaTolPageRankComputation.class);
 
-  /** Number of active vertices (for error tolerance) */
-  private static String NUM_ACTIVE_AGG = "num_active";
-
   @Override
   public void compute(
       Vertex<LongWritable, DoubleWritable, NullWritable> vertex,
@@ -78,21 +73,11 @@ public class DeltaTolPageRankComputation extends BasicComputation<LongWritable,
     }
     vertex.setValue(new DoubleWritable(vertex.getValue().get() + delta));
 
-    // must wait at least 1SS b/c MIN_TOLs >1.0 will cause
-    // immediate termination
-    if (getLogicalSuperstep() > 1 &&
-        ((LongWritable) getAggregatedValue(NUM_ACTIVE_AGG)).get() == 0) {
-      vertex.voteToHalt();
-      return;
-    }
-
-    if (delta > 0) {
+    // if delta <= tolerance, don't send messages/wake up neighbours
+    // (same behaviour as GraphLab async: scatter to no edges when delta < tol)
+    if (delta > MIN_TOL.get(getConf())) {
       sendMessageToAllEdges(vertex,
           new DoubleWritable(0.85 * delta / vertex.getNumEdges()));
-    }
-
-    if (delta > MIN_TOL.get(getConf())) {
-      aggregate(NUM_ACTIVE_AGG, new LongWritable(1));
     }
 
     // always vote to halt
@@ -110,19 +95,6 @@ public class DeltaTolPageRankComputation extends BasicComputation<LongWritable,
     @Override
     public DoubleWritable newInstance() {
       return new DoubleWritable(0.15);
-    }
-  }
-
-  /**
-   * Master compute associated with {@link DeltaTolPageRankComputation}.
-   * It registers required aggregators.
-   */
-  public static class DeltaTolPageRankMasterCompute extends
-      DefaultMasterCompute {
-    @Override
-    public void initialize() throws InstantiationException,
-        IllegalAccessException {
-      registerAggregator(NUM_ACTIVE_AGG, LongSumAggregator.class);
     }
   }
 
