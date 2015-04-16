@@ -311,6 +311,10 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
         // (i.e., backwards compatability with regular BSP algs)
         if (asyncConf.tokenSerialized() &&
             serviceWorker.getLogicalSuperstep() > 0) {
+          // (see below for usage)
+          boolean needWake = !asyncConf.needAllMsgs() &&
+            vertex.isHalted() && hasMessages(vertexId);
+
           // internal vertices can always execute
           // boundary vertices need token to execute
           //
@@ -328,13 +332,14 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
             if (asyncConf.haveLocalToken(partition.getId())) {
               computeVertex(computation, partition, vertex,
                             removeLocalMessages(vertexId));
-            } else if (vertex.isHalted() && hasMessages(vertexId)) {
+            } else if (needWake) {
               // Presence of local messages is NOT reported to master for
               // termination check, so we MUST wake up any skipped vertices
               // that have local messages to ensure active vertices != 0.
               //
               // Only needed for AP---BAP will not use barrier when there
-              // are still local messages.
+              // are still local messages. Not needed when needAllMsgs, b/c
+              // there will always be remote messages.
               vertex.wakeUp();
             }
             break;
@@ -343,7 +348,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
             if (asyncConf.haveGlobalToken()) {
               computeVertex(computation, partition, vertex,
                             removeAllMessages(vertexId));
-            } else if (vertex.isHalted() && hasMessages(vertexId)) {
+            } else if (needWake) {
               // Remote messages are reported to master (even after
               // being received), so this isn't actually an issue.
               // Leave it here just in case.
@@ -356,7 +361,7 @@ public class ComputeCallable<I extends WritableComparable, V extends Writable,
                 asyncConf.haveLocalToken(partition.getId())) {
               computeVertex(computation, partition, vertex,
                             removeAllMessages(vertexId));
-            } else if (vertex.isHalted() && hasMessages(vertexId)) {
+            } else if (needWake) {
               // Combination of above issues.
               vertex.wakeUp();
             }

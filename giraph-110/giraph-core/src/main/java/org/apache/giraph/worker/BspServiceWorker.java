@@ -1254,7 +1254,8 @@ public class BspServiceWorker<I extends WritableComparable,
         //
         // Consequently, there is always more local work to do.
         haveLocalWork = true;
-      } else if (asyncConf.isMultiPhase() || asyncConf.tokenSerialized()) {
+      } else if (asyncConf.isMultiPhase() ||
+                 (asyncConf.tokenSerialized() && !asyncConf.needAllMsgs())) {
         // For multi-phase computation, we must check only the message stores
         // for the current phase. Hence, we can't use workerSentMessages, since
         // that also captures messages sent for the next phase.
@@ -1263,6 +1264,7 @@ public class BspServiceWorker<I extends WritableComparable,
         // vertices do not get processed right away (it needs local token),
         // so workerSentMessages will miss these messages. There's more local
         // work to do b/c more LSSes will pass local token around.
+        // (Only exception is when needAllMsgs is true.)
         haveLocalWork = getServerData().getLocalMessageStore().hasMessages();
       } else {
         // For single-phase algs, workerSentMessages is sufficient.
@@ -1270,7 +1272,7 @@ public class BspServiceWorker<I extends WritableComparable,
         //
         // Also works for serialized algs via dist locking b/c all
         // vertices execute once in each LSS, so its behaviour is
-        // identical to non-serailizable algs.
+        // identical to non-serializable algs.
         //
         // NOTE: we do NOT need to check if all vertices are halted,
         // b/c if we have no messages, the vertices will have nothing
