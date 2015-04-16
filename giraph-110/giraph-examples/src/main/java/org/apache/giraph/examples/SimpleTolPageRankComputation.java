@@ -33,25 +33,24 @@ import org.apache.log4j.Logger;
 import java.io.IOException;
 
 /**
- * Demonstrates the delta PageRank implementation with
- * error tolerance termination.
+ * PageRank with error tolerance termination
  */
 @Algorithm(
-    name = "Delta PageRank (error tolerance termination)"
+    name = "PageRank (error tolerance termination)"
 )
-public class DeltaTolPageRankComputation extends BasicComputation<LongWritable,
-    DoubleWritable, NullWritable, DoubleWritable> {
+public class SimpleTolPageRankComputation extends BasicComputation<
+    LongWritable, DoubleWritable, NullWritable, DoubleWritable> {
   /** Minimum error tolerance; for async only */
   public static final float MIN_TOLERANCE = 1.0f;
 
   /** Configurable min error tolerance; for async only */
   public static final FloatConfOption MIN_TOL =
-    new FloatConfOption("DeltaTolPageRankComputation.minTol", MIN_TOLERANCE,
+    new FloatConfOption("SimpleTolPageRankComputation.minTol", MIN_TOLERANCE,
                         "The delta/error tolerance to halt at");
 
   /** Logger */
   private static final Logger LOG =
-      Logger.getLogger(DeltaTolPageRankComputation.class);
+      Logger.getLogger(SimpleTolPageRankComputation.class);
 
   @Override
   public void compute(
@@ -71,29 +70,32 @@ public class DeltaTolPageRankComputation extends BasicComputation<LongWritable,
     // - update only => here's my final delta, I'm done
     //   (implicit in GraphLab's gather)
     //
-    // Since deltas are always positive, we use positive value for
-    // update+signal and negative for update-only.
+    // Since messages (= vertex values) are always positive, we use
+    // positive for update+signal and negative for update-only.
 
     // NOTE: We follow GraphLab's alternative way of computing PageRank,
     // which is to not divide by |V|. To get the probability value at
     // each vertex, take its PageRank value and divide by |V|.
-    double delta = 0;
+    double oldVal = vertex.getValue().get();
     boolean signalled = false;
 
     if (getLogicalSuperstep() == 0) {
-      vertex.getValue().set(0.0);
-      delta = 0.15;
+      vertex.getValue().set(1.0);
+      oldVal = 0.0;     // so delta is > 0
       signalled = true;
-    }
-
-    for (DoubleWritable message : messages) {
-      if (message.get() > 0) {
-        signalled = true;
+    } else {
+      double sum = 0;
+      for (DoubleWritable message : messages) {
+        if (message.get() > 0) {
+          signalled = true;
+        }
+        sum += Math.abs(message.get());
       }
-      delta += Math.abs(message.get());
+
+      vertex.getValue().set(0.15 + 0.85 * sum);
     }
 
-    vertex.getValue().set(vertex.getValue().get() + delta);
+    double delta = Math.abs(oldVal - vertex.getValue().get());
     boolean converged = delta <= MIN_TOL.get(getConf());
 
     // send messages only when signalled
@@ -101,11 +103,12 @@ public class DeltaTolPageRankComputation extends BasicComputation<LongWritable,
       if (!converged) {
         // update+signal message (need more help)
         sendMessageToAllEdges(vertex,
-          new DoubleWritable(0.85 * delta / vertex.getNumEdges()));
+          new DoubleWritable(vertex.getValue().get() / vertex.getNumEdges()));
       } else {
         // update only (I'm done)
         sendMessageToAllEdges(vertex,
-          new DoubleWritable(-0.85 * delta / vertex.getNumEdges()));
+          new DoubleWritable(-1.0 * vertex.getValue().get() /
+                             vertex.getNumEdges()));
       }
     }
 
@@ -114,34 +117,35 @@ public class DeltaTolPageRankComputation extends BasicComputation<LongWritable,
   }
 
   /**
-   * Value factory context used with {@link DeltaTolPageRankComputation}.
+   * Value factory context used with {@link SimpleTolPageRankComputation}.
    *
-   * NOTE: Without this, the results will be INCORRECT because missing
-   * vertices are added with an initial value of 0 rather than 0.15.
+   * Not strictly necessary, since vertex values are overwritten.
    */
-  public static class DeltaTolPageRankVertexValueFactory
+  public static class SimpleTolPageRankVertexValueFactory
     extends DefaultVertexValueFactory<DoubleWritable> {
     @Override
     public DoubleWritable newInstance() {
-      return new DoubleWritable(0.15);
+      return new DoubleWritable(1.0);
     }
   }
 
   /**
-   * Simple VertexOutputFormat that supports {@link DeltaTolPageRankComputation}
+   * SimpleTol VertexOutputFormat that supports
+   * {@link SimpleTolPageRankComputation}
    */
-  public static class DeltaTolPageRankVertexOutputFormat extends
+  public static class SimpleTolPageRankVertexOutputFormat extends
       TextVertexOutputFormat<LongWritable, DoubleWritable, NullWritable> {
     @Override
     public TextVertexWriter createVertexWriter(TaskAttemptContext context)
       throws IOException, InterruptedException {
-      return new DeltaTolPageRankVertexWriter();
+      return new SimpleTolPageRankVertexWriter();
     }
 
     /**
-     * Simple VertexWriter that supports {@link DeltaTolPageRankComputation}
+     * SimpleTol VertexWriter that supports
+     * {@link SimpleTolPageRankComputation}
      */
-    public class DeltaTolPageRankVertexWriter extends TextVertexWriter {
+    public class SimpleTolPageRankVertexWriter extends TextVertexWriter {
       @Override
       public void writeVertex(
           Vertex<LongWritable, DoubleWritable, NullWritable> vertex)

@@ -50,13 +50,13 @@ hadoop jar "$GIRAPH_DIR"/giraph-examples/target/giraph-examples-1.1.0-for-hadoop
     -Dgiraph.numComputeThreads=${GIRAPH_THREADS} \
     -Dgiraph.numInputThreads=${GIRAPH_THREADS} \
     -Dgiraph.numOutputThreads=${GIRAPH_THREADS} \
-    -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.SimplePageRankComputation\$SimplePageRankVertexValueFactory \
+    -Dgiraph.vertexValueFactoryClass=org.apache.giraph.examples.SimpleTolPageRankComputation\$SimpleTolPageRankVertexValueFactory \
     -Dmapred.task.timeout=0 \
-    org.apache.giraph.examples.SimplePageRankComputation \
-    -ca SimplePageRankComputation.minTol=${tol} \
+    org.apache.giraph.examples.SimpleTolPageRankComputation \
+    -ca SimpleTolPageRankComputation.minTol=${tol} \
     -vif org.apache.giraph.examples.io.formats.SimplePageRankInputFormat \
     -vip /user/${USER}/input/${inputgraph} \
-    -vof org.apache.giraph.examples.SimplePageRankComputation\$SimplePageRankVertexOutputFormat \
+    -vof org.apache.giraph.examples.SimpleTolPageRankComputation\$SimpleTolPageRankVertexOutputFormat \
     -op "$outputdir" \
     -w ${machines} 2>&1 | tee -a ./logs/${logfile}
 

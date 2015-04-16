@@ -19,7 +19,6 @@
 package org.apache.giraph.examples;
 
 import org.apache.giraph.conf.IntConfOption;
-//import org.apache.giraph.conf.FloatConfOption;
 import org.apache.giraph.aggregators.DoubleMaxAggregator;
 import org.apache.giraph.aggregators.DoubleMinAggregator;
 import org.apache.giraph.aggregators.LongSumAggregator;
@@ -57,17 +56,11 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
   /** Number of supersteps for this test */
   // can't rename this---it's needed by external test classes
   public static final int MAX_SUPERSTEPS = 30;
-  ///** Minimum error tolerance; for async only */
-  //public static final float MIN_TOLERANCE = 1.0f;
 
   /** Configurable max number of supersteps */
   public static final IntConfOption MAX_SS =
     new IntConfOption("SimplePageRankComputation.maxSS", MAX_SUPERSTEPS,
                       "The maximum number of supersteps");
-  ///** Configurable min error tolerance; for async only */
-  //public static final FloatConfOption MIN_TOL =
-  //  new FloatConfOption("SimplePageRankComputation.minTol", MIN_TOLERANCE,
-  //                      "The delta/error tolerance to halt at");
 
   /** Logger */
   private static final Logger LOG =
@@ -87,10 +80,6 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
     // NOTE: We follow GraphLab's alternative way of computing PageRank,
     // which is to not divide by |V|. To get the probability value at
     // each vertex, take its PageRank value and divide by |V|.
-
-    // YH: for when using error tolerance
-    //double oldVal = vertex.getValue().get();
-
     if (getLogicalSuperstep() == 0) {
       // FIX: initial value is 1/|V| (or 1), not 0.15/|V| (or 0.15)
       vertex.getValue().set(1.0);
@@ -121,23 +110,12 @@ public class SimplePageRankComputation extends BasicComputation<LongWritable,
     } else {
       vertex.voteToHalt();
     }
-
-    //// YH: if delta <= tolerance, don't wake neighbours
-    //// (same behaviour as GraphLab async)
-    //if (Math.abs(oldVal - vertex.getValue().get()) >
-    //    MIN_TOL.get(getConf())) {
-    //  sendMessageToAllEdges(vertex,
-    //      new DoubleWritable(vertex.getValue().get() / vertex.getNumEdges()));
-    //}
-    //// always vote to halt
-    //vertex.voteToHalt();
   }
 
   /**
    * Value factory context used with {@link SimplePageRankComputation}.
    *
-   * NOTE: Without this, the results will be INCORRECT because missing
-   * vertices are added with an initial value of 0 rather than 1.0.
+   * Not strictly necessary, since vertex values are overwritten.
    */
   public static class SimplePageRankVertexValueFactory
     extends DefaultVertexValueFactory<DoubleWritable> {
