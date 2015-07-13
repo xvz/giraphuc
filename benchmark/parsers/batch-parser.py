@@ -94,13 +94,16 @@ def time_parser(log_prefix, system, alg):
                 io = io + float(line.split()[5].split('=')[1])
             elif "Input superstep " in line:
                 io = io + float(line.split()[6].split('=')[1])
+            elif "Vertex input superstep " in line:
+                # for compatability w/ Giraph 0.1
+                io = io + float(line.split()[7].split('=')[1])
             elif "Shutdown " in line:
                 io = io + float(line.split()[5].split('=')[1])
             # initialize is not included in total time, so add it too
             elif "Initialize " in line:
                 io = io + float(line.split()[5].split('=')[1])
                 total = total + float(line.split()[5].split('=')[1])
-            elif "Total (ms)" in line:
+            elif "Total (m" in line:
                 total = total + float(line.split()[5].split('=')[1])
 
         return ((total - io)/(MS_PER_SEC), io/(MS_PER_SEC))
@@ -265,7 +268,7 @@ def check_files(log_prefix, machines):
     is a critical missing log, and True otherwise. The string gives the
     source of the error, or a warning for missing CPU/net logs.
     """
-    
+
     logname = os.path.basename(log_prefix)
 
     if len(glob.glob(log_prefix + '_time.txt')) == 0:
@@ -274,11 +277,11 @@ def check_files(log_prefix, machines):
     stats = ['nbt', 'mem', 'cpu', 'net']
 
     if do_master:
-        for stat in stats:            
+        for stat in stats:
             if len(glob.glob(log_prefix + '_0_' + stat + '.txt')) == 0:
                 return (False, "\n  ERROR: " + logname + "_0_" + stat + ".txt missing!")
     else:
-        for stat in stats:            
+        for stat in stats:
             # machines+1, as the master has those log files too
             if len(glob.glob(log_prefix + '_*_' + stat + '.txt')) < machines+1:
                 return (False, "\n  ERROR: " + logname + "_*_" + stat + ".txt missing!")
@@ -323,7 +326,7 @@ def single_iteration(log):
         time_run, time_io = time_parser(log_prefix, system, alg)
         mem_min, mem_avg, mem_max = mem_parser(log_prefix, int(machines))
         eth_recv, eth_sent = net_parser(log_prefix, int(machines))
-         
+
         stats = (time_run+time_io, time_io, time_run, mem_min, mem_avg, mem_max, eth_recv, eth_sent, l1norm)
         separator = "------------+------------+------------+--------------------------------+-----------------------------+------------------------"
         return header + err_str + "\n" + separator + "\n  %8.2fs |  %8.2fs |  %8.2fs | %7.3f / %7.3f / %7.3f GB |  %9.3f / %9.3f GB   | %s \n" % stats + separator
